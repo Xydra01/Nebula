@@ -1,0 +1,21 @@
+# Pinned model runtimes (PHASE0_PLAN task 3.1). Update only after re-running the smoke test.
+
+[llama-prism]
+release = "prism-b10743-adfffbe"
+commit = "adfffbe41b2cabcd51fff326ab045662265062bb"
+build = 10743
+version = "0.2.0-dev"
+published = "2026-09-25"
+variant = "win-cuda-12.4-x64"
+# CUDA 13.3 builds crash on Windows (PrismML llama.cpp #222), and the 13.3 runtime needs a newer driver than 596.49 (CUDA 13.2).
+install_dir = 'F:\Nebula\runtime\llama-prism\b10743-adfffbe'
+source = "https://github.com/PrismML-Eng/llama.cpp/releases/tag/prism-b10743-adfffbe"
+
+[llama-prism.archives]
+"llama-prism-b10743-adfffbe-bin-win-cuda-12.4-x64.zip" = "1b849f713bee42fda258de83770cd422e8f48dd631ce370eb0641f6458c69d87"
+"cudart-llama-bin-win-cuda-12.4-x64.zip" = "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"
+
+[llama-prism.verified]
+date = "2026-10-02"
+devices = "CUDA0: NVIDIA GeForce RTX 4070 (12281 MiB)"
+driver = "596.49"

@@ -63,3 +63,29 @@ Things on this machine Nebula has to account for:
 ### 1.12 Recovery USB
 
 Pending: needs a physical USB stick (8 GB+) and the user. Use the Windows 11 Media Creation Tool.
+
+## 2026-10-02: WS3 runtime and first smoke test
+
+**Runtime (3.1).** `prism-b10743-adfffbe`, win-cuda-12.4-x64, unpacked to `F:\Nebula\runtime\llama-prism\b10743-adfffbe\` (1.1 GB). Archives are kept in `D:\NebulaCold\downloads\`. `--list-devices` shows `CUDA0: RTX 4070 (12281 MiB)`, so PrismML issue #241 (CUDA builds not starting on some CPUs) does not affect this machine.
+
+**Models (3.3).** In `F:\Nebula\models\bonsai2-27b\`: PTQ1_0 (5.95 GB, SHA-256 verified) and mmproj Q8_0. PQ2_0 is still downloading. **No dspark drafter exists for Bonsai 2 27B** (Bonsai-demo `SPECULATIVE.md`), so B4 and the `burst` profile are parked.
+
+**Smoke test (3.6), `standard` profile** (PTQ1_0, 32K context, f16 KV, `-np 1`, flash attention on): all checks pass.
+
+| Measure | Value |
+|---|---|
+| Load time (warm NVMe) | 4.5–5.4 s |
+| Offload | 65/65 layers; CUDA0 model buffer 5395 MiB, plus 265 MiB of embeddings mapped on the CPU |
+| KV cache, 32K f16 | 2048 MiB (exactly 64 KiB/token, matching the design) |
+| Recurrent state | 150 MiB |
+| Compute buffer | 166 MiB on the GPU, 52 MiB on the host |
+| VRAM | Desktop baseline 1.4 GB; loaded 9.3 GB of 12.0 GB; **~2.7 GB headroom** |
+| Prompt processing (short prompts) | ~175–200 t/s (not representative; B1 measures long prompts) |
+| Generation | 30–50 t/s |
+
+Findings that changed the design (NEBULA_DESIGN 5.5.1):
+
+- **llama-server allows every CORS origin by default and has no API key.** Any web page open in a browser could call it on `127.0.0.1`. The bench launcher now passes a random key in `LLAMA_API_KEY` and sets `--cors-origins http://nebula.invalid --no-cors-credentials`. The smoke `auth` check verifies a 401 without the key.
+- The default log verbosity hides the load details; `-lv 4` shows them.
+- The **desktop baseline is 1.4 GB** of VRAM (Discord, Firefox, Steam, Overwolf, the NVIDIA overlay and others). Windows (WDDM) doesn't report per-process VRAM (`N/A`), so `nebula-resources` must work from the total used.
+- PrismML's KNOWN_ISSUES rules are now in the design doc: reasoning effort per role, one system message, no echoed reasoning, `"{}"` for tool calls with no arguments, and no `q5_0` KV cache.

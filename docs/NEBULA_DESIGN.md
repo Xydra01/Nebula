@@ -254,7 +254,7 @@ Rules:
 | `quality` | PQ2_0 | FP16 | 32K | If benchmarks show gains |
 | `vision` | PTQ1_0 + mmproj | FP16 | 24K | Screenshots, UI work |
 | `lean` | PTQ1_0 | q4_0 + bias | 16K | When VRAM is contested |
-| `burst` | PTQ1_0 + dspark drafter | FP16 | 16K | Long single-shot generation; no prompt-cache reuse |
+| `burst` | PTQ1_0 + dspark drafter | FP16 | 16K | Long single-shot generation; no prompt-cache reuse. **Parked (2026-10-02): no Bonsai 2 drafter has been released yet** (see 5.5.1). |
 | `fallback` | Ornith-1.0-9B Q6_K (7.36 GB) on stock llama.cpp | FP16 | 32K | If the fork is broken or unavailable |
 
 **Fallback model.** Ornith-1.0-9B (MIT license; post-trained from Gemma 4 and Qwen 3.5 for terminal agents and tool calling) replaces the originally suggested Qwen 3.5 9B. Its vendor reports 43.1 on Terminal-Bench 2.1 against 21.3 for Qwen3.5-9B, versus 52.8 for Bonsai 2. It runs on **stock** llama.cpp, which is the point of a fallback. Qwen3.5-DeltaCoder-9B is the second candidate. Both are compared on Nebula's own benchmark in Phase 0 before one is chosen.
@@ -613,6 +613,24 @@ Each model call is built from a **budgeted template**. Stable parts come first s
 | Generation headroom | Output tokens | ~4K |
 
 When the step history overflows, older tool results are **compacted**: replaced with summaries, while the full versions stay in the log.
+
+### 5.5.1 Bonsai 2 Request Rules (from PrismML's KNOWN_ISSUES, 2026-09-23)
+
+Bonsai 2 is a **reasoning model**: it thinks before it answers, and the thinking counts against the output limit. The `nebula-model` client enforces these rules so that no caller can get them wrong:
+
+| Rule | Why |
+| --- | --- |
+| **Reasoning effort is set per role.** Executor mechanical steps (edits, tool calls with clear specs) use `reasoning_effort: "none"`, with the server left at `--reasoning auto`. Planner, verifier and reflector use `"medium"` with a top-level reasoning budget. Never send `"high"`. | Keeps the ~4K generation headroom above valid for the most frequent calls. `"high"` returns HTTP 500 (only `low`/`medium`/`xhigh` are valid), `low` barely shortens reasoning, and `--reasoning on` overrides `"none"`. |
+| **Reasoning calls get large output headroom:** `max_tokens` at least 16K, which those roles take from the retrieved-context slot | A small cap ends generation mid-thought, giving empty or truncated answers (the most common failure PrismML reports) |
+| **Exactly one system message, and it comes first.** The client merges any extra system content into it. | Otherwise the server returns HTTP 500 |
+| **Reasoning from earlier turns is never echoed back into the history.** Previous tool calls are re-sent exactly as generated. | Echoed reasoning bloats the context and breaks prefix-cache reuse in tool loops |
+| **Tool calls with no arguments are sent as `"{}"`** | Empty or non-JSON arguments return HTTP 400/500 |
+| **Schema-constrained decoding for every tool call** (5.6) is mandatory, not an optimization | PrismML lists malformed and looping tool calls (`// // //`) as an open model limitation |
+| **Explicit sampling:** `temperature 1.0`, `top_p 0.95`, `top_k 20`, `min_p 0.05`, plus the model card's presence penalty | The GGUF is missing `min_p` and the penalties |
+| **KV cache types are `f16`, `q8_0` or `q4_0` only** | `q5_0` is several times slower |
+| **Single-user server:** `-np 1` plus a large `--cache-ram` | Several slots split the cache, so long conversations keep re-processing their prompt |
+| **The server is locked down:** a random API key for each launch (passed in the `LLAMA_API_KEY` environment variable, never on the command line), `--cors-origins` set to a dummy origin, and `--no-cors-credentials` | By default llama-server allows **every** CORS origin and has no key, so any web page open in a browser could drive the model on `127.0.0.1`. The supervisor generates the key and is the only client that knows it. |
+| **No speculative decoding for now.** There is no official dspark drafter for Bonsai 2 27B yet; older drafters don't match it, and `--spec-type ngram-*` silently does nothing. | The `burst` profile is parked until PrismML publishes a drafter |
 
 ### 5.6 Reliable Tool Calling on a Small Model
 
