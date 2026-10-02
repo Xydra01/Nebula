@@ -116,25 +116,26 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 
 ### 2.3 VRAM Budget (12 GB)
 
-KV-cache sizes are **vendor-documented**; the other rows are planning estimates to be measured in Phase 0 (Section 12).
+**Measured in Phase 0** (2026-10-02, PTQ1_0; [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md)). PQ2_0 was measured too and dropped: same speed, 1.2 GB more VRAM, no quality gain.
 
-| Consumer | PTQ1_0 plan | PQ2_0 plan | Notes |
-| --- | --- | --- | --- |
-| Windows desktop / DWM / browser GPU use | 1.0 GB | 1.0 GB | Kept as a reserve; varies with monitors and apps |
-| Model weights | 5.95 GB | 7.21 GB | |
-| CUDA context + compute buffers | 0.8 GB | 0.8 GB | Depends on batch size and the fork's kernels |
-| Linear-attention recurrent state | ~0.1 GB | ~0.1 GB | Fixed size per sequence, independent of context length |
-| KV cache (full-attention layers only) | up to ~3.5 GB | up to ~2.3 GB | The part that grows with context |
-| Vision mmproj (on demand) | 0 / 0.63 GB | 0 / 0.63 GB | Loaded only for screenshot/image tasks |
-| Safety margin | ~0.5 GB | ~0.5 GB | Prevents OOM and driver spill into shared memory |
+| Consumer | Measured | Notes |
+| --- | --- | --- |
+| Windows desktop / DWM / browser GPU use | 1.4 GB | Discord, Firefox, Steam, overlays; WDDM does not report per-process VRAM |
+| Model weights (GPU buffer) | 5.3 GB | Plus 265 MiB of embeddings mapped on the CPU |
+| CUDA context + compute buffers | ~0.5 GB | |
+| Linear-attention recurrent state | 0.15 GB | Fixed size per sequence |
+| KV cache (full-attention layers only) | 2.0 GB at 32K f16 | Exactly 64 KiB/token at f16 |
+| Vision mmproj (on demand) | 0 / 0.63 GB | Not benchmarked yet |
+| **Total at 32K f16** | **9.4 GB** | **2.9 GB headroom**; prompt 1,055 t/s, generation 41 t/s at depth and 50 t/s short |
+| **Total at 128K q4_0** | **10.2 GB** | 2.1 GB headroom; prompt 673 t/s, generation 22 t/s at depth |
 
 **KV-cache sizing.** Only the ~25% full-attention layers keep a per-token KV cache. PrismML documents **64 KiB/token at FP16** and **~18 KiB/token with the 4-bit (q4_0) KV cache**. The 4-bit cache needs flash attention and is slightly slower to decode. A one-time, model-specific calibration bias (`llama-kv-mean-center`) recovers most of its quality loss.
 
 | Context tokens | KV at FP16 | KV at q4_0 | Fits the PTQ1_0 budget? |
 | --- | --- | --- | --- |
-| 32K | 2.0 GiB | ~0.56 GiB | Yes, comfortably, even at FP16 |
-| 64K | 4.0 GiB | ~1.1 GiB | FP16 is borderline; q4_0 is comfortable |
-| 128K | 8.0 GiB | ~2.25 GiB | Only with q4_0 |
+| 32K | 2.0 GiB | ~0.56 GiB | Yes, comfortably, even at FP16 (measured 9.4 GB total) |
+| 64K | 4.0 GiB | ~1.1 GiB | FP16 fits with only 0.8 GB headroom (11.4 GB); q4_0 is comfortable (8.7 GB) |
+| 128K | 8.0 GiB | ~2.25 GiB | Only with q4_0 (measured 10.2 GB); needle retrieval 100% at 120K tokens |
 | 262K | 16 GiB | ~4.5 GiB | Technically possible with q4_0, with no other GPU apps and no vision; not a planning target |
 
 **Planning targets:**
@@ -249,15 +250,16 @@ Rules:
 
 | Profile | Weights | KV | Context | Use |
 | --- | --- | --- | --- | --- |
-| `standard` | PTQ1_0 | FP16 | 32K | Default |
-| `long` | PTQ1_0 | q4_0 + bias | 128K | Big reads / synthesis |
-| `quality` | PQ2_0 | FP16 | 32K | If benchmarks show gains |
+| `standard` | PTQ1_0 | FP16 | 32K | Default for every role |
+| `long` | PTQ1_0 | q4_0 + bias | 128K | Big reads / synthesis; ~3 min to ingest 120K tokens cold |
 | `vision` | PTQ1_0 + mmproj | FP16 | 24K | Screenshots, UI work |
 | `lean` | PTQ1_0 | q4_0 + bias | 16K | When VRAM is contested |
 | `burst` | PTQ1_0 + dspark drafter | FP16 | 16K | Long single-shot generation; no prompt-cache reuse. **Parked (2026-10-02): no Bonsai 2 drafter has been released yet** (see 5.5.1). |
 | `fallback` | Ornith-1.0-9B Q6_K (7.36 GB) on stock llama.cpp | FP16 | 32K | If the fork is broken or unavailable |
 
-**Fallback model.** Ornith-1.0-9B (MIT license; post-trained from Gemma 4 and Qwen 3.5 for terminal agents and tool calling) replaces the originally suggested Qwen 3.5 9B. Its vendor reports 43.1 on Terminal-Bench 2.1 against 21.3 for Qwen3.5-9B, versus 52.8 for Bonsai 2. It runs on **stock** llama.cpp, which is the point of a fallback. Qwen3.5-DeltaCoder-9B is the second candidate. Both are compared on Nebula's own benchmark in Phase 0 before one is chosen.
+Final flags, reasoning effort per role and the prompt-layout rule are in [ADR-004](adr/ADR-004-model-profiles.md) (Accepted 2026-10-02). The `quality` profile was dropped: PQ2_0 showed no gain.
+
+**Fallback model.** Ornith-1.0-9B (MIT license; post-trained from Gemma 4 and Qwen 3.5 for terminal agents and tool calling) replaces the originally suggested Qwen 3.5 9B. Its vendor reports 43.1 on Terminal-Bench 2.1 against 21.3 for Qwen3.5-9B, versus 52.8 for Bonsai 2. It runs on **stock** llama.cpp, which is the point of a fallback. Qwen3.5-DeltaCoder-9B is the second candidate. Both are compared on Nebula's own benchmark in Phase 0 before one is chosen. **Update 2026-10-02:** all three 9B candidates (Ornith 1.0/1.5, DeltaCoder) fell well short of Bonsai (best 12–13/20 against 19/20 on the coding tasks), so ADR-005 stays Proposed while larger MoE models with experts in system RAM are tested.
 
 ---
 

@@ -1,6 +1,6 @@
 # ADR-004: Model profiles for Bonsai 2 27B
 
-**Status:** Proposed
+**Status:** Accepted (2026-10-02)
 
 ## Context
 
