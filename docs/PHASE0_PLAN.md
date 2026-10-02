@@ -172,6 +172,7 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
+| 2.0 | **Status 2026-10-01:** 2.1 and 2.2 are done: [github.com/Xydra01/Nebula](https://github.com/Xydra01/Nebula), with the `Project Neutron` folder itself as the repo. The GitHub half of 2.5 (secret scanning + push protection) is on. | — | — |
 | 2.1 | Create the **public** repo `Xydra01/Nebula` with an MIT `LICENSE`, `README.md` (vision paragraph + status) and a Rust/Python `.gitignore` | Repo exists | 0.3 h |
 | 2.2 | **First commit**: move `docs/NEBULA_DESIGN.md` and `docs/PHASE0_PLAN.md` from the `Project Neutron` folder into the repo | Docs visible on GitHub | 0.2 h |
 | 2.3 | Create the **`nebula-bot` machine account** (separate email, 2FA). Invite it as a collaborator with write access. Create a **fine-grained token** scoped to `Xydra01/Nebula` only (contents: read/write, pull requests: read/write). Store it in Windows Credential Manager as `nebula/github_bot_token`. | The bot can push a test branch and open a PR | 0.5–1 h |
