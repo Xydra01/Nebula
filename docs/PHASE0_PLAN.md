@@ -190,6 +190,11 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 
 ### 5.1 Runtime Setup
 
+> **Status 2026-10-02:**
+> - **3.1 done:** `prism-b10743-adfffbe`, CUDA 12.4, pinned in `config/runtime.lock.toml`.
+> - **3.3 done:** PTQ1_0, PQ2_0 and mmproj Q8_0 downloaded, with hashes verified and recorded in `config/models.lock.toml`. There is **no Bonsai 2 drafter** to download.
+> - **3.6 done:** all smoke checks pass ([bench/results](../bench/results/)). With 32K context and an f16 KV cache, the model plus context uses 7.9 GB, total VRAM use is 9.3 GB (the desktop takes 1.4 GB), and generation runs at 30–50 tokens/s.
+
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
 | 3.1 | Download the **PrismML llama.cpp release** for **Windows x64 CUDA 12.4** (from the `PrismML-Eng/llama.cpp` releases, or via the Bonsai-demo `setup.ps1`). Unpack to `F:\Nebula\runtime\llama-prism\<version>\`, recording the version and commit in `runtime.lock.toml`. | `llama-server --version` prints the fork's version | 0.5 h |
@@ -228,7 +233,7 @@ bench/
 | B1 | **Throughput** | Prompt processing and generation tokens/s at 8K / 32K / 64K / 128K, for FP16 and q4_0 KV. Use `llama-bench` where it supports the fork's formats, otherwise time server requests (`timings` field). 3 runs each, report the median. | Table: context × KV → pp t/s, tg t/s |
 | B2 | **VRAM** | Peak dedicated GPU memory per configuration (NVML total used minus the idle baseline), plus a check for **shared-memory spill** (Task Manager / Windows performance counters) | Table that replaces design doc Section 2.3 |
 | B3 | **Prompt cache** | Use `--ctx-checkpoints 32 --cache-ram 4096 --cache-idle-slots` with `cache_prompt: true`. Send a 20K-token prefix plus a varying suffix 10 times and compare `timings.prompt_n` / `prompt_ms` against `cache_prompt: false`. Repeat with the tool list reordered to confirm prefix sensitivity. | Cache speedup factor; rules for prompt layout |
-| B4 | **Burst profile** | dspark drafter, `-np 1`, generating 2K tokens of code. Measure the speedup and the first-token penalty against `standard`. | Speedup and when `burst` is worth using |
+| B4 | **Burst profile.** **Blocked (2026-10-02): PrismML has not released a dspark drafter for Bonsai 2 27B.** Re-check on each fork release. | dspark drafter, `-np 1`, generating 2K tokens of code. Measure the speedup and the first-token penalty against `standard`. | Speedup and when `burst` is worth using |
 | B5 | **Quality** | The 20 coding prompts (mix: Python, Rust, TS, C++; algorithms, bug fixes, small refactors; some taken from Smart Archive code) on PTQ1_0, PQ2_0, Ornith Q6_K and DeltaCoder Q6_K. Scored by **executable tests** where possible, otherwise by a rubric you grade blind (model names hidden). | Pass rate per model |
 | B6 | **Tool-call reliability** | 100 tool-call cases (pick the right tool, valid arguments, multi-tool turns) with and without `json_schema` / grammar constraints | % valid, % correct tool, % correct arguments |
 | B7 | **Long-context sanity** | Needle-in-a-repo retrieval at 32K / 64K / 128K (q4_0 + bias versus without bias) | Accuracy per length; whether 128K is usable in practice |

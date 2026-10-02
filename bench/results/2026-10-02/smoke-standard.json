@@ -1,0 +1,111 @@
+{
+  "profile": "standard",
+  "date": "2026-10-02 01:17",
+  "vram_baseline_mib": 1406,
+  "checks": {
+    "offload": {
+      "ok": true,
+      "detail": "65/65 layers on GPU"
+    },
+    "auth": {
+      "ok": true,
+      "detail": "no-key status=401, CORS allow-origin for evil.example='http://nebula.invalid'"
+    },
+    "chat": {
+      "ok": true,
+      "detail": "answer='391'",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 28,
+        "prompt_ms": 159.807,
+        "prompt_per_token_ms": 5.707392857142857,
+        "prompt_per_second": 175.21134868935656,
+        "predicted_n": 4,
+        "predicted_ms": 93.471,
+        "predicted_per_token_ms": 31.157,
+        "predicted_per_second": 32.095516256378986
+      },
+      "usage": {
+        "completion_tokens": 4,
+        "prompt_tokens": 28,
+        "total_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    },
+    "reasoning": {
+      "ok": true,
+      "detail": "answer='No, because 221 = 13 × 17.', reasoning_chars=146, finish=stop",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 30,
+        "prompt_ms": 147.18,
+        "prompt_per_token_ms": 4.906000000000001,
+        "prompt_per_second": 203.8320423970648,
+        "predicted_n": 92,
+        "predicted_ms": 1835.933,
+        "predicted_per_token_ms": 20.17508791208791,
+        "predicted_per_second": 49.56607893643178
+      },
+      "usage": {
+        "completion_tokens": 92,
+        "prompt_tokens": 30,
+        "total_tokens": 122,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    },
+    "tool_call": {
+      "ok": true,
+      "detail": "get_weather({\"city\": \"Toronto\", \"unit\": \"celsius\"})",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 301,
+        "prompt_ms": 406.794,
+        "prompt_per_token_ms": 1.3514750830564783,
+        "prompt_per_second": 739.9322507214954,
+        "predicted_n": 39,
+        "predicted_ms": 808.093,
+        "predicted_per_token_ms": 21.265605263157894,
+        "predicted_per_second": 47.024290521016766
+      },
+      "usage": {
+        "completion_tokens": 39,
+        "prompt_tokens": 301,
+        "total_tokens": 340,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    },
+    "json_schema": {
+      "ok": true,
+      "detail": "parsed={\"language\": \"Rust\", \"primes\": [2, 3, 5, 7, 11]}",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 24,
+        "prompt_ms": 237.018,
+        "prompt_per_token_ms": 9.87575,
+        "prompt_per_second": 101.25813229374984,
+        "predicted_n": 44,
+        "predicted_ms": 1792.794,
+        "predicted_per_token_ms": 41.69288372093023,
+        "predicted_per_second": 23.98490847247369
+      },
+      "usage": {
+        "completion_tokens": 44,
+        "prompt_tokens": 24,
+        "total_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      }
+    }
+  },
+  "load_seconds": 4.1,
+  "vram_loaded_mib": 9334,
+  "vram_peak_mib": 9346,
+  "server_log": "F:\\Nebula\\logs\\bench\\standard-20261002-011711.log"
+}

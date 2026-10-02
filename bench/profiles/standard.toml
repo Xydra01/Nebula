@@ -1,0 +1,38 @@
+# Phase 0 starting point for the `standard` profile. Final values come from ADR-004 (B1-B3, B7).
+name = "standard"
+runtime = "llama-prism"
+model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
+ctx = 32768
+kv_type = "f16"
+flags = [
+    "-ngl", "99",
+    "-fa", "on",
+    "-np", "1",
+    "--jinja",
+    "--reasoning", "auto",
+    "--ctx-checkpoints", "32",
+    "--cache-ram", "4096",
+    "--cache-idle-slots",
+    # The default allows every origin, so any web page could drive the local server.
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+    # Verbosity 4 logs tensor offload and buffer sizes, which the smoke test checks.
+    "-lv", "4",
+]
+
+# Model card presets: "thinking" for reasoning_effort low/medium/xhigh, "instruct" for "none".
+[sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.05
+presence_penalty = 0.0
+repeat_penalty = 1.0
+
+[sampling.instruct]
+temperature = 0.7
+top_p = 0.80
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
+repeat_penalty = 1.0
