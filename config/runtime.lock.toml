@@ -19,3 +19,18 @@ source = "https://github.com/PrismML-Eng/llama.cpp/releases/tag/prism-b10743-adf
 date = "2026-10-02"
 devices = "CUDA0: NVIDIA GeForce RTX 4070 (12281 MiB)"
 driver = "596.49"
+
+# Upstream build for the non-Bonsai fallback models (ADR-005); PrismML's fork lags upstream.
+[llama-stock]
+release = "b11342"
+commit = "f1cee9941b0e843ea260bf8dd9a090fbd9711b6a"
+build = 11342
+version = "0.5.0-dev"
+published = "2026-10-02"
+variant = "win-cuda-12.4-x64"
+install_dir = 'F:\Nebula\runtime\llama-stock\b11342'
+source = "https://github.com/ggml-org/llama.cpp/releases/tag/b11342"
+
+[llama-stock.archives]
+"llama-b11342-bin-win-cuda-12.4-x64.zip" = "78e15a116a372a3ac5bb654c31709bee45f575d01e2e967b42ec6395cced9a64"
+"cudart-llama-bin-win-cuda-12.4-x64.zip" = "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"

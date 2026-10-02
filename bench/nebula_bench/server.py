@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import secrets
 import socket
@@ -15,6 +16,7 @@ import httpx
 
 RUNTIMES = {
     "llama-prism": Path(r"F:\Nebula\runtime\llama-prism\b10743-adfffbe\llama-server.exe"),
+    "llama-stock": Path(r"F:\Nebula\runtime\llama-stock\b11342\llama-server.exe"),
 }
 LOG_DIR = Path(r"F:\Nebula\logs\bench")
 PROFILE_DIR = Path(__file__).resolve().parent.parent / "profiles"
@@ -29,14 +31,20 @@ class Profile:
     kv_type: str
     flags: list[str]
     sampling: dict = field(default_factory=dict)
+    kv_bias: str | None = None
+    # How this model family switches reasoning: "effort" (Bonsai) or "enable_thinking" (Qwen).
+    reasoning_style: str = "effort"
 
     @classmethod
     def load(cls, name: str) -> Profile:
         data = tomllib.loads((PROFILE_DIR / f"{name}.toml").read_text(encoding="utf-8"))
         return cls(**data)
 
+    def with_(self, **overrides) -> Profile:
+        return dataclasses.replace(self, **overrides)
+
     def args(self, port: int) -> list[str]:
-        return [
+        args = [
             str(RUNTIMES[self.runtime]),
             "-m",
             self.model,
@@ -52,6 +60,13 @@ class Profile:
             str(port),
             *self.flags,
         ]
+        if self.kv_bias:
+            args += ["--kv-mean-center", self.kv_bias]
+        return args
+
+    def env(self) -> dict[str, str]:
+        # The KV bias is calibrated with K rotation off; inference must match.
+        return {"LLAMA_ATTN_ROT_DISABLE": "1"} if self.kv_bias else {}
 
 
 def free_port() -> int:
@@ -63,19 +78,20 @@ def free_port() -> int:
 class Server:
     """A llama-server child process. Use as a context manager so it is always stopped."""
 
-    def __init__(self, profile: Profile, startup_timeout_s: float = 300.0):
+    def __init__(self, profile: Profile, startup_timeout_s: float = 600.0, tag: str = ""):
         self.profile = profile
         self.port = free_port()
         self.base_url = f"http://127.0.0.1:{self.port}"
         self.startup_timeout_s = startup_timeout_s
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
-        self.log_path = LOG_DIR / f"{profile.name}-{stamp}.log"
+        self.log_path = LOG_DIR / f"{profile.name}{'-' + tag if tag else ''}-{stamp}.log"
         # Passed by environment rather than argv so it doesn't show up in process listings.
         self.api_key = secrets.token_urlsafe(32)
         self.headers = {"Authorization": f"Bearer {self.api_key}"}
         self._proc: subprocess.Popen | None = None
         self._log = None
+        self.load_seconds = 0.0
 
     def __enter__(self) -> Server:
         self._log = self.log_path.open("wb")
@@ -83,10 +99,14 @@ class Server:
             self.profile.args(self.port),
             stdout=self._log,
             stderr=subprocess.STDOUT,
-            env={**os.environ, "LLAMA_API_KEY": self.api_key},
+            env={**os.environ, **self.profile.env(), "LLAMA_API_KEY": self.api_key},
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        self.load_seconds = self._wait_healthy()
+        try:
+            self.load_seconds = self._wait_healthy()
+        except BaseException:
+            self.__exit__()
+            raise
         return self
 
     def __exit__(self, *exc) -> None:
@@ -96,8 +116,12 @@ class Server:
                 self._proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
-        if self._log:
+                self._proc.wait(timeout=30)
+        if self._log and not self._log.closed:
             self._log.close()
+
+    def alive(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
 
     def _wait_healthy(self) -> float:
         start = time.monotonic()
@@ -111,9 +135,10 @@ class Server:
                     return time.monotonic() - start
             except httpx.HTTPError:
                 pass
-            time.sleep(1)
+            time.sleep(0.25)
         raise TimeoutError(f"llama-server not healthy after {self.startup_timeout_s}s")
 
     def log_text(self) -> str:
-        self._log.flush()
+        if self._log and not self._log.closed:
+            self._log.flush()
         return self.log_path.read_text(encoding="utf-8", errors="replace")

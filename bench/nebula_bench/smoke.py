@@ -10,44 +10,21 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 import httpx
 
+from nebula_bench.client import chat as client_chat
+from nebula_bench.client import vram_used_mib
 from nebula_bench.server import Profile, Server
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 
-def vram_used_mib() -> int:
-    out = subprocess.run(
-        ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return int(out.strip().splitlines()[0])
-
-
 def chat(server: Server, messages: list[dict], *, effort: str, max_tokens: int, **extra) -> dict:
-    body = {
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "cache_prompt": True,
-        "reasoning_effort": effort,
-        "chat_template_kwargs": {"reasoning_effort": effort},
-        **server.profile.sampling["instruct" if effort == "none" else "thinking"],
-        **extra,
-    }
-    r = httpx.post(
-        f"{server.base_url}/v1/chat/completions", json=body, headers=server.headers, timeout=600
-    )
-    if r.status_code != 200:
-        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:500]}")
-    return r.json()
+    return client_chat(server, messages, reasoning=effort, max_tokens=max_tokens, **extra)
 
 
 def check_offload(server: Server) -> tuple[bool, str]:

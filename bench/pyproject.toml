@@ -29,3 +29,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Task prompts and tests are data; wrapping them hurts readability more than long lines do.
+"nebula_bench/tasks_*.py" = ["E501"]
+"nebula_bench/toolcalls.py" = ["E741"]

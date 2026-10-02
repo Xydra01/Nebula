@@ -14,9 +14,36 @@ role = "primary candidate"
 [bonsai2-27b.files."Ternary-Bonsai-2-27B-PQ2_0.gguf"]
 sha256 = "3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1"
 bytes = 7206168928
-role = "comparison; archive to D: after B1/B5 unless ADR-004 picks it"
+role = "not chosen (ADR-004); the kv-bias file was archived with it"
+archived = 'D:\NebulaCold\models-archive\bonsai2-27b'
 
 [bonsai2-27b.files."Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf"]
 sha256 = "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"
 bytes = 629246976
 role = "vision projector"
+
+# Fallback candidates (ADR-005). All Qwen 3.5 9B fine-tunes, Q6_K, run on llama-stock.
+[fallback]
+dir = 'F:\Nebula\models\fallback'
+downloaded = "2026-10-02"
+runtime = "llama-stock"
+
+[fallback.files."ornith-1.0-9b-Q6_K.gguf"]
+repo = "ornith-ai/Ornith-1.0-9B-GGUF"
+sha256 = "33b6f6a3e3f05078438e12df8a4b55c8acf78ceadcc639d2af1cf35a026e8387"
+bytes = 7359259072
+role = "not chosen (ADR-005)"
+archived = 'D:\NebulaCold\models-archive\fallback'
+
+[fallback.files."Ornith-1.5-9B-Q6_K.gguf"]
+repo = "ornith-ai/Ornith-1.5-9B-GGUF"
+sha256 = "b6f76e74f86245b3caee014b797c10dca931c4dfdaabfb134eab655f81e4154a"
+bytes = 7558901696
+role = "not chosen (ADR-005)"
+archived = 'D:\NebulaCold\models-archive\fallback'
+
+[fallback.files."DeltaCoder-9B-v1.1-DPO-Q6_K.gguf"]
+repo = "danielcherubini/Qwen3.5-DeltaCoder-9B-GGUF"
+sha256 = "0f57f0cda3cb1e027e947ce6e8f15f5743f150ec8cd28f29dacde0b8748bf3cd"
+bytes = 7359259040
+role = "fallback model (ADR-005, Proposed)"

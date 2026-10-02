@@ -194,6 +194,9 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 > - **3.1 done:** `prism-b10743-adfffbe`, CUDA 12.4, pinned in `config/runtime.lock.toml`.
 > - **3.3 done:** PTQ1_0, PQ2_0 and mmproj Q8_0 downloaded, with hashes verified and recorded in `config/models.lock.toml`. There is **no Bonsai 2 drafter** to download.
 > - **3.6 done:** all smoke checks pass ([bench/results](../bench/results/)). With 32K context and an f16 KV cache, the model plus context uses 7.9 GB, total VRAM use is 9.3 GB (the desktop takes 1.4 GB), and generation runs at 30–50 tokens/s.
+> - **3.4 done:** stock llama.cpp `b11342` plus three fallback candidates (Ornith 1.0, Ornith 1.5, DeltaCoder), all benchmarked. The losers are archived to `D:` (see ADR-005).
+> - **3.7 done:** KV bias files generated for PTQ1_0 and PQ2_0; the server loads them with q4_0 KV.
+> - **5.2 harness and B1–B3, B5–B8 run** (overnight, 2026-10-02). See the [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md) and [ADR-005](adr/ADR-005-fallback-model.md) (both Proposed). B4 is still blocked. 3.5 (embedding model) is still open.
 
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
