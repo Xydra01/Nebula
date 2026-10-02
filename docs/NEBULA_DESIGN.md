@@ -787,9 +787,9 @@ Approval requests show up in the TUI as a modal:
 | Visibility | Public from day one |
 | License | MIT |
 | Repo | `Xydra01/Nebula` |
-| Machine account | A free GitHub machine account, **`nebula-bot`**, added as a collaborator (write access) only on repos Nebula works in. It authenticates with a fine-grained token stored in Credential Manager. |
-| Commit identity | Commits are authored under your account, with a `Co-authored-by: nebula-bot <ID+nebula-bot@users.noreply.github.com>` trailer (GitHub then shows the bot as co-author on each commit) and a `Nebula-Task: t_0042` trailer linking back to the ledger. `git log --grep` and GitHub search can show exactly what Nebula built. |
-| Pushing | `nebula-bot` pushes **Nebula's own feature branches** (`nebula/<task-id>-<slug>`) and opens the PRs (tier 2, auto-allowed by policy). Push to `main` is forbidden. |
+| Machine account | A free GitHub machine account, **`Nebula-dev-bot`**, added as a collaborator (write access) only on repos Nebula works in. It authenticates with a fine-grained token stored in Credential Manager. |
+| Commit identity | Commits are authored under your account, with a `Co-authored-by: Nebula-dev-bot <336789866+Nebula-dev-bot@users.noreply.github.com>` trailer (GitHub then shows the bot as co-author on each commit) and a `Nebula-Task: t_0042` trailer linking back to the ledger. `git log --grep` and GitHub search can show exactly what Nebula built. |
+| Pushing | `Nebula-dev-bot` pushes **Nebula's own feature branches** (`nebula/<task-id>-<slug>`) and opens the PRs (tier 2, auto-allowed by policy). Push to `main` is forbidden. |
 | Review and merge | Branch protection on `main`: PR required, status checks required, **1 approving review from you** (via `CODEOWNERS`). Because the bot opened the PR, you can formally review and approve it, and the bot cannot approve its own PR. |
 | Future trust | A per-repo `trust_level` in `policy.toml`: `pr_only` (default) or `auto_merge` (Nebula may merge its own PR once required checks pass; this needs a per-repo branch-protection exception). Nebula's own repo can never be set to `auto_merge` for core (L3) changes. |
 
@@ -1154,7 +1154,7 @@ flowchart LR
 
 - Free 100–150 GB on `F:`; install toolchains to `F:` (VS Build Tools/MSVC, CUDA toolkit, Rust, uv, Node, Git, gitleaks, rclone)
 - Public `Xydra01/Nebula` repo (MIT) with this design doc as the first commit
-- `nebula-bot` machine account, `CODEOWNERS`, branch protection on `main` (1 review from you), commit trailer conventions, pre-commit/pre-push secret scanning
+- `Nebula-dev-bot` machine account, `CODEOWNERS`, branch protection on `main` (1 review from you), commit trailer conventions, pre-commit/pre-push secret scanning
 - Windows OpenSSH Server restricted to the Tailscale interface; check the TUI-over-SSH path
 - Encrypted rclone backup of the state DB to Google Drive, with a first test restore
 - Rust workspace and crate skeletons; CI script (`cargo fmt`, `clippy`, `nextest`) plus GitHub Actions
@@ -1190,7 +1190,7 @@ flowchart LR
 - First Python tool server from the tool template (`test.run` with output parsing)
 - Build/test adapters for **Python** (uv, pytest, ruff, pyright) and **Rust** (cargo, nextest, clippy)
 - Circuit breakers, global stop, game-mode detection, disk guard
-- GitHub flow: `nebula-bot` pushes feature branches and opens PRs with co-author trailers
+- GitHub flow: `Nebula-dev-bot` pushes feature branches and opens PRs with co-author trailers
 - ntfy push notifications over Tailscale for approvals and task completion
 
 **Exit criteria:**
@@ -1512,7 +1512,7 @@ A: This si great human at executive level for decisions is the way to go.
 
 29. GitHub self-review: PRs opened under your account can't be formally "approved" by you on GitHub. Pick one:
     - **(a)** Branch protection with required status checks and zero required approvals. You merge by hand, and Nebula's `trust_level` stops it from merging on its own. This is the current plan.
-    - **(b)** A free machine account (e.g. `nebula-bot`) opens the PRs, so you can formally review and approve them. Commits still carry your authorship with the co-author trailer.
+    - **(b)** A free machine account (e.g. `Nebula-dev-bot`) opens the PRs, so you can formally review and approve them. Commits still carry your authorship with the co-author trailer.
 
     A: b would work
 
@@ -1538,7 +1538,7 @@ A: Nebula
 | 26 | The `C:` drive is **physically failing**: it is never used and is a forbidden path for Nebula. Off-machine backups go to **Google Drive** through encrypted rclone. | 4.6, 7.6, R14 |
 | 27 | Authority split **confirmed**: the manager handles its task, and you are the executive for every tier-3 decision. | 9.5 |
 | 28 | **$20/month** of Cursor usage available (Nebula's share was set to $5 in question 33); **local runtime only**; every delegation is approved by you at first. | 9.4 |
-| 29 | **Option (b):** a `nebula-bot` machine account opens the PRs, so you can formally review and approve them. Commits stay under your authorship with the bot as co-author. | 7.7, 12 |
+| 29 | **Option (b):** a `Nebula-dev-bot` machine account opens the PRs, so you can formally review and approve them. Commits stay under your authorship with the bot as co-author. | 7.7, 12 |
 | 30 | Godot is fine, but the game-dev offshoot is **out of scope**. Nebula will design it when it's ready. | 12 |
 | 31 | Repo: **`Xydra01/Nebula`**. This design doc becomes its first commit (assumed, since the answer only covered the name). | 7.7, 12 |
 

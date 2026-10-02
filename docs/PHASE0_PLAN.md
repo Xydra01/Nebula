@@ -25,7 +25,7 @@ There are no agent tools yet; that is Phase 1. Phase 0 builds the ground everyth
 | Workstream | Summary |
 | --- | --- |
 | **WS1 Machine prep** | Disk space, the `C:` drive, toolchains, Tailscale SSH |
-| **WS2 Repo and GitHub** | `Xydra01/Nebula`, `nebula-bot`, branch protection, secret scanning, CI |
+| **WS2 Repo and GitHub** | `Xydra01/Nebula`, `Nebula-dev-bot`, branch protection, secret scanning, CI |
 | **WS3 Model runtime and benchmarks** | PrismML binaries, model downloads, benchmark harness, measurements, model decisions |
 | **WS4 Rust core** | `nebula-proto`, `nebula-telemetry`, `nebula-model`, `nebula-resources`, `nebula-daemon`, `nebula-cli` |
 | **WS5 Ops** | Encrypted backups, `nebula doctor`, the remote-access check |
@@ -175,10 +175,10 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 | 2.0 | **Status 2026-10-01:** 2.1 and 2.2 are done: [github.com/Xydra01/Nebula](https://github.com/Xydra01/Nebula), with the `Project Neutron` folder itself as the repo. The GitHub half of 2.5 (secret scanning + push protection) is on. | — | — |
 | 2.1 | Create the **public** repo `Xydra01/Nebula` with an MIT `LICENSE`, `README.md` (vision paragraph + status) and a Rust/Python `.gitignore` | Repo exists | 0.3 h |
 | 2.2 | **First commit**: move `docs/NEBULA_DESIGN.md` and `docs/PHASE0_PLAN.md` from the `Project Neutron` folder into the repo | Docs visible on GitHub | 0.2 h |
-| 2.3 | Create the **`nebula-bot` machine account** (separate email, 2FA). Invite it as a collaborator with write access. Create a **fine-grained token** scoped to `Xydra01/Nebula` only (contents: read/write, pull requests: read/write). Store it in Windows Credential Manager as `nebula/github_bot_token`. | The bot can push a test branch and open a PR | 0.5–1 h |
+| 2.3 | Create the **`Nebula-dev-bot` machine account** (separate email, 2FA). Invite it as a collaborator with write access. Create a **fine-grained token** scoped to `Xydra01/Nebula` only (contents: read/write, pull requests: read/write). Store it in Windows Credential Manager as `nebula/github_bot_token`. | The bot can push a test branch and open a PR | 0.5–1 h |
 | 2.4 | Add `CODEOWNERS` (`* @Xydra01`). Set up branch protection / a ruleset on `main`: PR required, 1 approval from a code owner, required status checks (the CI job from 2.7), no force-push, no deletion | A direct push to `main` is rejected; a bot PR needs your approval | 0.5 h |
 | 2.5 | Turn on **GitHub secret scanning + push protection** (free for public repos). Add `gitleaks` as **pre-commit and pre-push hooks** (a `scripts/install-hooks.ps1` that sets `core.hooksPath` to `.githooks/`) | A commit containing a fake token is blocked locally, and the same push is blocked by GitHub | 0.5 h |
-| 2.6 | Write `CONTRIBUTING.md` covering: branch naming (`nebula/<task-id>-<slug>`, `feat/...` for your own work); **commit trailers** (`Co-authored-by: nebula-bot <ID+nebula-bot@users.noreply.github.com>`, `Nebula-Task: <id>`); Conventional Commits style messages; how to run checks locally | File merged | 0.5 h |
+| 2.6 | Write `CONTRIBUTING.md` covering: branch naming (`nebula/<task-id>-<slug>`, `feat/...` for your own work); **commit trailers** (`Co-authored-by: Nebula-dev-bot <336789866+Nebula-dev-bot@users.noreply.github.com>`, `Nebula-Task: <id>`); Conventional Commits style messages; how to run checks locally | File merged | 0.5 h |
 | 2.7 | **CI (GitHub Actions)** on the Windows runner: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo nextest run` (CPU-only tests), `gitleaks detect`, plus `ruff` + `pytest` for `bench/`. Cache with `Swatinem/rust-cache`. | First PR shows a green required check | 1.5–2 h |
 | 2.8 | Add issue templates (bug, feature, ADR) and a `docs/adr/` folder with `ADR-001`–`003` copied from the design doc | Templates show on GitHub | 0.5 h |
 
@@ -440,7 +440,7 @@ From the laptop over Tailscale: `ssh desktop`, then `nebula daemon status`, `neb
    - Section 2.2: the PTQ1_0 versus PQ2_0 verdict
 2. **ADRs merged:** ADR-004 (model profiles), ADR-005 (fallback model), and **ADR-006 (IPC framing: NDJSON JSON-RPC over the named pipe)**.
 3. `docs/ops/`: `setup.md` (a reproducible machine setup checklist, which future Nebula will read), `backup.md`, `runtime-upgrade.md` (how to move to a new fork release and re-run benchmarks), `retire-c-drive.md` (the step-by-step boot-loader move and disconnect procedure from Section 3.1), and `replace-nvme.md` (moving Windows + Nebula to a new NVMe: clone or reinstall, restore the latest backup, update `config.toml` paths, move the boot loader).
-4. **Phase 1 backlog** as GitHub issues, each with acceptance criteria. Seed list: MCP tool host, built-in fs/git/shell tools, permission tiers and classifier, worktrees, Job Objects for tools, TUI, executor loop, Python/Rust adapters, circuit breakers, game mode, `nebula-bot` PR flow, ntfy, auto-start.
+4. **Phase 1 backlog** as GitHub issues, each with acceptance criteria. Seed list: MCP tool host, built-in fs/git/shell tools, permission tiers and classifier, worktrees, Job Objects for tools, TUI, executor loop, Python/Rust adapters, circuit breakers, game mode, `Nebula-dev-bot` PR flow, ntfy, auto-start.
 5. **Exit review** (Section 9): go through the checklist and tag `v0.0.1-phase0`.
 
 ---
@@ -458,7 +458,7 @@ Phase 0 is done when **every** box is checked:
 
 **Repo**
 - [ ] `Xydra01/Nebula` is public under MIT; `main` is protected (PR, 1 code-owner approval, required CI)
-- [ ] `nebula-bot` opened at least one PR that you approved and merged
+- [ ] `Nebula-dev-bot` opened at least one PR that you approved and merged
 - [ ] A planted fake secret is blocked by both the local hook and GitHub push protection
 - [ ] CI is green on `main`
 
