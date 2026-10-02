@@ -1,0 +1,37 @@
+name: Feature / task
+description: A new capability or a backlog task, with acceptance criteria
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should Nebula be able to do, and why does it matter?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete, checkable conditions. Nebula's verifier uses these.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Roadmap phase
+      options: [Phase 0, Phase 1, Phase 2, Phase 3, Phase 4+, unscheduled]
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Self-modification layer touched
+      description: See design doc Section 11. L3 is proposal-only (you review and merge); L4 is changed only by hand.
+      options: [none / docs, "L0 knowledge notes / memory", "L1 prompts / workflows / tool configs", L2 Python tool servers, L3 Rust core crates, L4 protected set]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Design doc sections, constraints, related issues.
