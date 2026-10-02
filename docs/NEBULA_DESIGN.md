@@ -171,7 +171,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | --- | --- | --- | --- |
 | Toolchains: VS Build Tools (MSVC), Rust, uv, Node, misc. | `F:` | ~18 GB | CUDA toolkit installed only if the fork must be built from source |
 | Page file (moved off `C:`) | `F:` | 4–12 GB | |
-| Active models | `F:` | ~16 GB | Bonsai PTQ1_0 + drafter + mmproj + KV bias, chosen fallback, embedding model. Kept on the NVMe for fast loading (game-mode resume). |
+| Active models | `F:` | ~25 GB | Bonsai PTQ1_0 + mmproj + KV bias (6.6 GB), the Gemma 4 fallback (17 GB), embedding model; plus a drafter if one is released. Kept on the NVMe for fast loading (game-mode resume). |
 | Rust build output | `F:` | ~10 GB | Shared `CARGO_TARGET_DIR`, `sccache` capped at 6 GB, weekly `cargo sweep` |
 | Worktrees, package caches, state DB | `F:` | ~8 GB | Finished worktrees pruned automatically |
 | Hot logs (7 days) | `F:` | ~2 GB | |
@@ -255,11 +255,11 @@ Rules:
 | `vision` | PTQ1_0 + mmproj | FP16 | 24K | Screenshots, UI work |
 | `lean` | PTQ1_0 | q4_0 + bias | 16K | When VRAM is contested |
 | `burst` | PTQ1_0 + dspark drafter | FP16 | 16K | Long single-shot generation; no prompt-cache reuse. **Parked (2026-10-02): no Bonsai 2 drafter has been released yet** (see 5.5.1). |
-| `fallback` | Ornith-1.0-9B Q6_K (7.36 GB) on stock llama.cpp | FP16 | 32K | If the fork is broken or unavailable |
+| `fallback` | Gemma 4 26B-A4B UD-Q4_K_XL (17.0 GB, MoE; experts in system RAM via `--fit`) on stock llama.cpp | FP16 | 32K | If the fork is broken or unavailable |
 
 Final flags, reasoning effort per role and the prompt-layout rule are in [ADR-004](adr/ADR-004-model-profiles.md) (Accepted 2026-10-02). The `quality` profile was dropped: PQ2_0 showed no gain.
 
-**Fallback model.** Ornith-1.0-9B (MIT license; post-trained from Gemma 4 and Qwen 3.5 for terminal agents and tool calling) replaces the originally suggested Qwen 3.5 9B. Its vendor reports 43.1 on Terminal-Bench 2.1 against 21.3 for Qwen3.5-9B, versus 52.8 for Bonsai 2. It runs on **stock** llama.cpp, which is the point of a fallback. Qwen3.5-DeltaCoder-9B is the second candidate. Both are compared on Nebula's own benchmark in Phase 0 before one is chosen. **Update 2026-10-02:** all three 9B candidates (Ornith 1.0/1.5, DeltaCoder) fell well short of Bonsai (best 12–13/20 against 19/20 on the coding tasks), so ADR-005 stays Proposed while larger MoE models with experts in system RAM are tested.
+**Fallback model: Gemma 4 26B-A4B** ([ADR-005](adr/ADR-005-fallback-model.md), Accepted 2026-10-02). It runs on **stock** llama.cpp, which is the point of a fallback. It is a mixture-of-experts model with ~4B active parameters, so `--fit on` keeps attention, the KV cache and some experts on the GPU and the rest in system RAM (~10.5 GB). On Nebula's benchmark it scored 18/20 on the coding tasks with thinking off and 19/20 with thinking on (Bonsai: 19/20 at `medium`), at 27.5 t/s. Tool calls must be schema-constrained (98%; 88% unconstrained). The originally planned 9B models (Ornith 1.0/1.5, DeltaCoder) reached only 12–13/20; Qwen3.6-35B-A3B was a close runner-up and is archived on `D:`.
 
 ---
 
@@ -1187,7 +1187,7 @@ flowchart LR
   - prompt-cache hit behavior with context checkpoints
   - `burst` profile speedup
   - PTQ1_0 vs PQ2_0 quality on ~20 hand-picked coding prompts
-  - Ornith-1.0-9B vs DeltaCoder-9B as the fallback
+  - the fallback model (done: Gemma 4 26B-A4B, ADR-005)
   - schema-constrained JSON / tool-call reliability
 - `nebula-model`: llama-server supervisor, profiles, streaming chat, JSON-schema output
 - `nebula-telemetry`: JSONL logging, trace IDs, blob store
@@ -1386,7 +1386,7 @@ A: One of them is a upgraded version of a tool I currently have made called Smar
 | 3 | Gaming can overlap with Nebula. A **game mode** pauses tasks and unloads the model when a game is detected, then resumes afterwards. Games are never closed. | 2.6 |
 | 4 | SearXNG runs **natively in WSL2** as a systemd service, with no Docker. | 2.4, 3.3, 8.2 |
 | 5 | Researched. **Prompt caching: yes**, through context checkpoints (`--ctx-checkpoints`, `--cache-ram`, `cache_prompt`). **Speculative decoding: yes on CUDA (~1.8–2x)**, but it currently disables prompt-cache reuse, so it is limited to an opt-in `burst` profile. The 4-bit KV cache (~18 KiB/token) makes 128K context practical. | 2.2, 2.3, 2.6 |
-| 6 | Fallback model: **Ornith-1.0-9B Q6_K** on stock llama.cpp, with Qwen3.5-DeltaCoder-9B as runner-up. The final pick is made on Nebula's own Phase 0 benchmark. | 2.6 |
+| 6 | Fallback model: **Gemma 4 26B-A4B** (MoE, experts in system RAM) on stock llama.cpp, chosen on Nebula's Phase 0 benchmark (ADR-005). Qwen3.6-35B-A3B is the runner-up. | 2.6 |
 | 7 | LoRA fine-tuning is a planned research track (Phase 5+). Feasibility limits: see question 23. | 14.3 |
 | 8 | Your three examples become the benchmark's three **task families**: multi-file feature + tests, bug diagnosis + regression fix, and refactor with the test suite kept green. Repos chosen in round 2 (question 20). | 11.4 |
 | 9 | Proposed adapter order. Phase 1: Python and Rust. Phase 2: web (HTML/CSS/JS/TS/React). Phase 3: C/C++. Confirmed in round 2. | 12 |
@@ -1470,7 +1470,7 @@ A: Currently I'm taking a class that uses C++ so I just figured it would be good
 23. LoRA fine-tuning limits you should know about:
     - The ternary weights can't be trained directly with standard tools.
     - Fine-tuning the full Qwen3.8-27B and re-compressing it would need PrismML's compression pipeline.
-    - QLoRA on a 27B needs ~20 GB+ VRAM. Your 12 GB card can QLoRA a ~9B model, such as the fallback model.
+    - QLoRA on a 27B needs ~20 GB+ VRAM. Your 12 GB card can QLoRA a ~9B dense model (the MoE fallback is too large).
     - Whether llama.cpp LoRA adapters work on top of the ternary format is unverified.
 
     Options:

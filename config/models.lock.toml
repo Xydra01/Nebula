@@ -59,7 +59,7 @@ runtime = "llama-stock"
 repo = "unsloth/gemma-4-26B-A4B-it-GGUF"
 sha256 = "ef728c8e0c337fd1067b947af006e38a9ef2419e56feced4fd29b4bf0636e30c"
 bytes = 17010980576
-role = "fallback model (ADR-005, Proposed)"
+role = "fallback model (ADR-005)"
 
 [fallback-moe.files."Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"]
 repo = "unsloth/Qwen3.6-35B-A3B-GGUF"

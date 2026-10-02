@@ -1,6 +1,6 @@
 # ADR-005: Fallback model
 
-**Status:** Proposed
+**Status:** Accepted (2026-10-02)
 
 ## Context
 
