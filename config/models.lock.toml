@@ -46,4 +46,31 @@ archived = 'D:\NebulaCold\models-archive\fallback'
 repo = "danielcherubini/Qwen3.5-DeltaCoder-9B-GGUF"
 sha256 = "0f57f0cda3cb1e027e947ce6e8f15f5743f150ec8cd28f29dacde0b8748bf3cd"
 bytes = 7359259040
+role = "not chosen (ADR-005 round 2)"
+archived = 'D:\NebulaCold\models-archive\fallback'
+
+# Fallback round 2 (ADR-005): MoE models with routed experts in system RAM (`--fit on`).
+[fallback-moe]
+dir = 'F:\Nebula\models\fallback-moe'
+downloaded = "2026-10-02"
+runtime = "llama-stock"
+
+[fallback-moe.files."gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf"]
+repo = "unsloth/gemma-4-26B-A4B-it-GGUF"
+sha256 = "ef728c8e0c337fd1067b947af006e38a9ef2419e56feced4fd29b4bf0636e30c"
+bytes = 17010980576
 role = "fallback model (ADR-005, Proposed)"
+
+[fallback-moe.files."Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"]
+repo = "unsloth/Qwen3.6-35B-A3B-GGUF"
+sha256 = "707a55a8a4397ecde44de0c499d3e68c1ad1d240d1da65826b4949d1043f4450"
+bytes = 22360456160
+role = "runner-up (ADR-005)"
+archived = 'D:\NebulaCold\models-archive\fallback-moe'
+
+[fallback-moe.files."GLM-4.7-Flash-UD-Q4_K_XL.gguf"]
+repo = "unsloth/GLM-4.7-Flash-GGUF"
+sha256 = "b0d4fbc1211f891b4cfbf2a497160bfe06a49412420068904d426b7a13f4ba7f"
+bytes = 17520169312
+role = "not chosen (ADR-005)"
+archived = 'D:\NebulaCold\models-archive\fallback-moe'

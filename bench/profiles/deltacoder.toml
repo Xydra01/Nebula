@@ -1,7 +1,7 @@
 # Fallback candidate (ADR-005). Model card: temperature 0.6, never below 0.5.
 name = "deltacoder"
 runtime = "llama-stock"
-model = 'F:\Nebula\models\fallback\DeltaCoder-9B-v1.1-DPO-Q6_K.gguf'
+model = 'D:\NebulaCold\models-archive\fallback\DeltaCoder-9B-v1.1-DPO-Q6_K.gguf'
 ctx = 32768
 kv_type = "f16"
 reasoning_style = "enable_thinking"

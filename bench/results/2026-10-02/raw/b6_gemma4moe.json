@@ -1,0 +1,259 @@
+{
+ "cases": 100,
+ "modes": {
+  "native": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 91.0,
+    "args_ok": 88.0
+   },
+   "failures": [
+    {
+     "i": 4,
+     "request": "What's in Cargo.toml?",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "ls -R | grep Cargo.toml"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 25,
+     "request": "Find `TODO` (case-sensitive) but only inside src.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "path": "src",
+        "pattern": "TODO"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 26,
+     "request": "Find `fn main` (case-sensitive) but only inside crates/daemon.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "path": "crates/daemon",
+        "pattern": "fn main"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "path": "bench/profiles",
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 36,
+     "request": "Create the file notes/todo.md containing exactly: - write ADR-004",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "mkdir -p notes"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 39,
+     "request": "Create the file docs/CHANGELOG.md containing exactly: ## 0.1.0",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "mkdir -p docs"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 42,
+     "request": "Commit Cargo.toml and Cargo.lock with the message \"chore: bump deps\".",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "ls Cargo.toml Cargo.lock"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 49,
+     "request": "Fetch https://github.com/PrismML-Eng/llama.cpp",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "git clone https://github.com/PrismML-Eng/llama.cpp"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 51,
+     "request": "Read both Cargo.toml and README.md.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 52,
+     "request": "Read both src/main.rs and src/lib.rs.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "read_file",
+       {
+        "path": "src/main.rs"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 53,
+     "request": "Read both bench/pyproject.toml and bench/profiles/standard.toml.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "read_file",
+       {
+        "path": "bench/pyproject.toml"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 54,
+     "request": "List the src directory and also search it for TODO.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "list_dir",
+       {
+        "path": "src"
+       }
+      ]
+     ],
+     "raw": ""
+    }
+   ]
+  },
+  "schema": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 99.0,
+    "args_ok": 98.0
+   },
+   "failures": [
+    {
+     "i": 28,
+     "request": "Find `class .*Error` (case-sensitive) but only inside docs.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "class .*Error",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"class .*Error\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 36,
+     "request": "Create the file notes/todo.md containing exactly: - write ADR-004",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "mkdir -p notes"
+       }
+      ],
+      [
+       "write_file",
+       {
+        "path": "notes/todo.md",
+        "content": "- write ADR-004"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"run_command\", \"arguments\": {\"command\": \"mkdir -p notes\"}}, {\"tool\": \"write_file\", \"arguments\": {\"path\": \"notes/todo.md\", \"content\": \"- write ADR-004\"}}]}"
+    }
+   ]
+  }
+ },
+ "stage_seconds": 458
+}

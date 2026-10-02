@@ -72,6 +72,15 @@ def vram_used_mib() -> int:
     return int(out.strip().splitlines()[0])
 
 
+def process_ram_mib(pid: int) -> int:
+    """Private bytes of a process; for MoE offload this is where the expert weights live."""
+    cmd = f"[int]((Get-Process -Id {pid}).PrivateMemorySize64/1MB)"
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True, timeout=60
+    ).stdout.strip()
+    return int(out) if out.isdigit() else -1
+
+
 def shared_gpu_mib() -> int:
     """Largest 'Shared Usage' across GPU adapters: VRAM that spilled into system RAM."""
     cmd = (

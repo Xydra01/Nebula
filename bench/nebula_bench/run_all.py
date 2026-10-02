@@ -29,6 +29,14 @@ FALLBACK_SHA = {
     "ornith15": "b6f76e74f86245b3caee014b797c10dca931c4dfdaabfb134eab655f81e4154a",
     "deltacoder": "0f57f0cda3cb1e027e947ce6e8f15f5743f150ec8cd28f29dacde0b8748bf3cd",
 }
+# Round 2: MoE models with routed experts in system RAM (`--fit on`); the 9B round was too weak.
+MOE_SHA = {
+    "qwen36moe": "707a55a8a4397ecde44de0c499d3e68c1ad1d240d1da65826b4949d1043f4450",
+    "gemma4moe": "ef728c8e0c337fd1067b947af006e38a9ef2419e56feced4fd29b4bf0636e30c",
+    "glm47flash": "b0d4fbc1211f891b4cfbf2a497160bfe06a49412420068904d426b7a13f4ba7f",
+}
+MOE_BYTES = {"qwen36moe": 22360456160, "gemma4moe": 17010980576, "glm47flash": 17520169312}
+ALL_SHA = FALLBACK_SHA | MOE_SHA
 ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
 
 
@@ -90,11 +98,14 @@ def fallback_ready(name: str, verified: dict) -> bool:
     path = Path(Profile.load(name).model)
     if not path.exists():
         return False
+    expected = MOE_BYTES.get(name)
     size = path.stat().st_size
+    if expected is not None and size != expected:
+        return False  # still downloading
     time.sleep(20)
     if path.stat().st_size != size or size < 6 * 2**30:
         return False  # still downloading
-    verified[name] = sha256(path) == FALLBACK_SHA[name]
+    verified[name] = sha256(path) == ALL_SHA[name]
     log(f"  {name}: download complete, hash {'OK' if verified[name] else 'MISMATCH'}")
     return verified[name]
 
@@ -170,6 +181,38 @@ def stages() -> list[Stage]:
             lambda: b7(pq2, "PQ2_0", [("q4_0", True, 65536), ("q4_0", True, 131072)]),
         ),
     ]
+    for name in MOE_SHA:
+        p = Profile.load(name)
+        out += [
+            # `--fit` decides GPU placement, so the VRAM pre-check is bypassed (buffer 0).
+            (
+                f"b1_{name}",
+                name,
+                lambda p=p: {
+                    "model": p.model,
+                    "rows": [
+                        perf.throughput(p, 32768, "f16", 0, log),
+                        perf.throughput(p, 131072, "q8_0", 0, log),
+                    ],
+                },
+            ),
+            (f"b6_{name}", name, lambda p=p: toolcalls.run(p, ["native", "schema"], log)),
+            (f"b5_{name}_none", name, lambda p=p: quality.run(p, "none", 4096, log)),
+            (f"b5_{name}_thinking", name, lambda p=p: quality.run(p, "on", 16384, log)),
+            (
+                f"b7hard_{name}",
+                name,
+                lambda p=p: {
+                    "model": p.model,
+                    "rows": [needle.run(p, 32768, "f16", None, log, hard=True)],
+                },
+            ),
+        ]
+    # The two finalists: does the agent-loop prompt cache work on them?
+    out += [
+        (f"b3_{n}", n, lambda n=n: perf.prompt_cache(Profile.load(n), log, n=5))
+        for n in ("qwen36moe", "gemma4moe")
+    ]
     return out
 
 
@@ -210,7 +253,7 @@ def main() -> int:
             continue
         run_stage(name, fn)
 
-    deadline = time.monotonic() + 3 * 3600
+    deadline = time.monotonic() + 8 * 3600
     while deferred and time.monotonic() < deadline:
         for stage in list(deferred):
             name, needs, fn = stage

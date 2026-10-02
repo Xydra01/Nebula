@@ -1,0 +1,60 @@
+{
+ "model": "F:\\Nebula\\models\\fallback-moe\\Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf",
+ "rows": [
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "estimated_mib": 2648,
+   "load_seconds": 17.84,
+   "vram_loaded_mib": 11107,
+   "prompt_tokens": 29163,
+   "pp_tps": 334.2,
+   "tg_at_depth_tps": 32.86,
+   "tg_short_tps": 34.34,
+   "pp_runs": [
+    267.3,
+    334.2,
+    335.3
+   ],
+   "tg_runs": [
+    32.86,
+    31.66,
+    35.99
+   ],
+   "vram_peak_mib": 11122,
+   "shared_mib": 166,
+   "server_ram_mib": 11623,
+   "vram_baseline_mib": 1459,
+   "model_plus_ctx_mib": 9663,
+   "spill_mib": 117,
+   "headroom_mib": 1160
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "q8_0",
+   "estimated_mib": 4952,
+   "load_seconds": 26.0,
+   "vram_loaded_mib": 11006,
+   "prompt_tokens": 117700,
+   "pp_tps": 295.9,
+   "tg_at_depth_tps": 25.11,
+   "tg_short_tps": 30.82,
+   "pp_runs": [
+    289.4,
+    302.4
+   ],
+   "tg_runs": [
+    24.93,
+    25.3
+   ],
+   "vram_peak_mib": 11005,
+   "shared_mib": 261,
+   "server_ram_mib": 12297,
+   "vram_baseline_mib": 1449,
+   "model_plus_ctx_mib": 9556,
+   "spill_mib": 215,
+   "headroom_mib": 1277
+  }
+ ],
+ "stage_seconds": 1252
+}

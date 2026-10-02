@@ -1,0 +1,141 @@
+{
+ "prefix_tokens_target": 20000,
+ "prefix_tokens": 19994,
+ "no_cache": {
+  "rows": [
+   {
+    "prompt_n": 20261,
+    "prompt_ms": 35243.9,
+    "cache_n": 0
+   },
+   {
+    "prompt_n": 20261,
+    "prompt_ms": 31598.3,
+    "cache_n": 0
+   },
+   {
+    "prompt_n": 20261,
+    "prompt_ms": 31290.6,
+    "cache_n": 0
+   },
+   {
+    "prompt_n": 20261,
+    "prompt_ms": 31569.3,
+    "cache_n": 0
+   },
+   {
+    "prompt_n": 20261,
+    "prompt_ms": 31417.1,
+    "cache_n": 0
+   }
+  ],
+  "median_prompt_ms": 31493.199999999997,
+  "median_prompt_n": 20261.0
+ },
+ "cache": {
+  "rows": [
+   {
+    "prompt_n": 24,
+    "prompt_ms": 408.3,
+    "cache_n": 20237
+   },
+   {
+    "prompt_n": 24,
+    "prompt_ms": 392.8,
+    "cache_n": 20237
+   },
+   {
+    "prompt_n": 24,
+    "prompt_ms": 751.1,
+    "cache_n": 20237
+   },
+   {
+    "prompt_n": 24,
+    "prompt_ms": 403.1,
+    "cache_n": 20237
+   },
+   {
+    "prompt_n": 24,
+    "prompt_ms": 423.4,
+    "cache_n": 20237
+   }
+  ],
+  "median_prompt_ms": 413.25,
+  "median_prompt_n": 24.0
+ },
+ "cache_tools_reordered": {
+  "rows": [
+   {
+    "prompt_n": 24,
+    "prompt_ms": 410.8,
+    "cache_n": 20237
+   },
+   {
+    "prompt_n": 250,
+    "prompt_ms": 1097.1,
+    "cache_n": 20011
+   },
+   {
+    "prompt_n": 250,
+    "prompt_ms": 1389.3,
+    "cache_n": 20011
+   },
+   {
+    "prompt_n": 250,
+    "prompt_ms": 1091.1,
+    "cache_n": 20011
+   },
+   {
+    "prompt_n": 250,
+    "prompt_ms": 1218.2,
+    "cache_n": 20011
+   }
+  ],
+  "median_prompt_ms": 1157.65,
+  "median_prompt_n": 250.0
+ },
+ "cache_speedup": 76.2,
+ "agent_loop": [
+  {
+   "turn": 0,
+   "prompt_n": 241,
+   "prompt_ms": 1024.7
+  },
+  {
+   "turn": 1,
+   "prompt_n": 544,
+   "prompt_ms": 1361.6
+  },
+  {
+   "turn": 2,
+   "prompt_n": 945,
+   "prompt_ms": 1865.4
+  },
+  {
+   "turn": 3,
+   "prompt_n": 783,
+   "prompt_ms": 1854.7
+  },
+  {
+   "turn": 4,
+   "prompt_n": 895,
+   "prompt_ms": 2000.3
+  },
+  {
+   "turn": 5,
+   "prompt_n": 872,
+   "prompt_ms": 1769.6
+  },
+  {
+   "turn": 6,
+   "prompt_n": 436,
+   "prompt_ms": 1040.2
+  },
+  {
+   "turn": 7,
+   "prompt_n": 1049,
+   "prompt_ms": 2155.3
+  }
+ ],
+ "stage_seconds": 241
+}
