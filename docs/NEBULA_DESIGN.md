@@ -263,6 +263,8 @@ Rules:
 
 ## 3. Language and Stack Rationale
 
+> ADR-001 to ADR-003 are also kept as standalone records in [docs/adr/](adr/), which are the source of truth for decisions from now on.
+
 ### ADR-001: Rust core with Python tools
 
 **Status:** Accepted (2026-09-30)

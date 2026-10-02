@@ -1,0 +1,44 @@
+name: Bug report
+description: Something Nebula did wrong, crashed on, or did unsafely
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. nebula ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: trace
+    attributes:
+      label: Trace or task id
+      description: The trace_id or Nebula-Task id from the logs, if any (e.g. t_0042).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: Paste JSONL excerpts. Check that they contain no secrets or tokens.
+      render: json
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [model runtime, agent loop, tools / MCP, permissions / sandbox, resources / telemetry, TUI / CLI, research, self-improvement, docs, other]
+  - type: dropdown
+    id: safety
+    attributes:
+      label: Safety impact
+      description: Did Nebula touch something outside its sandbox, ignore a permission tier, or delete data?
+      options: ["No", "Yes (describe above)"]
+    validations:
+      required: true

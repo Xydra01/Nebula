@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Design document
+    url: https://github.com/Xydra01/Nebula/blob/main/docs/NEBULA_DESIGN.md
+    about: Read the architecture and roadmap before proposing large changes.
