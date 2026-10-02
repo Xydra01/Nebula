@@ -1,3 +1,5 @@
+# Classic token with only the public_repo scope: fine-grained tokens can't reach repos the
+# bot merely collaborates on (github/roadmap#601).
 # Stores the Nebula-dev-bot GitHub token in Windows Credential Manager as
 # nebula/github_bot_token (Phase 0 task 2.3), then verifies it against the GitHub API.
 # The token is read from a hidden prompt so it never lands in shell history or process args.
@@ -46,20 +48,24 @@ public static class NebulaCred {
 }
 '@
 
-$secure = Read-Host -Prompt "Paste the $user fine-grained token (input hidden)" -AsSecureString
+$secure = Read-Host -Prompt "Paste the $user token (input hidden)" -AsSecureString
 $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-if (-not $plain.StartsWith('github_pat_')) { throw 'That does not look like a fine-grained token (expected github_pat_...).' }
+if (-not ($plain.StartsWith('ghp_') -or $plain.StartsWith('github_pat_'))) {
+    throw 'That does not look like a GitHub token (expected ghp_... or github_pat_...).'
+}
 
 [NebulaCred]::Write($target, $user, $plain)
 $plain = $null
 
 $token = [NebulaCred]::Read($target)
 $headers = @{ Authorization = "Bearer $token"; 'X-GitHub-Api-Version' = '2022-11-28' }
-$me = Invoke-RestMethod -Uri 'https://api.github.com/user' -Headers $headers
+$resp = Invoke-WebRequest -Uri 'https://api.github.com/user' -Headers $headers -UseBasicParsing
+$me = $resp.Content | ConvertFrom-Json
 $repo = Invoke-RestMethod -Uri 'https://api.github.com/repos/Xydra01/Nebula' -Headers $headers
 $token = $null
 
 Write-Host "Stored as '$target'."
 Write-Host "Token authenticates as: $($me.login)"
+Write-Host "Token scopes: $($resp.Headers['X-OAuth-Scopes'])"
 Write-Host "Repo access: push=$($repo.permissions.push) admin=$($repo.permissions.admin)"

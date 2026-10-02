@@ -787,7 +787,7 @@ Approval requests show up in the TUI as a modal:
 | Visibility | Public from day one |
 | License | MIT |
 | Repo | `Xydra01/Nebula` |
-| Machine account | A free GitHub machine account, **`Nebula-dev-bot`**, added as a collaborator (write access) only on repos Nebula works in. It authenticates with a fine-grained token stored in Credential Manager. |
+| Machine account | A free GitHub machine account, **`Nebula-dev-bot`**, added as a collaborator (write access) only on repos Nebula works in. It authenticates with a classic token that has **only the `public_repo` scope**, stored in Credential Manager. Fine-grained tokens can't access repos the account only collaborates on. Its write access is therefore limited to the repos it has been invited to, and private repos are out of reach unless that changes. |
 | Commit identity | Commits are authored under your account, with a `Co-authored-by: Nebula-dev-bot <336789866+Nebula-dev-bot@users.noreply.github.com>` trailer (GitHub then shows the bot as co-author on each commit) and a `Nebula-Task: t_0042` trailer linking back to the ledger. `git log --grep` and GitHub search can show exactly what Nebula built. |
 | Pushing | `Nebula-dev-bot` pushes **Nebula's own feature branches** (`nebula/<task-id>-<slug>`) and opens the PRs (tier 2, auto-allowed by policy). Push to `main` is forbidden. |
 | Review and merge | Branch protection on `main`: PR required, status checks required, **1 approving review from you** (via `CODEOWNERS`). Because the bot opened the PR, you can formally review and approve it, and the bot cannot approve its own PR. |
