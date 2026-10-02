@@ -39,7 +39,7 @@ def chat(server: Server, messages: list[dict], *, effort: str, max_tokens: int, 
         "cache_prompt": True,
         "reasoning_effort": effort,
         "chat_template_kwargs": {"reasoning_effort": effort},
-        **server.profile.sampling,
+        **server.profile.sampling["instruct" if effort == "none" else "thinking"],
         **extra,
     }
     r = httpx.post(

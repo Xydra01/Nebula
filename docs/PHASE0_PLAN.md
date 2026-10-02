@@ -192,7 +192,7 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 
 > **Status 2026-10-02:**
 > - **3.1 done:** `prism-b10743-adfffbe`, CUDA 12.4, pinned in `config/runtime.lock.toml`.
-> - **3.3 in progress:** PTQ1_0 downloaded and its hash verified. There is **no Bonsai 2 drafter** to download.
+> - **3.3 done:** PTQ1_0, PQ2_0 and mmproj Q8_0 downloaded, with hashes verified and recorded in `config/models.lock.toml`. There is **no Bonsai 2 drafter** to download.
 > - **3.6 done:** all smoke checks pass ([bench/results](../bench/results/)). With 32K context and an f16 KV cache, the model plus context uses 7.9 GB, total VRAM use is 9.3 GB (the desktop takes 1.4 GB), and generation runs at 30–50 tokens/s.
 
 | # | Task | Done when | Est. |

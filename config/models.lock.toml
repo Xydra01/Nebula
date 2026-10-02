@@ -1,0 +1,22 @@
+# Model files and their SHA-256 hashes (PHASE0_PLAN task 3.3). Verified against Hugging Face LFS oids.
+
+[bonsai2-27b]
+repo = "prism-ml/Ternary-Bonsai-2-27B-gguf"
+dir = 'F:\Nebula\models\bonsai2-27b'
+downloaded = "2026-10-02"
+runtime = "llama-prism"
+
+[bonsai2-27b.files."Ternary-Bonsai-2-27B-PTQ1_0.gguf"]
+sha256 = "53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3"
+bytes = 5946648928
+role = "primary candidate"
+
+[bonsai2-27b.files."Ternary-Bonsai-2-27B-PQ2_0.gguf"]
+sha256 = "3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1"
+bytes = 7206168928
+role = "comparison; archive to D: after B1/B5 unless ADR-004 picks it"
+
+[bonsai2-27b.files."Ternary-Bonsai-2-27B-mmproj-Q8_0.gguf"]
+sha256 = "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"
+bytes = 629246976
+role = "vision projector"
