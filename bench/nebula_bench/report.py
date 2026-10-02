@@ -46,6 +46,7 @@ def b1_section(models: list[str]) -> list[str]:
                     r.get("vram_peak_mib"),
                     r.get("headroom_mib"),
                     r.get("spill_mib"),
+                    r.get("server_ram_mib"),
                     r.get("load_seconds"),
                     note[:60],
                 ]
@@ -61,6 +62,7 @@ def b1_section(models: list[str]) -> list[str]:
             "VRAM MiB",
             "headroom",
             "spill MiB",
+            "server RAM MiB",
             "load s",
             "note",
         ],
@@ -102,25 +104,30 @@ def b7_section(models: list[str]) -> list[str]:
     )
 
 
-def b3_section() -> list[str]:
-    data = load("b3_PTQ1_0")
-    if not data:
-        return []
-    rows = [
-        [k, data[k]["median_prompt_ms"], data[k]["median_prompt_n"]]
-        for k in ("no_cache", "cache", "cache_tools_reordered")
-        if k in data
-    ]
-    loop = ", ".join(f"{t['prompt_n']} ({t['prompt_ms']:.0f} ms)" for t in data["agent_loop"])
-    return (
-        ["## B3 prompt cache (PTQ1_0, 20K-token prefix)", ""]
-        + table(["mode", "median prompt ms", "tokens processed"], rows)
-        + [
-            f"Speedup with cache: **{data.get('cache_speedup')}x**.",
-            "",
-            f"Agent loop, tokens processed per turn: {loop}",
-            "",
+def b3_section(models: list[str]) -> list[str]:
+    lines = ["## B3 prompt cache (20K-token prefix)", ""]
+    rows, loops = [], []
+    for m in models:
+        data = load(f"b3_{m}")
+        if not data:
+            continue
+        rows += [
+            [m, k, data[k]["median_prompt_ms"], data[k]["median_prompt_n"]]
+            for k in ("no_cache", "cache", "cache_tools_reordered")
+            if k in data
         ]
+        loop = ", ".join(str(t["prompt_n"]) for t in data["agent_loop"])
+        loops.append(
+            f"- {m}: speedup **{data.get('cache_speedup')}x**; agent loop tokens "
+            f"processed per turn: {loop}"
+        )
+    if not rows:
+        return []
+    return (
+        lines
+        + table(["model", "mode", "median prompt ms", "tokens processed"], rows)
+        + loops
+        + [""]
     )
 
 
@@ -210,7 +217,7 @@ def b6_section(models: list[str]) -> list[str]:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     bonsai = ["PTQ1_0", "PQ2_0"]
-    fallback = ["ornith10", "ornith15", "deltacoder"]
+    fallback = ["ornith10", "ornith15", "deltacoder", "qwen36moe", "gemma4moe", "glm47flash"]
     variants = [f"{m}_{r}" for m in bonsai for r in ("none", "medium")] + [
         f"{m}_{r}" for m in fallback for r in ("none", "thinking")
     ]
@@ -225,8 +232,8 @@ def main() -> int:
         "",
     ]
     lines += b1_section(bonsai + fallback)
-    lines += b7_section(bonsai)
-    lines += b3_section()
+    lines += b7_section(bonsai + fallback)
+    lines += b3_section(["PTQ1_0", "qwen36moe", "gemma4moe"])
     lines += b8_section(bonsai)
     lines += b5_section(variants)
     lines += b6_section(bonsai + fallback)

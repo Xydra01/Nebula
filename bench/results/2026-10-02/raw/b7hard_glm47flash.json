@@ -1,0 +1,176 @@
+{
+ "model": "F:\\Nebula\\models\\fallback-moe\\GLM-4.7-Flash-UD-Q4_K_XL.gguf",
+ "rows": [
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "bias": false,
+   "hard": true,
+   "answers": [
+    {
+     "depth": 0.025,
+     "name": "SHARD_SALT_EU_WEST_1",
+     "expected": "r6u6-83rr",
+     "answer": "r6u6-83rr",
+     "correct": true,
+     "prompt_ms": 82310.7
+    },
+    {
+     "depth": 0.075,
+     "name": "SHARD_SALT_EU_EAST_1",
+     "expected": "t6vg-f4ts",
+     "answer": "t6vg-f4ts",
+     "correct": true,
+     "prompt_ms": 252.9
+    },
+    {
+     "depth": 0.125,
+     "name": "SHARD_SALT_US_WEST_1",
+     "expected": "xw4f-drke",
+     "answer": "xw4f-drke",
+     "correct": true,
+     "prompt_ms": 240.8
+    },
+    {
+     "depth": 0.175,
+     "name": "SHARD_SALT_US_EAST_1",
+     "expected": "cu47-zxbw",
+     "answer": "cu47-zxbw",
+     "correct": true,
+     "prompt_ms": 263.0
+    },
+    {
+     "depth": 0.225,
+     "name": "SHARD_SALT_AP_SOUTH_1",
+     "expected": "p9rx-2wxf",
+     "answer": "p9rx-2wxf",
+     "correct": true,
+     "prompt_ms": 291.1
+    },
+    {
+     "depth": 0.275,
+     "name": "SHARD_SALT_EU_WEST_2",
+     "expected": "wa5t-cbbg",
+     "answer": "wa5t-cbbg",
+     "correct": true,
+     "prompt_ms": 287.8
+    },
+    {
+     "depth": 0.325,
+     "name": "SHARD_SALT_EU_EAST_2",
+     "expected": "7hwa-3rmr",
+     "answer": "7hwa-3rmr",
+     "correct": true,
+     "prompt_ms": 263.1
+    },
+    {
+     "depth": 0.375,
+     "name": "SHARD_SALT_US_WEST_2",
+     "expected": "v5gt-hxks",
+     "answer": "v5gt-hxks",
+     "correct": true,
+     "prompt_ms": 265.1
+    },
+    {
+     "depth": 0.425,
+     "name": "SHARD_SALT_US_EAST_2",
+     "expected": "aycr-xjqu",
+     "answer": "aycr-xjqu",
+     "correct": true,
+     "prompt_ms": 245.6
+    },
+    {
+     "depth": 0.475,
+     "name": "SHARD_SALT_AP_SOUTH_2",
+     "expected": "85cz-jm3h",
+     "answer": "85cz-jm3h",
+     "correct": true,
+     "prompt_ms": 380.7
+    },
+    {
+     "depth": 0.525,
+     "name": "SHARD_SALT_EU_WEST_3",
+     "expected": "tkac-v3dp",
+     "answer": "tkac-v3dp",
+     "correct": true,
+     "prompt_ms": 279.2
+    },
+    {
+     "depth": 0.575,
+     "name": "SHARD_SALT_EU_EAST_3",
+     "expected": "d6kp-c9a6",
+     "answer": "d6kp-c9a6",
+     "correct": true,
+     "prompt_ms": 262.5
+    },
+    {
+     "depth": 0.625,
+     "name": "SHARD_SALT_US_WEST_3",
+     "expected": "yagg-88bs",
+     "answer": "yagg-88bs",
+     "correct": true,
+     "prompt_ms": 265.1
+    },
+    {
+     "depth": 0.675,
+     "name": "SHARD_SALT_US_EAST_3",
+     "expected": "pzpq-cvxg",
+     "answer": "pzpq-cvxg",
+     "correct": true,
+     "prompt_ms": 249.3
+    },
+    {
+     "depth": 0.725,
+     "name": "SHARD_SALT_AP_SOUTH_3",
+     "expected": "3yjm-ckma",
+     "answer": "3yjm-ckma",
+     "correct": true,
+     "prompt_ms": 249.1
+    },
+    {
+     "depth": 0.775,
+     "name": "SHARD_SALT_EU_WEST_4",
+     "expected": "9q38-dehz",
+     "answer": "9q38-dehz",
+     "correct": true,
+     "prompt_ms": 276.6
+    },
+    {
+     "depth": 0.825,
+     "name": "SHARD_SALT_EU_EAST_4",
+     "expected": "dabr-4sfy",
+     "answer": "dabr-4sfy",
+     "correct": true,
+     "prompt_ms": 261.8
+    },
+    {
+     "depth": 0.875,
+     "name": "SHARD_SALT_US_WEST_4",
+     "expected": "ugrt-g23e",
+     "answer": "ugrt-g23e",
+     "correct": true,
+     "prompt_ms": 274.5
+    },
+    {
+     "depth": 0.925,
+     "name": "SHARD_SALT_US_EAST_4",
+     "expected": "qxpd-pqga",
+     "answer": "qxpd-pqga",
+     "correct": true,
+     "prompt_ms": 252.9
+    },
+    {
+     "depth": 0.975,
+     "name": "SHARD_SALT_AP_SOUTH_4",
+     "expected": "j64v-k7ag",
+     "answer": "j64v-k7ag",
+     "correct": true,
+     "prompt_ms": 288.4
+    }
+   ],
+   "haystack_tokens": 29695,
+   "accuracy": 1.0
+  }
+ ],
+ "stage_seconds": 115
+}

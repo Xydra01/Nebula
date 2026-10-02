@@ -10,6 +10,7 @@ from nebula_bench.client import (
     chat,
     complete_raw,
     count_tokens,
+    process_ram_mib,
     shared_gpu_mib,
     vram_used_mib,
 )
@@ -88,6 +89,7 @@ def throughput(profile: Profile, ctx: int, kv_type: str, model_buffer_mib: int, 
             tg_runs=[round(x, 2) for x in tg],
             vram_peak_mib=vram_used_mib(),
             shared_mib=shared_gpu_mib(),
+            server_ram_mib=process_ram_mib(server._proc.pid),
         )
     result["vram_baseline_mib"] = baseline_vram
     result["model_plus_ctx_mib"] = result["vram_peak_mib"] - baseline_vram

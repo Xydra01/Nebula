@@ -1,0 +1,73 @@
+{
+ "cases": 100,
+ "modes": {
+  "native": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 100.0,
+    "args_ok": 100.0
+   },
+   "failures": []
+  },
+  "schema": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 99.0,
+    "args_ok": 97.0
+   },
+   "failures": [
+    {
+     "i": 29,
+     "request": "Run `cargo test` in the crates/daemon directory.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "cd crates/daemon && cargo test",
+        "timeout_s": 300
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"run_command\", \"arguments\": {\"command\": \"cd crates/daemon && cargo test\", \"timeout_s\": 300}}]}"
+    },
+    {
+     "i": 30,
+     "request": "Run `uv run pytest` in the bench directory.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "cd bench && uv run pytest",
+        "timeout_s": 300
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"run_command\", \"arguments\": {\"command\": \"cd bench && uv run pytest\", \"timeout_s\": 300}}]}"
+    },
+    {
+     "i": 49,
+     "request": "Fetch https://github.com/PrismML-Eng/llama.cpp",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "git clone https://github.com/PrismML-Eng/llama.cpp"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"run_command\", \"arguments\": {\"command\": \"git clone https://github.com/PrismML-Eng/llama.cpp\"}}]}"
+    }
+   ]
+  }
+ },
+ "stage_seconds": 347
+}

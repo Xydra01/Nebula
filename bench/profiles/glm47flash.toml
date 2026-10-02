@@ -1,0 +1,24 @@
+# Fallback candidate, round 2 (MoE, experts in system RAM). Sampling from the Unsloth model card:
+# general 1.0/0.95, tool calling 0.7/1.0, min_p 0.01 (llama.cpp's default 0.05 is too high).
+name = "glm47flash"
+runtime = "llama-stock"
+model = 'D:\NebulaCold\models-archive\fallback-moe\GLM-4.7-Flash-UD-Q4_K_XL.gguf'
+ctx = 32768
+kv_type = "f16"
+reasoning_style = "enable_thinking"
+flags = ["--fit", "on", "--fit-target", "1536", "-fa", "on", "-np", "1", "--jinja",
+         "--reasoning", "auto", "--ctx-checkpoints", "32", "--cache-ram", "4096",
+         "--cache-idle-slots", "--cors-origins", "http://nebula.invalid",
+         "--no-cors-credentials", "-lv", "4"]
+
+[sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+min_p = 0.01
+repeat_penalty = 1.0
+
+[sampling.instruct]
+temperature = 0.7
+top_p = 1.0
+min_p = 0.01
+repeat_penalty = 1.0
