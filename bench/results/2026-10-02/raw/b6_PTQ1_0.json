@@ -1,0 +1,619 @@
+{
+ "cases": 100,
+ "modes": {
+  "native": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 99.0,
+    "args_ok": 91.0
+   },
+   "failures": [
+    {
+     "i": 22,
+     "request": "Search the codebase for the regex `unwrap\\(\\)`.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(",
+        "path": "bench/profiles",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 47,
+     "request": "Search the web for 'rmcp crate' and give me 3 results.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "web_search",
+       {
+        "query": "rmcp crate",
+        "max_results": 5
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 57,
+     "request": "What is 12 squared?",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "echo $((12*12))"
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 73,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\("
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 74,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\("
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 79,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(",
+        "path": "."
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 84,
+     "request": "Look for `import requests` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "^import requests$|import requests\\b",
+        "path": ".",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 93,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\("
+       }
+      ]
+     ],
+     "raw": ""
+    }
+   ]
+  },
+  "prompted": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 99.0,
+    "args_ok": 85.0
+   },
+   "failures": [
+    {
+     "i": 22,
+     "request": "Search the codebase for the regex `unwrap\\(\\)`.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 25,
+     "request": "Find `TODO` (case-sensitive) but only inside src.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "TODO"
+       }
+      ]
+     ],
+     "raw": "{\"calls\":[{\"tool\":\"search_code\",\"pattern\":\"TODO\"}]}"
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": "bench/profiles",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"path\": \"bench/profiles\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 28,
+     "request": "Find `class .*Error` (case-sensitive) but only inside docs.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "class .*(?:Error)",
+        "path": "docs",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"class .*(?:Error)\", \"path\": \"docs\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 64,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"fn\\\\s+main\"}]}"
+    },
+    {
+     "i": 68,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"fn\\\\s+main\"}]}"
+    },
+    {
+     "i": 70,
+     "request": "Look for `import requests` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "^\\s*import\\s+requests$|import\\s+requests\\b"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"^\\\\s*import\\\\s+requests$|import\\\\s+requests\\\\b\"}}]}"
+    },
+    {
+     "i": 73,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"unwrap\\\\(\\\\)\", \"case_sensitive\": true}]}"
+    },
+    {
+     "i": 74,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"unwrap\\\\(\\\\)\"}]}"
+    },
+    {
+     "i": 76,
+     "request": "Please read bench/nebula_bench/perf.py.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [],
+     "raw": "{\"calls\": []}"
+    },
+    {
+     "i": 79,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"unwrap\\\\(\\\\)\"}]}"
+    },
+    {
+     "i": 91,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"fn\\\\s+main\"}]}"
+    },
+    {
+     "i": 92,
+     "request": "Look for `import requests` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "import\\s+requests"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"import\\\\s+requests\"}}]}"
+    },
+    {
+     "i": 93,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"unwrap\\\\(\\\\)\"}]}"
+    },
+    {
+     "i": 96,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"pattern\": \"fn\\\\s+main\"}]}"
+    }
+   ]
+  },
+  "schema": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 98.0,
+    "args_ok": 88.0
+   },
+   "failures": [
+    {
+     "i": 6,
+     "request": "Open src/main.rs so I can see it.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [],
+     "raw": "{\"calls\": []}"
+    },
+    {
+     "i": 22,
+     "request": "Search the codebase for the regex `unwrap\\(\\)`.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\"}}]}"
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": "bench/profiles",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"path\": \"bench/profiles\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 68,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"fn\\\\s+main\"}}]}"
+    },
+    {
+     "i": 70,
+     "request": "Look for `import requests` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "import\\s+requests"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"import\\\\s+requests\"}}]}"
+    },
+    {
+     "i": 73,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": ".",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"path\": \".\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 74,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ],
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\("
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\"}}, {\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\"}}]}"
+    },
+    {
+     "i": 79,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": ".",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"path\": \".\", \"case_sensitive\": true}}]}"
+    },
+    {
+     "i": 84,
+     "request": "Look for `import requests` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "^\\s*import requests\\b"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"^\\\\s*import requests\\\\b\"}}]}"
+    },
+    {
+     "i": 91,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"fn\\\\s+main\"}}]}"
+    },
+    {
+     "i": 93,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\"}}] }"
+    },
+    {
+     "i": 96,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn\\s+main"
+       }
+      ]
+     ],
+     "raw": "{\"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"fn\\\\s+main\"}}]}"
+    }
+   ]
+  }
+ },
+ "stage_seconds": 338
+}

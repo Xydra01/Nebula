@@ -4,6 +4,7 @@ runtime = "llama-prism"
 model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
 ctx = 32768
 kv_type = "f16"
+reasoning_style = "effort"
 flags = [
     "-ngl", "99",
     "-fa", "on",

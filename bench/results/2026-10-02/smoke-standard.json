@@ -1,7 +1,7 @@
 {
   "profile": "standard",
-  "date": "2026-10-02 01:17",
-  "vram_baseline_mib": 1406,
+  "date": "2026-10-02 01:59",
+  "vram_baseline_mib": 1440,
   "checks": {
     "offload": {
       "ok": true,
@@ -17,13 +17,13 @@
       "timings": {
         "cache_n": 0,
         "prompt_n": 28,
-        "prompt_ms": 159.807,
-        "prompt_per_token_ms": 5.707392857142857,
-        "prompt_per_second": 175.21134868935656,
+        "prompt_ms": 173.068,
+        "prompt_per_token_ms": 6.181,
+        "prompt_per_second": 161.78611875101114,
         "predicted_n": 4,
-        "predicted_ms": 93.471,
-        "predicted_per_token_ms": 31.157,
-        "predicted_per_second": 32.095516256378986
+        "predicted_ms": 96.876,
+        "predicted_per_token_ms": 32.292,
+        "predicted_per_second": 30.967422271770097
       },
       "usage": {
         "completion_tokens": 4,
@@ -36,22 +36,22 @@
     },
     "reasoning": {
       "ok": true,
-      "detail": "answer='No, because 221 = 13 × 17.', reasoning_chars=146, finish=stop",
+      "detail": "answer='No — 221 = 13 × 17.', reasoning_chars=340, finish=stop",
       "timings": {
         "cache_n": 0,
         "prompt_n": 30,
-        "prompt_ms": 147.18,
-        "prompt_per_token_ms": 4.906000000000001,
-        "prompt_per_second": 203.8320423970648,
-        "predicted_n": 92,
-        "predicted_ms": 1835.933,
-        "predicted_per_token_ms": 20.17508791208791,
-        "predicted_per_second": 49.56607893643178
+        "prompt_ms": 165.958,
+        "prompt_per_token_ms": 5.531933333333333,
+        "prompt_per_second": 180.76862820713677,
+        "predicted_n": 181,
+        "predicted_ms": 3719.698,
+        "predicted_per_token_ms": 20.66498888888889,
+        "predicted_per_second": 48.39102529291357
       },
       "usage": {
-        "completion_tokens": 92,
+        "completion_tokens": 181,
         "prompt_tokens": 30,
-        "total_tokens": 122,
+        "total_tokens": 211,
         "prompt_tokens_details": {
           "cached_tokens": 0
         }
@@ -63,13 +63,13 @@
       "timings": {
         "cache_n": 0,
         "prompt_n": 301,
-        "prompt_ms": 406.794,
-        "prompt_per_token_ms": 1.3514750830564783,
-        "prompt_per_second": 739.9322507214954,
+        "prompt_ms": 419.288,
+        "prompt_per_token_ms": 1.392983388704319,
+        "prompt_per_second": 717.8836503787372,
         "predicted_n": 39,
-        "predicted_ms": 808.093,
-        "predicted_per_token_ms": 21.265605263157894,
-        "predicted_per_second": 47.024290521016766
+        "predicted_ms": 812.906,
+        "predicted_per_token_ms": 21.392263157894735,
+        "predicted_per_second": 46.74587221646784
       },
       "usage": {
         "completion_tokens": 39,
@@ -86,26 +86,26 @@
       "timings": {
         "cache_n": 0,
         "prompt_n": 24,
-        "prompt_ms": 237.018,
-        "prompt_per_token_ms": 9.87575,
-        "prompt_per_second": 101.25813229374984,
-        "predicted_n": 44,
-        "predicted_ms": 1792.794,
-        "predicted_per_token_ms": 41.69288372093023,
-        "predicted_per_second": 23.98490847247369
+        "prompt_ms": 211.836,
+        "prompt_per_token_ms": 8.826500000000001,
+        "prompt_per_second": 113.29519061915822,
+        "predicted_n": 41,
+        "predicted_ms": 1050.275,
+        "predicted_per_token_ms": 26.256875,
+        "predicted_per_second": 38.085263383399585
       },
       "usage": {
-        "completion_tokens": 44,
+        "completion_tokens": 41,
         "prompt_tokens": 24,
-        "total_tokens": 68,
+        "total_tokens": 65,
         "prompt_tokens_details": {
           "cached_tokens": 0
         }
       }
     }
   },
-  "load_seconds": 4.1,
-  "vram_loaded_mib": 9334,
-  "vram_peak_mib": 9346,
-  "server_log": "F:\\Nebula\\logs\\bench\\standard-20261002-011711.log"
+  "load_seconds": 4.6,
+  "vram_loaded_mib": 9358,
+  "vram_peak_mib": 9366,
+  "server_log": "F:\\Nebula\\logs\\bench\\standard-20261002-015901.log"
 }

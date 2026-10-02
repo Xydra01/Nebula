@@ -89,3 +89,14 @@ Findings that changed the design (NEBULA_DESIGN 5.5.1):
 - The default log verbosity hides the load details; `-lv 4` shows them.
 - The **desktop baseline is 1.4 GB** of VRAM (Discord, Firefox, Steam, Overwolf, the NVIDIA overlay and others). Windows (WDDM) doesn't report per-process VRAM (`N/A`), so `nebula-resources` must work from the total used.
 - PrismML's KNOWN_ISSUES rules are now in the design doc: reasoning effort per role, one system message, no echoed reasoning, `"{}"` for tool calls with no arguments, and no `q5_0` KV cache.
+
+## 2026-10-02: WS3 overnight benchmark run
+
+Unattended run of `uv run python -m nebula_bench.run_all` from 02:06 to ~07:00. The results and report are in [bench/results/2026-10-02/](../../bench/results/2026-10-02/); the decisions are in ADR-004 and ADR-005.
+
+- **Harness:** each stage saves `raw/<stage>.json` as soon as it finishes, and a re-run skips stages that are already done. It was restarted twice on stage boundaries (once to reorder stages so the fallback models ran before the long reasoning runs, once to add the hard needle test). The run holds `SetThreadExecutionState` so the PC can't sleep.
+- **Stock runtime:** llama.cpp `b11342` (upstream) was added to `config/runtime.lock.toml` for the fallback models. PrismML's fork is 600 builds behind.
+- **Fallback downloads:** Ornith 1.0 9B, Ornith 1.5 9B and DeltaCoder 9B v1.1 DPO, all Q6_K. Their hashes match the Hugging Face LFS oids and are recorded in `config/models.lock.toml`. Ornith 1.5 was released after the plan was written, so it was added as a third candidate.
+- **The B6 scorer had a bug:** it normalized backslashes on the model's arguments only (meant for Windows paths), so regex patterns like `unwrap\(\)` could never match. `toolcalls.rescore` re-scores the stored failures. Search patterns now pass if the regex finds the intended text. The report shows both numbers.
+- **The easy needle test saturated** (5/5 everywhere), so a 20-needle variant with near-identical names was added. That also showed no difference from the KV bias.
+- The 9B fallbacks process prompts ~3x faster than Bonsai (~3,000 t/s against ~1,050 at 32K) and generate ~25% faster (51 against 41 t/s). They need far more thinking tokens to reach a lower pass rate.

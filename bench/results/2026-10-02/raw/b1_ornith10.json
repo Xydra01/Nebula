@@ -1,0 +1,33 @@
+{
+ "model": "F:\\Nebula\\models\\fallback\\ornith-1.0-9b-Q6_K.gguf",
+ "rows": [
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "estimated_mib": 9406,
+   "load_seconds": 4.66,
+   "vram_loaded_mib": 8987,
+   "prompt_tokens": 29163,
+   "pp_tps": 3016.8,
+   "tg_at_depth_tps": 51.05,
+   "tg_short_tps": 58.01,
+   "pp_runs": [
+    2972.1,
+    3020.5,
+    3016.8
+   ],
+   "tg_runs": [
+    51.08,
+    51.05,
+    50.84
+   ],
+   "vram_peak_mib": 8991,
+   "shared_mib": 173,
+   "vram_baseline_mib": 1410,
+   "model_plus_ctx_mib": 7581,
+   "spill_mib": 125,
+   "headroom_mib": 3291
+  }
+ ],
+ "stage_seconds": 56
+}

@@ -1,0 +1,10 @@
+{
+ "load_seconds": [
+  4.5,
+  4.31,
+  4.41
+ ],
+ "median": 4.41,
+ "first_prompt_ms": 145.7,
+ "stage_seconds": 17
+}

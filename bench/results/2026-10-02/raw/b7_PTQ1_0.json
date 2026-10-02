@@ -1,0 +1,398 @@
+{
+ "model": "F:\\Nebula\\models\\bonsai2-27b\\Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+ "rows": [
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "bias": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 28077.0
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 232.2
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 251.1
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 230.4
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "\"q7k2-m9x4\"",
+     "correct": true,
+     "prompt_ms": 231.4
+    }
+   ],
+   "haystack_tokens": 29803,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 65536,
+   "kv_type": "f16",
+   "bias": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 65394.8
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 250.5
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 252.8
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 252.2
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "\"q7k2-m9x4\"",
+     "correct": true,
+     "prompt_ms": 260.7
+    }
+   ],
+   "haystack_tokens": 59083,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 32768,
+   "kv_type": "q4_0",
+   "bias": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 28393.3
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "37",
+     "correct": true,
+     "prompt_ms": 294.6
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 246.0
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 247.8
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "\"q7k2-m9x4\"",
+     "correct": true,
+     "prompt_ms": 248.8
+    }
+   ],
+   "haystack_tokens": 29803,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 65536,
+   "kv_type": "q4_0",
+   "bias": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 65970.3
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 280.0
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 274.2
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 329.0
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "q7k2-m9x4",
+     "correct": true,
+     "prompt_ms": 274.4
+    }
+   ],
+   "haystack_tokens": 59083,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "q4_0",
+   "bias": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 180833.1
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 374.4
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "48211",
+     "correct": true,
+     "prompt_ms": 354.1
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 348.6
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "q7k2-m9x4",
+     "correct": true,
+     "prompt_ms": 348.5
+    }
+   ],
+   "haystack_tokens": 120065,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 32768,
+   "kv_type": "q4_0",
+   "bias": true,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 28309.2
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 273.4
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 248.8
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 250.4
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "\"q7k2-m9x4\"",
+     "correct": true,
+     "prompt_ms": 253.6
+    }
+   ],
+   "haystack_tokens": 29803,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 65536,
+   "kv_type": "q4_0",
+   "bias": true,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 65647.7
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 308.9
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "48211",
+     "correct": true,
+     "prompt_ms": 282.3
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 287.9
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "q7k2-m9x4",
+     "correct": true,
+     "prompt_ms": 286.5
+    }
+   ],
+   "haystack_tokens": 59083,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "q4_0",
+   "bias": true,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 177693.2
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "37",
+     "correct": true,
+     "prompt_ms": 370.5
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 344.7
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 351.7
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "q7k2-m9x4",
+     "correct": true,
+     "prompt_ms": 347.7
+    }
+   ],
+   "haystack_tokens": 120065,
+   "accuracy": 1.0
+  }
+ ],
+ "stage_seconds": 747
+}

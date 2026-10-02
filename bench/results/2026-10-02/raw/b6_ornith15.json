@@ -1,0 +1,405 @@
+{
+ "cases": 100,
+ "modes": {
+  "native": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 98.0,
+    "args_ok": 92.0
+   },
+   "failures": [
+    {
+     "i": 22,
+     "request": "Search the codebase for the regex `unwrap\\(\\)`.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "I'll search the codebase for the regex `unwrap()`.\n\n"
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": "I'll search for `unwrap()` (case-sensitive) inside bench/profiles directories.\n\n"
+    },
+    {
+     "i": 28,
+     "request": "Find `class .*Error` (case-sensitive) but only inside docs.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": "I'll search for `class .*Error` patterns in documentation files. Let me first understand the repository structure.\n\n"
+    },
+    {
+     "i": 29,
+     "request": "Run `cargo test` in the crates/daemon directory.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "cd crates/daemon && cargo test",
+        "timeout_s": 600
+       }
+      ]
+     ],
+     "raw": ""
+    },
+    {
+     "i": 73,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "I'll search for `unwrap()` across the repository.\n\n"
+    },
+    {
+     "i": 74,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "I'll search for `unwrap()` across the repository.\n\n"
+    },
+    {
+     "i": 79,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "I'll search for `unwrap()` across the repository.\n\n"
+    },
+    {
+     "i": 93,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "I'll search the repository for `unwrap()` occurrences.\n\n"
+    }
+   ]
+  },
+  "schema": {
+   "summary": {
+    "valid": 100.0,
+    "tool_ok": 93.0,
+    "args_ok": 87.0
+   },
+   "failures": [
+    {
+     "i": 22,
+     "request": "Search the codebase for the regex `unwrap\\(\\)`.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": "/"
+       }
+      ]
+     ],
+     "raw": "{\"calls\":[{\"tool\":\"search_code\",\"arguments\":{\"pattern\":\"unwrap\\\\(\\\\)\",\"path\":\"/\"}}]}"
+    },
+    {
+     "i": 26,
+     "request": "Find `fn main` (case-sensitive) but only inside crates/daemon.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn main",
+        "path": "crates/daemon"
+       }
+      ],
+      [
+       "list_dir",
+       {
+        "path": "crates/daemon"
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"fn main\", \"path\": \"crates/daemon\"}}, {\"tool\": \"list_dir\", \"arguments\": {\"path\": \"crates/daemon\"}}]}"
+    },
+    {
+     "i": 27,
+     "request": "Find `unwrap\\(\\)` (case-sensitive) but only inside bench/profiles.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": "bench"
+       }
+      ],
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "path": "profiles"
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [\n    {\n      \"tool\": \"search_code\",\n      \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"path\": \"bench\"}\n    },\n    {\n      \"tool\": \"search_code\",\n      \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)"
+    },
+    {
+     "i": 28,
+     "request": "Find `class .*Error` (case-sensitive) but only inside docs.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "class .*Error",
+        "path": "/docs"
+       }
+      ],
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"class .*Error\", \"path\": \"/docs\"}}, {\"tool\": \"list_dir\", \"arguments\": {\"path\": \".\"}}]}"
+    },
+    {
+     "i": 29,
+     "request": "Run `cargo test` in the crates/daemon directory.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "run_command",
+       {
+        "command": "cd crates/daemon && cargo test"
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"run_command\", \"arguments\": {\"command\": \"cd crates/daemon && cargo test\"}}]}"
+    },
+    {
+     "i": 30,
+     "request": "Run `uv run pytest` in the bench directory.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ],
+      [
+       "run_command",
+       {
+        "command": "ls -la"
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"list_dir\", \"arguments\": {\"path\": \".\"}}, {\"tool\": \"run_command\", \"arguments\": {\"command\": \"ls -la\"}}]\n}"
+    },
+    {
+     "i": 40,
+     "request": "Commit src/parse.rs with the message \"fix: handle empty input\".",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "read_file",
+       {
+        "path": "src/parse.rs"
+       }
+      ]
+     ],
+     "raw": "{\"calls\":[{\"tool\":\"read_file\",\"arguments\":{\"path\":\"src/parse.rs\"}}]}"
+    },
+    {
+     "i": 68,
+     "request": "Look for `fn main` across the repo.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "fn main"
+       }
+      ],
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"fn main\"}}, {\"tool\": \"list_dir\", \"arguments\": {\"path\": \".\"}}]}"
+    },
+    {
+     "i": 73,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)"
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\"}}]}"
+    },
+    {
+     "i": 74,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "case_sensitive": false
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [\n    {\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"case_sensitive\": false}}\n  ]\n}"
+    },
+    {
+     "i": 75,
+     "request": "Look for `class .*Error` across the repo.",
+     "valid": true,
+     "tool_ok": false,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "class .*Error"
+       }
+      ],
+      [
+       "list_dir",
+       {
+        "path": "."
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"class .*Error\"}}, {\"tool\": \"list_dir\", \"arguments\": {\"path\": \".\"}}]\n  }"
+    },
+    {
+     "i": 79,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"case_sensitive\": true}}]\n}"
+    },
+    {
+     "i": 93,
+     "request": "Look for `unwrap\\(\\)` across the repo.",
+     "valid": true,
+     "tool_ok": true,
+     "args_ok": false,
+     "got": [
+      [
+       "search_code",
+       {
+        "pattern": "unwrap\\(\\)",
+        "case_sensitive": true
+       }
+      ]
+     ],
+     "raw": "{\n  \"calls\": [{\"tool\": \"search_code\", \"arguments\": {\"pattern\": \"unwrap\\\\(\\\\)\", \"case_sensitive\": true}}]\n}"
+    }
+   ]
+  }
+ },
+ "stage_seconds": 210
+}

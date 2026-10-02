@@ -1,0 +1,195 @@
+{
+ "model": "F:\\Nebula\\models\\bonsai2-27b\\Ternary-Bonsai-2-27B-PTQ1_0.gguf",
+ "rows": [
+  {
+   "ctx": 8192,
+   "kv_type": "f16",
+   "estimated_mib": 6523,
+   "load_seconds": 4.28,
+   "vram_loaded_mib": 7788,
+   "prompt_tokens": 7111,
+   "pp_tps": 1200.1,
+   "tg_at_depth_tps": 45.33,
+   "tg_short_tps": 49.81,
+   "pp_runs": [
+    1162.0,
+    1201.0,
+    1200.1
+   ],
+   "tg_runs": [
+    45.16,
+    45.33,
+    45.44
+   ],
+   "vram_peak_mib": 7802,
+   "shared_mib": 158,
+   "vram_baseline_mib": 1402,
+   "model_plus_ctx_mib": 6400,
+   "spill_mib": 101,
+   "headroom_mib": 4480
+  },
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "estimated_mib": 8059,
+   "load_seconds": 4.41,
+   "vram_loaded_mib": 9377,
+   "prompt_tokens": 29163,
+   "pp_tps": 1054.6,
+   "tg_at_depth_tps": 40.8,
+   "tg_short_tps": 50.13,
+   "pp_runs": [
+    1050.4,
+    1054.6,
+    1077.1
+   ],
+   "tg_runs": [
+    40.19,
+    40.8,
+    41.21
+   ],
+   "vram_peak_mib": 9362,
+   "shared_mib": 199,
+   "vram_baseline_mib": 1395,
+   "model_plus_ctx_mib": 7967,
+   "spill_mib": 149,
+   "headroom_mib": 2920
+  },
+  {
+   "ctx": 65536,
+   "kv_type": "f16",
+   "estimated_mib": 10107,
+   "load_seconds": 4.51,
+   "vram_loaded_mib": 11428,
+   "prompt_tokens": 57802,
+   "pp_tps": 912.7,
+   "tg_at_depth_tps": 34.9,
+   "tg_short_tps": 50.05,
+   "pp_runs": [
+    912.1,
+    913.3
+   ],
+   "tg_runs": [
+    34.78,
+    35.01
+   ],
+   "vram_peak_mib": 11442,
+   "shared_mib": 210,
+   "vram_baseline_mib": 1395,
+   "model_plus_ctx_mib": 10047,
+   "spill_mib": 164,
+   "headroom_mib": 840
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "f16",
+   "estimated_mib": 14203,
+   "skipped": "estimated 14203 MiB + desktop reserve exceeds 12282 MiB"
+  },
+  {
+   "ctx": 8192,
+   "kv_type": "q4_0",
+   "estimated_mib": 6155,
+   "load_seconds": 4.44,
+   "vram_loaded_mib": 7420,
+   "prompt_tokens": 7111,
+   "pp_tps": 1202.4,
+   "tg_at_depth_tps": 45.92,
+   "tg_short_tps": 49.59,
+   "pp_runs": [
+    1157.7,
+    1204.2,
+    1202.4
+   ],
+   "tg_runs": [
+    45.95,
+    45.92,
+    45.9
+   ],
+   "vram_peak_mib": 7434,
+   "shared_mib": 157,
+   "vram_baseline_mib": 1395,
+   "model_plus_ctx_mib": 6039,
+   "spill_mib": 111,
+   "headroom_mib": 4848
+  },
+  {
+   "ctx": 32768,
+   "kv_type": "q4_0",
+   "estimated_mib": 6587,
+   "load_seconds": 4.5,
+   "vram_loaded_mib": 7960,
+   "prompt_tokens": 29163,
+   "pp_tps": 1069.2,
+   "tg_at_depth_tps": 37.85,
+   "tg_short_tps": 49.41,
+   "pp_runs": [
+    1065.1,
+    1069.2,
+    1070.5
+   ],
+   "tg_runs": [
+    37.75,
+    37.85,
+    38.11
+   ],
+   "vram_peak_mib": 7974,
+   "shared_mib": 179,
+   "vram_baseline_mib": 1395,
+   "model_plus_ctx_mib": 6579,
+   "spill_mib": 130,
+   "headroom_mib": 4308
+  },
+  {
+   "ctx": 65536,
+   "kv_type": "q4_0",
+   "estimated_mib": 7163,
+   "load_seconds": 4.47,
+   "vram_loaded_mib": 8696,
+   "prompt_tokens": 57802,
+   "pp_tps": 904.6,
+   "tg_at_depth_tps": 30.82,
+   "tg_short_tps": 49.38,
+   "pp_runs": [
+    904.2,
+    905.1
+   ],
+   "tg_runs": [
+    30.79,
+    30.85
+   ],
+   "vram_peak_mib": 8699,
+   "shared_mib": 210,
+   "vram_baseline_mib": 1395,
+   "model_plus_ctx_mib": 7304,
+   "spill_mib": 163,
+   "headroom_mib": 3583
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "q4_0",
+   "estimated_mib": 8315,
+   "load_seconds": 4.38,
+   "vram_loaded_mib": 10157,
+   "prompt_tokens": 117700,
+   "pp_tps": 673.0,
+   "tg_at_depth_tps": 22.15,
+   "tg_short_tps": 49.03,
+   "pp_runs": [
+    672.6,
+    673.4
+   ],
+   "tg_runs": [
+    22.14,
+    22.16
+   ],
+   "vram_peak_mib": 10198,
+   "shared_mib": 276,
+   "vram_baseline_mib": 1384,
+   "model_plus_ctx_mib": 8814,
+   "spill_mib": 230,
+   "headroom_mib": 2084
+  }
+ ],
+ "stage_seconds": 1013
+}

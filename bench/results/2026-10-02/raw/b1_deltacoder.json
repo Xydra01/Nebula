@@ -1,0 +1,33 @@
+{
+ "model": "F:\\Nebula\\models\\fallback\\DeltaCoder-9B-v1.1-DPO-Q6_K.gguf",
+ "rows": [
+  {
+   "ctx": 32768,
+   "kv_type": "f16",
+   "estimated_mib": 9406,
+   "load_seconds": 4.52,
+   "vram_loaded_mib": 8983,
+   "prompt_tokens": 29163,
+   "pp_tps": 3006.2,
+   "tg_at_depth_tps": 50.83,
+   "tg_short_tps": 57.71,
+   "pp_runs": [
+    2963.6,
+    3010.5,
+    3006.2
+   ],
+   "tg_runs": [
+    50.82,
+    50.83,
+    50.89
+   ],
+   "vram_peak_mib": 8987,
+   "shared_mib": 173,
+   "vram_baseline_mib": 1406,
+   "model_plus_ctx_mib": 7581,
+   "spill_mib": 127,
+   "headroom_mib": 3295
+  }
+ ],
+ "stage_seconds": 56
+}

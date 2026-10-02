@@ -1,0 +1,106 @@
+{
+ "model": "F:\\Nebula\\models\\bonsai2-27b\\Ternary-Bonsai-2-27B-PQ2_0.gguf",
+ "rows": [
+  {
+   "ctx": 65536,
+   "kv_type": "q4_0",
+   "bias": true,
+   "hard": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 65388.5
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "\"37\"",
+     "correct": true,
+     "prompt_ms": 248.6
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "\"48211\"",
+     "correct": true,
+     "prompt_ms": 245.5
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 247.0
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "\"q7k2-m9x4\"",
+     "correct": true,
+     "prompt_ms": 273.3
+    }
+   ],
+   "haystack_tokens": 59083,
+   "accuracy": 1.0
+  },
+  {
+   "ctx": 131072,
+   "kv_type": "q4_0",
+   "bias": true,
+   "hard": false,
+   "answers": [
+    {
+     "depth": 0.05,
+     "name": "RELEASE_CODENAME",
+     "expected": "amber-falcon-4127",
+     "answer": "amber-falcon-4127",
+     "correct": true,
+     "prompt_ms": 177120.7
+    },
+    {
+     "depth": 0.25,
+     "name": "MAX_PARALLEL_FETCHES",
+     "expected": "37",
+     "answer": "37",
+     "correct": true,
+     "prompt_ms": 334.6
+    },
+    {
+     "depth": 0.5,
+     "name": "TELEMETRY_SINK_PORT",
+     "expected": "48211",
+     "answer": "48211",
+     "correct": true,
+     "prompt_ms": 317.9
+    },
+    {
+     "depth": 0.75,
+     "name": "ON_CALL_ALIAS",
+     "expected": "violet-heron",
+     "answer": "violet-heron",
+     "correct": true,
+     "prompt_ms": 318.1
+    },
+    {
+     "depth": 0.95,
+     "name": "SHARD_SALT",
+     "expected": "q7k2-m9x4",
+     "answer": "q7k2-m9x4",
+     "correct": true,
+     "prompt_ms": 315.2
+    }
+   ],
+   "haystack_tokens": 120065,
+   "accuracy": 1.0
+  }
+ ],
+ "stage_seconds": 271
+}

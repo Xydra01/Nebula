@@ -1,0 +1,23 @@
+# Fallback candidate (ADR-005). Sampling from the model card's SWE-bench settings.
+name = "ornith10"
+runtime = "llama-stock"
+model = 'D:\NebulaCold\models-archive\fallback\ornith-1.0-9b-Q6_K.gguf'
+ctx = 32768
+kv_type = "f16"
+reasoning_style = "enable_thinking"
+flags = ["-ngl", "99", "-fa", "on", "-np", "1", "--jinja", "--reasoning", "auto",
+         "--ctx-checkpoints", "32", "--cache-ram", "4096", "--cache-idle-slots",
+         "--cors-origins", "http://nebula.invalid", "--no-cors-credentials", "-lv", "4"]
+
+[sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.0
+
+[sampling.instruct]
+temperature = 0.7
+top_p = 0.8
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
