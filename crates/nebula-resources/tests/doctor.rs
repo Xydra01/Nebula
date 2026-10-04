@@ -80,7 +80,11 @@ fn healthy() -> LocalInputs {
             "dev_sdc-2026-10-01_1932.json".into(),
             nvme_json("S1", 2, 99),
         )]),
-        backups: BackupState::Newest(Duration::from_secs(3600)),
+        backups: BackupState {
+            uploaded_age: Some(Duration::from_secs(3600)),
+            uploaded_name: Some("nebula-20261004T110000Z.tar.zst".into()),
+            last_error: None,
+        },
         backup_auth: BackupAuth::SignedIn(datetime!(2026-10-03 12:00 UTC)),
         log_bytes: Ok(50 * 1024 * 1024),
         log_writable: Ok(()),
@@ -263,14 +267,53 @@ fn facts_unavailable_warns_but_does_not_fail() {
 #[test]
 fn backups_and_logs() {
     let mut i = healthy();
-    i.backups = BackupState::NotSetUp;
+    i.backups = BackupState::default();
     i.log_bytes = Ok(3 * GB);
     i.log_writable = Err("access denied".into());
     let checks = evaluate(&cfg(), &i);
-    assert_eq!(status(&checks, "backup"), CheckStatus::Warn);
-    assert!(find(&checks, "backup").detail.contains("not set up"));
+    assert_eq!(status(&checks, "backup"), CheckStatus::Fail);
+    assert!(
+        find(&checks, "backup")
+            .detail
+            .contains("no successful off-site backup")
+    );
     assert_eq!(status(&checks, "logs.budget"), CheckStatus::Warn);
     assert_eq!(status(&checks, "logs.writable"), CheckStatus::Fail);
+}
+
+#[test]
+fn backup_age_and_errors() {
+    let judge = |b: BackupState| {
+        let mut i = healthy();
+        i.backups = b;
+        find(&evaluate(&cfg(), &i), "backup").clone()
+    };
+    let hours = |h: u64| Some(Duration::from_secs(h * 3600));
+
+    let c = judge(BackupState {
+        uploaded_age: hours(40),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Warn);
+    assert!(c.detail.contains("40 h ago"), "{c:?}");
+
+    let c = judge(BackupState {
+        uploaded_age: hours(5),
+        last_error: Some("rclone copyto failed".into()),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Warn);
+    assert!(
+        c.detail.contains("last run failed: rclone copyto failed"),
+        "{c:?}"
+    );
+
+    let c = judge(BackupState {
+        last_error: Some("token expired".into()),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Fail);
+    assert!(c.detail.contains("token expired"), "{c:?}");
 }
 
 #[test]

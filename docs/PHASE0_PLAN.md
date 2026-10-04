@@ -428,7 +428,7 @@ All output works in a plain SSH session: no mouse, colors that degrade cleanly, 
 - **`daemon start`:** spawns `nebula-daemon.exe` from next to `nebula.exe`, detached and outside the console's job when Windows allows it, so it survives the terminal or SSH session closing. It then waits (up to 5 minutes) until the `load_on_start` profile is ready, printing each state change. If a daemon is already running, it shows its status instead.
 - **`chat`:** one line per message. The history is kept by the CLI and sent whole on each turn. `/reset` clears it and `/exit` quits. Reasoning is shown dimmed only in an interactive terminal. Ctrl-C during a reply cancels it; Ctrl-C at the prompt quits. With `--json`, one object per turn: `chat_id`, `text`, `reasoning`, `stop_reason`, `usage`. `--reasoning` and `--max-tokens` are also available.
 - **`doctor`:** prepends a `daemon` check. When the daemon is down, it runs the local checks itself and reports `daemon` as FAIL. `resources` also falls back to a local snapshot.
-- **Not built yet:** `nebula backup` (with WS5).
+- **`backup`:** added with WS5 (Section 7.1).
 - **Install:** `scripts/install-nebula.ps1` builds release binaries and copies both to `F:\Nebula\bin\` (see `docs/ops/setup.md`).
 
 ---
@@ -446,6 +446,14 @@ All output works in a plain SSH session: no mouse, colors that degrade cleanly, 
 3. `nebula backup restore <id>` restores into a **scratch directory** by default. Overwriting live state requires `--in-place` and the daemon to be stopped.
 4. Schedule runs with **Task Scheduler** **every 6 hours** (00:00, 06:00, 12:00, 18:00) plus the 03:00 nightly, running whether or not you're logged in. The 6-hour runs are skipped if nothing has changed since the last snapshot.
 5. **Test restore** once by hand, and record it in `docs/ops/backup.md`.
+
+**As built (WS5 backups):** see `docs/ops/backup.md` for setup, renewal and restore.
+- **Code:** the `nebula-backup` crate (archive, retention, rclone wrapper) and the `nebula backup now|list|restore|reauth` commands.
+- **Contents:** each backup holds `state\` and `config\` as one `tar.zst`, with a SHA-256 manifest as its first entry. A restore checks every file against the manifest.
+- **Database:** there is no `nebula.db` yet, so the `VACUUM INTO` step comes with the Phase 1 database.
+- **Google sign-in:** the app stays unpublished, because publishing needs a verified domain. Google ends its sign-in after 7 days. `doctor` has a `backup.auth` check that warns 2 days before expiry; renew with `nebula backup reauth`.
+- **Large deletes:** a scheduled run can't prompt, so retention refuses any pass above 500 files or 1 GB. It records the error, which doctor shows as WARN, and waits for `nebula backup now --allow-large-delete`.
+- **Schedule:** registered by `scripts/register-backup-tasks.ps1`. Test restore from the cloud passed on 2026-10-04.
 
 ### 7.2 `nebula doctor` (2 h)
 

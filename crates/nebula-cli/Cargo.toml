@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+nebula-backup.workspace = true
 nebula-config.workspace = true
 nebula-daemon.workspace = true
 nebula-proto.workspace = true

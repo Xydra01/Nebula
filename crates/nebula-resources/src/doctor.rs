@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use nebula_config::NebulaConfig;
 use nebula_proto::{CheckStatus, DiskUsage, DoctorCheck, DoctorReport};
@@ -29,8 +29,8 @@ pub const TAILSCALE_RANGES: &[&str] = &[
 /// SMART snapshots older than this are stale.
 pub const SMART_MAX_AGE: Duration = Duration::from_secs(35 * 24 * 3600);
 
-/// Backups older than this are stale.
-pub const BACKUP_MAX_AGE: Duration = Duration::from_secs(8 * 24 * 3600);
+/// An off-site backup older than this is stale (the nightly run always uploads).
+pub const BACKUP_MAX_AGE: Duration = Duration::from_secs(36 * 3600);
 
 /// How far back the first disk-event check looks.
 pub const FIRST_EVENT_LOOKBACK: Duration = Duration::from_secs(7 * 24 * 3600);
@@ -94,13 +94,25 @@ pub struct SystemFacts {
     pub wsl: Option<bool>,
 }
 
-/// What's in the local backup folder.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BackupState {
-    /// Missing or empty.
-    NotSetUp,
-    /// Age of the newest entry.
-    Newest(Duration),
+/// Off-site backups, from `state\backup-last.json` (written by `nebula backup now`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackupState {
+    /// Age of the last successful upload; `None` if there never was one.
+    pub uploaded_age: Option<Duration>,
+    /// Its archive name.
+    pub uploaded_name: Option<String>,
+    /// The latest run's error.
+    pub last_error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct BackupRecord {
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    last_uploaded_at: Option<OffsetDateTime>,
+    #[serde(default)]
+    last_uploaded: Option<String>,
+    #[serde(default)]
+    last_error: Option<String>,
 }
 
 /// The off-site remote's sign-in, as recorded by `nebula backup reauth`.
@@ -607,18 +619,37 @@ fn judge_smart(dev: &str, cur: &Smart, prev: Option<&Smart>) -> DoctorCheck {
 }
 
 fn backup_check(b: &BackupState) -> DoctorCheck {
-    match b {
-        BackupState::NotSetUp => check("backup", CheckStatus::Warn, "not set up (PHASE0_PLAN 7.1)"),
-        BackupState::Newest(age) if *age > BACKUP_MAX_AGE => check(
+    let failed = b
+        .last_error
+        .as_deref()
+        .map_or_else(String::new, |e| format!("; last run failed: {e}"));
+    let Some(age) = b.uploaded_age else {
+        return check(
+            "backup",
+            CheckStatus::Fail,
+            format!("no successful off-site backup yet (`nebula backup now`){failed}"),
+        );
+    };
+    let hours = age.as_secs() / 3600;
+    let name = b.uploaded_name.as_deref().unwrap_or("?");
+    if age > BACKUP_MAX_AGE {
+        check(
             "backup",
             CheckStatus::Warn,
-            format!("newest local backup is {} days old", age.as_secs() / 86_400),
-        ),
-        BackupState::Newest(age) => check(
+            format!("last off-site backup {hours} h ago ({name}){failed}"),
+        )
+    } else if b.last_error.is_some() {
+        check(
+            "backup",
+            CheckStatus::Warn,
+            format!("last off-site backup {hours} h ago{failed}"),
+        )
+    } else {
+        check(
             "backup",
             CheckStatus::Ok,
-            format!("newest local backup is {} h old", age.as_secs() / 3600),
-        ),
+            format!("last off-site backup {hours} h ago ({name})"),
+        )
     }
 }
 
@@ -824,17 +855,20 @@ fn read_smart_files(dir: &Path) -> Option<Vec<(String, String)>> {
     )
 }
 
-fn backup_state(dir: &Path) -> BackupState {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return BackupState::NotSetUp;
+fn backup_state(cfg: &NebulaConfig, now: OffsetDateTime) -> BackupState {
+    let Some(r) = std::fs::read_to_string(cfg.paths.state.join("backup-last.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<BackupRecord>(&t).ok())
+    else {
+        return BackupState::default();
     };
-    entries
-        .filter_map(Result::ok)
-        .filter_map(|e| e.metadata().ok()?.modified().ok())
-        .max()
-        .map_or(BackupState::NotSetUp, |t| {
-            BackupState::Newest(SystemTime::now().duration_since(t).unwrap_or_default())
-        })
+    BackupState {
+        uploaded_age: r
+            .last_uploaded_at
+            .map(|t| (now - t).try_into().unwrap_or_default()),
+        uploaded_name: r.last_uploaded,
+        last_error: r.last_error,
+    }
 }
 
 fn probe_writable(dir: &Path) -> Result<(), String> {
@@ -978,7 +1012,7 @@ pub fn gather(cfg: &NebulaConfig) -> LocalInputs {
         facts,
         events_since,
         smart_files: read_smart_files(&cfg.paths.state.join("smart")),
-        backups: backup_state(&cfg.paths.backups_local),
+        backups: backup_state(cfg, now),
         backup_auth: backup_auth(cfg),
         log_bytes: nebula_telemetry::budget::usage(&log_dir)
             .map(|u| u.log_bytes + u.blob_bytes)

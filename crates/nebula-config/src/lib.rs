@@ -53,6 +53,8 @@ pub struct Paths {
     pub logs: PathBuf,
     /// Daemon state (doctor history, hash cache, SMART JSON, ...).
     pub state: PathBuf,
+    /// Local config: the override file and `rclone.conf`. Backed up with `state`.
+    pub config: PathBuf,
     /// Log archive on the cold drive.
     pub archive: PathBuf,
     /// Local copies of backups (PHASE0_PLAN 7.1).
@@ -139,6 +141,20 @@ pub struct BackupConfig {
     pub token_lifetime_days: u64,
     /// Doctor warns this many days before the sign-in expires.
     pub token_warn_days: u64,
+    /// Cloud retention: the newest this many backups...
+    pub keep_recent: usize,
+    /// ...plus the newest of each of this many days...
+    pub keep_daily: usize,
+    /// ...ISO weeks...
+    pub keep_weekly: usize,
+    /// ...and months.
+    pub keep_monthly: usize,
+    /// Local copies in `paths.backups_local` are kept this many days.
+    pub local_keep_days: u64,
+    /// A retention pass that would delete more than this many files...
+    pub max_delete_files: usize,
+    /// ...or more than this many MiB stops and asks (`--allow-large-delete`).
+    pub max_delete_mib: u64,
 }
 
 /// The whole configuration.
@@ -238,6 +254,7 @@ impl NebulaConfig {
             ("paths.data_root".to_owned(), self.paths.data_root.clone()),
             ("paths.logs".to_owned(), self.paths.logs.clone()),
             ("paths.state".to_owned(), self.paths.state.clone()),
+            ("paths.config".to_owned(), self.paths.config.clone()),
             ("paths.archive".to_owned(), self.paths.archive.clone()),
             (
                 "paths.backups_local".to_owned(),

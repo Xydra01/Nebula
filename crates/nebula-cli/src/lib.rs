@@ -82,6 +82,28 @@ pub enum Command {
 /// `nebula backup ...`.
 #[derive(Debug, Subcommand)]
 pub enum BackupAction {
+    /// Back up state and config, upload the encrypted copy, apply retention.
+    Now {
+        /// Skip if nothing changed since the last upload (the 6-hourly runs).
+        #[arg(long)]
+        if_changed: bool,
+        /// Confirm a retention pass that deletes more than the ask-first limit.
+        #[arg(long)]
+        allow_large_delete: bool,
+    },
+    /// List local and cloud backups.
+    List,
+    /// Restore a backup into a scratch folder (or over the live files with --in-place).
+    Restore {
+        /// Backup name, e.g. nebula-20261004T170000Z (from `nebula backup list`).
+        id: String,
+        /// Where to unpack (default: D:\NebulaCold\restore\<id>).
+        #[arg(long, conflicts_with = "in_place")]
+        to: Option<PathBuf>,
+        /// Overwrite the live state and config files (the daemon must be stopped).
+        #[arg(long)]
+        in_place: bool,
+    },
     /// Renew the cloud sign-in (opens a browser) and record when, for `doctor`.
     Reauth {
         /// Only check the remote and record the time (right after `rclone config`).
@@ -253,9 +275,20 @@ pub async fn run(
         } => logs_tail(ctx, level, trace, target, out).await,
         Command::Resources => resources(ctx, out).await,
         Command::Doctor => doctor(ctx, out).await,
-        Command::Backup {
-            action: BackupAction::Reauth { record_only },
-        } => backup::reauth(ctx, record_only, out),
+        Command::Backup { action } => match action {
+            BackupAction::Reauth { record_only } => backup::reauth(ctx, record_only, out),
+            BackupAction::Now {
+                if_changed,
+                allow_large_delete,
+            } => backup::now(ctx, if_changed, allow_large_delete, out),
+            BackupAction::List => backup::list(ctx, out),
+            BackupAction::Restore { id, to, in_place } => {
+                if in_place && !matches!(connect(ctx).await, Err(ClientError::NotRunning(_))) {
+                    anyhow::bail!("stop the daemon first (`nebula daemon stop`)");
+                }
+                backup::restore(ctx, &id, to, in_place, out)
+            }
+        },
     }
 }
 
