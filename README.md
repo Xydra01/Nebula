@@ -6,20 +6,44 @@ It is the first app of a planned local **AI foundry**, and its long-term job is 
 
 ## Status
 
-**Phase 0: foundations (pre-alpha).** Design is complete; machine prep is underway; there is no runnable code yet.
+**Phase 0 (foundations) is built; the exit review is pending.** Today Nebula is a supervised local model with a CLI. It isn't an agent yet:
+
+- a daemon that runs and supervises the model servers (crash restart, profile switching, Job Object cleanup);
+- `nebula chat` with streaming;
+- structured logs with trace IDs;
+- `nebula doctor` health checks;
+- encrypted off-site backups.
+
+**Phase 1** adds the agent: tools over MCP, permission tiers, worktrees, an executor loop and a TUI. See the [`phase-1` issues](https://github.com/Xydra01/Nebula/issues?q=is%3Aissue+label%3Aphase-1).
+
+## Quick start (on the Nebula machine)
+
+```powershell
+.\scripts\install-nebula.ps1     # build and install nebula.exe + nebula-daemon.exe to F:\Nebula\bin
+nebula daemon start               # load the default model profile
+nebula chat                       # /reset, /exit; Ctrl-C cancels a reply
+nebula doctor                     # health report
+nebula daemon stop                # free the GPU
+```
+
+`nebula --help` lists everything. Setting up a machine from scratch (runtimes, models, toolchain): [docs/ops/setup.md](docs/ops/setup.md).
 
 ## Documents
 
-- [Design document](docs/NEBULA_DESIGN.md): architecture, agent design, security model, self-improvement framework, roadmap, risks
-- [Phase 0 plan](docs/PHASE0_PLAN.md): workstreams, milestones and exit criteria for the first ~6 weeks
-- [Phase 0 ops notes](docs/ops/phase0-notes.md): machine-prep results
+- [AGENTS.md](AGENTS.md): start here if you're an AI agent or new to the repo. Build/test commands, conventions, hard rules and gotchas.
+- [Architecture and code map](docs/ARCHITECTURE.md): what's built, the crates, the on-disk layout, and the docs index.
+- [Design document](docs/NEBULA_DESIGN.md): the target architecture, agent design, security model, self-improvement framework, roadmap and risks.
+- [Phase 0 plan](docs/PHASE0_PLAN.md): workstreams, "As built" notes and the exit criteria.
+- [ADRs](docs/adr/README.md): recorded decisions.
+- [Ops docs](docs/ops/): setup, backups, runbooks, and the machine log ([phase0-notes.md](docs/ops/phase0-notes.md)).
+- [Contributing](CONTRIBUTING.md): branches, commits, PRs, Rust conventions.
 
-## Stack (planned)
+## Stack
 
-- **Core:** Rust (tokio, tracing, ratatui, rusqlite + sqlite-vec, nvml-wrapper, rmcp)
-- **Periphery:** Python (uv, MCP SDK, Playwright, pytest)
-- **Tool boundary:** MCP
-- **Model runtime:** PrismML llama.cpp fork, supervised as a child process
+- **Core:** Rust 2024 (tokio, tracing, serde, clap, windows-rs, nvml-wrapper). Later: ratatui, rusqlite + sqlite-vec, rmcp.
+- **Periphery:** Python (uv). Today that's the benchmark harness in `bench/`; Phase 1 adds the MCP tool servers.
+- **Tool boundary:** MCP ([ADR-002](docs/adr/ADR-002-mcp-tool-boundary.md)).
+- **Model runtime:** the PrismML llama.cpp fork, plus stock llama.cpp for the fallback and embedding models, supervised as child processes ([ADR-003](docs/adr/ADR-003-llama-cpp-backend.md)).
 
 ## License
 
