@@ -1,0 +1,7 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "format::daemon_status(&s, datetime!(2026-10-04 12:05:03 UTC), Style::PLAIN)"
+---
+daemon   running (pid 1234, version 0.1.0, protocol 1), up 1h 02m
+model    standard ready for 5m 03s, 1 restart(s)
+error    llama-server exited with code 1

@@ -1,0 +1,34 @@
+[package]
+name = "nebula-cli"
+description = "The `nebula` command: daemon control, chat, model, logs, resources and doctor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nebula"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+nebula-config.workspace = true
+nebula-daemon.workspace = true
+nebula-proto.workspace = true
+nebula-resources.workspace = true
+nebula-telemetry.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "io-util", "io-std", "time", "signal"] }
+
+[dev-dependencies]
+insta.workspace = true
+nebula-model = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true
