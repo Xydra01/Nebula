@@ -1,13 +1,12 @@
 #![allow(clippy::unwrap_used, clippy::panic, missing_docs)]
 
-mod fake;
-
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use fake::{FakeLauncher, FakeState, content, finish, reasoning};
 use futures_util::StreamExt;
+use nebula_model::testing as fake;
+use nebula_model::testing::{FakeLauncher, FakeState, content, finish, reasoning};
 use nebula_model::{
     Activity, BackendHealth, ChatRequest, LlamaServerBackend, ModelBackend, ModelError,
     ModelManager, StreamItem, SupervisorConfig,
@@ -25,7 +24,7 @@ fn hello() -> ChatRequest {
 
 async fn backend(state: &Arc<FakeState>) -> LlamaServerBackend {
     *state.api_key.lock().unwrap() = Some("k3y".into());
-    let (url, _task) = fake::start(Arc::clone(state)).await;
+    let (url, _task) = fake::start(Arc::clone(state)).await.unwrap();
     LlamaServerBackend::new(
         url,
         Some("k3y".into()),
@@ -66,7 +65,7 @@ async fn chat_streams_tokens_and_logs_model_call_with_blobs() {
         finish("stop"),
     ]);
     *state.api_key.lock().unwrap() = Some("k3y".into());
-    let (url, _task) = fake::start(Arc::clone(&state)).await;
+    let (url, _task) = fake::start(Arc::clone(&state)).await.unwrap();
     let b = LlamaServerBackend::new(
         url,
         Some("k3y".into()),
@@ -402,13 +401,13 @@ async fn unknown_profile_stop_and_unload() {
 
     let s = m.stop().await.unwrap();
     assert_eq!(s.state, ModelState::Stopped);
-    assert!(launcher.current().exited());
+    assert!(launcher.current().unwrap().exited());
     assert!(m.backend().is_err());
     assert_eq!(m.pid(), None);
 
     m.set_profile("a").await.unwrap();
     assert_eq!(m.unload().await.unwrap().state, ModelState::Unloaded);
-    assert!(launcher.current().exited());
+    assert!(launcher.current().unwrap().exited());
 }
 
 struct RefuseB;
@@ -449,7 +448,7 @@ async fn dropping_the_manager_stops_the_server() {
     let launcher = FakeLauncher::new(FakeState::new());
     let m = manager(&launcher);
     m.set_profile("a").await.unwrap();
-    let ctl = launcher.current();
+    let ctl = launcher.current().unwrap();
     drop(m);
     for _ in 0..100 {
         if ctl.exited() {

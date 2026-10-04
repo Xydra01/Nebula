@@ -1,0 +1,44 @@
+[package]
+name = "nebula-daemon"
+description = "The Nebula daemon: named-pipe JSON-RPC server over the model, resources and telemetry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "nebula-daemon"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+nebula-config.workspace = true
+nebula-model.workspace = true
+nebula-proto.workspace = true
+nebula-resources.workspace = true
+nebula-telemetry.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
+tokio-util = { workspace = true, features = ["codec", "rt"] }
+toml.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_System_Threading"] }
+
+[dev-dependencies]
+nebula-model = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[lints]
+workspace = true

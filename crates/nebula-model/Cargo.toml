@@ -8,8 +8,13 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+## The fake llama-server and launcher in `nebula_model::testing`.
+test-support = ["dep:axum"]
+
 [dependencies]
 async-trait.workspace = true
+axum = { workspace = true, optional = true }
 eventsource-stream.workspace = true
 futures-util.workspace = true
 getrandom.workspace = true
@@ -30,7 +35,7 @@ ulid.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
 
 [dev-dependencies]
-axum.workspace = true
+nebula-model = { path = ".", features = ["test-support"] }
 tempfile.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
 toml.workspace = true

@@ -1,9 +1,10 @@
-//! A fake llama-server (axum) and a launcher that starts it in-process.
+//! A fake llama-server (axum) and a launcher that starts it in-process, for tests in this
+//! crate and its users (the daemon). Behind the `test-support` feature.
 
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -14,25 +15,39 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use futures_util::StreamExt;
-use nebula_model::{
-    LaunchSpec, Launcher, ModelConfig, ModelError, ModelProfile, ReasoningStyle, Sampling,
-    ServerProcess,
-};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
+use crate::{
+    LaunchSpec, Launcher, ModelConfig, ModelError, ModelProfile, ReasoningStyle, Sampling,
+    ServerProcess,
+};
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// What the fake server answers, and what it has received.
 #[derive(Default)]
 pub struct FakeState {
+    /// Required bearer key, set by [`FakeLauncher`] from `LLAMA_API_KEY`.
     pub api_key: Mutex<Option<String>>,
+    /// `/health` status code.
     pub health: AtomicU16,
+    /// `/v1/chat/completions` status code.
     pub chat_status: AtomicU16,
+    /// SSE `data:` payloads streamed by chat, ending with `[DONE]`.
     pub chunks: Mutex<Vec<String>>,
+    /// Delay before each chunk.
     pub chunk_delay_ms: AtomicU64,
+    /// `(path, body)` of every request.
     pub requests: Mutex<Vec<(String, Value)>>,
 }
 
 impl FakeState {
+    /// Healthy, answering 200, with no chunks.
+    #[must_use]
     pub fn new() -> Arc<Self> {
         let s = Self::default();
         s.health.store(200, Ordering::SeqCst);
@@ -40,16 +55,25 @@ impl FakeState {
         Arc::new(s)
     }
 
+    /// Sets the chat stream (a `[DONE]` is appended).
     pub fn set_chunks(&self, chunks: Vec<Value>) {
         let mut data: Vec<String> = chunks.into_iter().map(|c| c.to_string()).collect();
         data.push("[DONE]".into());
-        *self.chunks.lock().unwrap() = data;
+        *lock(&self.chunks) = data;
     }
 
+    /// Sets the delay before each chunk.
+    pub fn set_chunk_delay(&self, delay: Duration) {
+        self.chunk_delay_ms.store(
+            u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+            Ordering::SeqCst,
+        );
+    }
+
+    /// Bodies received on `path`.
+    #[must_use]
     pub fn requests(&self, path: &str) -> Vec<Value> {
-        self.requests
-            .lock()
-            .unwrap()
+        lock(&self.requests)
             .iter()
             .filter(|(p, _)| p == path)
             .map(|(_, v)| v.clone())
@@ -57,7 +81,7 @@ impl FakeState {
     }
 
     fn authorized(&self, headers: &HeaderMap) -> bool {
-        match &*self.api_key.lock().unwrap() {
+        match &*lock(&self.api_key) {
             None => true,
             Some(k) => headers
                 .get("authorization")
@@ -68,16 +92,19 @@ impl FakeState {
 }
 
 /// A content delta chunk.
+#[must_use]
 pub fn content(text: &str) -> Value {
     json!({ "choices": [{ "index": 0, "delta": { "content": text }, "finish_reason": null }] })
 }
 
 /// A reasoning delta chunk.
+#[must_use]
 pub fn reasoning(text: &str) -> Value {
     json!({ "choices": [{ "index": 0, "delta": { "reasoning_content": text }, "finish_reason": null }] })
 }
 
 /// The final chunk with a finish reason and timings.
+#[must_use]
 pub fn finish(reason: &str) -> Value {
     json!({
         "choices": [{ "index": 0, "delta": {}, "finish_reason": reason }],
@@ -86,11 +113,15 @@ pub fn finish(reason: &str) -> Value {
     })
 }
 
+fn status(code: u16) -> StatusCode {
+    StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
 async fn health(State(s): State<Arc<FakeState>>, headers: HeaderMap) -> Response {
     if !s.authorized(&headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
-    let code = StatusCode::from_u16(s.health.load(Ordering::SeqCst)).unwrap();
+    let code = status(s.health.load(Ordering::SeqCst));
     (code, axum::Json(json!({ "status": "x" }))).into_response()
 }
 
@@ -102,16 +133,16 @@ async fn chat(
     if !s.authorized(&headers) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
-    s.requests
-        .lock()
-        .unwrap()
-        .push(("/v1/chat/completions".into(), body));
-    let status = s.chat_status.load(Ordering::SeqCst);
-    if status != 200 {
-        let code = StatusCode::from_u16(status).unwrap();
-        return (code, axum::Json(json!({ "error": { "message": "boom" } }))).into_response();
+    lock(&s.requests).push(("/v1/chat/completions".into(), body));
+    let code = s.chat_status.load(Ordering::SeqCst);
+    if code != 200 {
+        return (
+            status(code),
+            axum::Json(json!({ "error": { "message": "boom" } })),
+        )
+            .into_response();
     }
-    let chunks = s.chunks.lock().unwrap().clone();
+    let chunks = lock(&s.chunks).clone();
     let delay = Duration::from_millis(s.chunk_delay_ms.load(Ordering::SeqCst));
     let stream = futures_util::stream::iter(chunks).then(move |c| async move {
         tokio::time::sleep(delay).await;
@@ -120,14 +151,14 @@ async fn chat(
     Response::builder()
         .header("content-type", "text/event-stream")
         .body(Body::from_stream(stream))
-        .unwrap()
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
 async fn tokenize(
     State(s): State<Arc<FakeState>>,
     axum::Json(body): axum::Json<Value>,
 ) -> Response {
-    s.requests.lock().unwrap().push(("/tokenize".into(), body));
+    lock(&s.requests).push(("/tokenize".into(), body));
     axum::Json(json!({ "tokens": [1, 2, 3] })).into_response()
 }
 
@@ -135,10 +166,7 @@ async fn embeddings(
     State(s): State<Arc<FakeState>>,
     axum::Json(body): axum::Json<Value>,
 ) -> Response {
-    s.requests
-        .lock()
-        .unwrap()
-        .push(("/v1/embeddings".into(), body));
+    lock(&s.requests).push(("/v1/embeddings".into(), body));
     axum::Json(json!({ "data": [
         { "index": 1, "embedding": [0.5, 0.5] },
         { "index": 0, "embedding": [0.25, 0.75] },
@@ -146,6 +174,7 @@ async fn embeddings(
     .into_response()
 }
 
+/// The fake's routes.
 pub fn router(state: Arc<FakeState>) -> Router {
     Router::new()
         .route("/health", get(health))
@@ -163,12 +192,16 @@ pub fn serve(state: Arc<FakeState>, listener: TcpListener) -> JoinHandle<()> {
 }
 
 /// Serves the fake on a random port and returns its base URL.
-pub async fn start(state: Arc<FakeState>) -> (String, JoinHandle<()>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    (url, serve(state, listener))
+///
+/// # Errors
+/// If binding fails.
+pub async fn start(state: Arc<FakeState>) -> std::io::Result<(String, JoinHandle<()>)> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let url = format!("http://{}", listener.local_addr()?);
+    Ok((url, serve(state, listener)))
 }
 
+/// Controls one fake server "process".
 pub struct ProcCtl {
     exited: AtomicBool,
     task: Mutex<Option<JoinHandle<()>>>,
@@ -176,12 +209,14 @@ pub struct ProcCtl {
 
 impl ProcCtl {
     fn kill(&self) {
-        if let Some(t) = self.task.lock().unwrap().take() {
+        if let Some(t) = lock(&self.task).take() {
             t.abort();
         }
         self.exited.store(true, Ordering::SeqCst);
     }
 
+    /// Whether it has "exited".
+    #[must_use]
     pub fn exited(&self) -> bool {
         self.exited.load(Ordering::SeqCst)
     }
@@ -207,13 +242,19 @@ impl ServerProcess for FakeProcess {
 
 /// Starts the fake server in-process on the port the supervisor picked.
 pub struct FakeLauncher {
+    /// Shared by every server it starts.
     pub state: Arc<FakeState>,
+    /// Every launch, in order.
     pub launches: Mutex<Vec<LaunchSpec>>,
+    /// Make the next launches exit immediately.
     pub crash_on_start: AtomicBool,
+    /// The latest server.
     pub current: Mutex<Option<Arc<ProcCtl>>>,
 }
 
 impl FakeLauncher {
+    /// A launcher serving `state`.
+    #[must_use]
     pub fn new(state: Arc<FakeState>) -> Arc<Self> {
         Arc::new(Self {
             state,
@@ -225,30 +266,34 @@ impl FakeLauncher {
 
     /// Simulates the server process dying.
     pub fn crash(&self) {
-        if let Some(c) = &*self.current.lock().unwrap() {
+        if let Some(c) = &*lock(&self.current) {
             c.kill();
         }
     }
 
-    pub fn current(&self) -> Arc<ProcCtl> {
-        self.current.lock().unwrap().clone().unwrap()
+    /// The latest server, if one was launched.
+    #[must_use]
+    pub fn current(&self) -> Option<Arc<ProcCtl>> {
+        lock(&self.current).clone()
     }
 
+    /// Every launch so far.
+    #[must_use]
     pub fn launches(&self) -> Vec<LaunchSpec> {
-        self.launches.lock().unwrap().clone()
+        lock(&self.launches).clone()
     }
 }
 
 #[async_trait]
 impl Launcher for FakeLauncher {
     async fn launch(&self, spec: LaunchSpec) -> Result<Box<dyn ServerProcess>, ModelError> {
-        self.launches.lock().unwrap().push(spec.clone());
+        lock(&self.launches).push(spec.clone());
         let key = spec
             .env
             .iter()
             .find(|(k, _)| k == "LLAMA_API_KEY")
             .map(|(_, v)| v.clone());
-        *self.state.api_key.lock().unwrap() = key;
+        *lock(&self.state.api_key) = key;
         let ctl = Arc::new(ProcCtl {
             exited: AtomicBool::new(false),
             task: Mutex::new(None),
@@ -259,13 +304,15 @@ impl Launcher for FakeLauncher {
             let listener = TcpListener::bind(("127.0.0.1", spec.port))
                 .await
                 .map_err(|e| ModelError::Launch(e.to_string()))?;
-            *ctl.task.lock().unwrap() = Some(serve(Arc::clone(&self.state), listener));
+            *lock(&ctl.task) = Some(serve(Arc::clone(&self.state), listener));
         }
-        *self.current.lock().unwrap() = Some(Arc::clone(&ctl));
+        *lock(&self.current) = Some(Arc::clone(&ctl));
         Ok(Box::new(FakeProcess(ctl)))
     }
 }
 
+/// A small profile for `model` on the `fake` runtime.
+#[must_use]
 pub fn profile(model: &str) -> ModelProfile {
     let mut instruct = serde_json::Map::new();
     instruct.insert("temperature".into(), json!(0.7));
@@ -285,6 +332,8 @@ pub fn profile(model: &str) -> ModelProfile {
     }
 }
 
+/// Profiles `a` (default) and `b` on the `fake` runtime.
+#[must_use]
 pub fn config() -> ModelConfig {
     ModelConfig {
         default_profile: "a".into(),
