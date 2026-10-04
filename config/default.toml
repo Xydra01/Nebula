@@ -9,6 +9,16 @@ state = 'F:\Nebula\state'
 archive = 'D:\NebulaCold\logs-archive'
 backups_local = 'D:\NebulaCold\backups-local'
 
+[backup]
+rclone = "rclone"
+rclone_config = 'F:\Nebula\config\rclone.conf'
+auth_remote = "gdrive:"
+remote = "gdrive-crypt:"
+# The Google app is unpublished (Testing), so its sign-in expires 7 days after
+# `nebula backup reauth`. Set to 0 once it is published or for a key-based remote.
+token_lifetime_days = 7
+token_warn_days = 2
+
 [telemetry]
 filter = "info"
 

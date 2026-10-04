@@ -3,6 +3,7 @@
 //! Output is plain text that works over SSH (color only on a terminal, never with
 //! `NO_COLOR`), or JSON with `--json`.
 
+mod backup;
 mod chat;
 mod daemon_ctl;
 pub mod format;
@@ -70,6 +71,23 @@ pub enum Command {
     Resources,
     /// Health report; exits 0 (ok), 1 (warnings) or 2 (failures).
     Doctor,
+    /// Off-site backups.
+    Backup {
+        /// Action.
+        #[command(subcommand)]
+        action: BackupAction,
+    },
+}
+
+/// `nebula backup ...`.
+#[derive(Debug, Subcommand)]
+pub enum BackupAction {
+    /// Renew the cloud sign-in (opens a browser) and record when, for `doctor`.
+    Reauth {
+        /// Only check the remote and record the time (right after `rclone config`).
+        #[arg(long)]
+        record_only: bool,
+    },
 }
 
 /// `nebula daemon ...`.
@@ -235,6 +253,9 @@ pub async fn run(
         } => logs_tail(ctx, level, trace, target, out).await,
         Command::Resources => resources(ctx, out).await,
         Command::Doctor => doctor(ctx, out).await,
+        Command::Backup {
+            action: BackupAction::Reauth { record_only },
+        } => backup::reauth(ctx, record_only, out),
     }
 }
 

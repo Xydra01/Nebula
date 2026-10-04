@@ -123,12 +123,32 @@ pub struct ResourcesConfig {
     pub volumes: Vec<VolumeGuard>,
 }
 
+/// The `[backup]` section (PHASE0_PLAN 7.1).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackupConfig {
+    /// The rclone executable.
+    pub rclone: PathBuf,
+    /// rclone's config file, encrypted with the `nebula/rclone_config_pass` credential.
+    pub rclone_config: PathBuf,
+    /// The cloud remote that holds the OAuth sign-in, e.g. `gdrive:`.
+    pub auth_remote: String,
+    /// The encrypted remote backups are written to, e.g. `gdrive-crypt:`.
+    pub remote: String,
+    /// How long a sign-in lasts (7 for a Google app in Testing); 0 if it doesn't expire.
+    pub token_lifetime_days: u64,
+    /// Doctor warns this many days before the sign-in expires.
+    pub token_warn_days: u64,
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NebulaConfig {
     /// Data locations.
     pub paths: Paths,
+    /// Off-site backups.
+    pub backup: BackupConfig,
     /// Logging; `log_dir` defaults to `paths.logs`.
     #[serde(default)]
     pub telemetry: TelemetryConfig,
@@ -222,6 +242,10 @@ impl NebulaConfig {
             (
                 "paths.backups_local".to_owned(),
                 self.paths.backups_local.clone(),
+            ),
+            (
+                "backup.rclone_config".to_owned(),
+                self.backup.rclone_config.clone(),
             ),
         ];
         if let Some(d) = &self.telemetry.log_dir {
