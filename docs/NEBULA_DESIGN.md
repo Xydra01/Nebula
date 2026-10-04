@@ -158,7 +158,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | Windows + your apps | 8–10 GB | Reserve |
 | Nebula daemon (Rust) | 100–300 MB | Includes the SQLite page cache |
 | Python tool servers | 200 MB–1 GB | Depends on active tools |
-| Embedding model (CPU) | 0.5–1.5 GB | Small embedding model, e.g. a ~0.6B class model in GGUF form |
+| Embedding model (CPU) | 1.8–2.4 GB | Qwen3-Embedding-0.6B Q8_0: 1.2–1.8 GB private plus 0.6 GB of memory-mapped weights, with inputs capped at 1024 tokens (Phase 0 task 3.5) |
 | Code index + vector store | 100 MB–1 GB | sqlite-vec, memory-mapped |
 | Headless Chromium (Playwright) | 0.5–2 GB | Heavy; started on demand and stopped when idle |
 | WSL2 VM | 2–6 GB | Capped via `.wslconfig`; started on demand |

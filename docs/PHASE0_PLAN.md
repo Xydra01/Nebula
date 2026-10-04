@@ -196,8 +196,9 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 > - **3.6 done:** all smoke checks pass ([bench/results](../bench/results/)). With 32K context and an f16 KV cache, the model plus context uses 7.9 GB, total VRAM use is 9.3 GB (the desktop takes 1.4 GB), and generation runs at 30–50 tokens/s.
 > - **3.4 done:** stock llama.cpp `b11342` plus six fallback candidates in two rounds (9B dense: Ornith 1.0, Ornith 1.5, DeltaCoder; MoE with experts in RAM: Qwen3.6-35B-A3B, Gemma 4 26B-A4B, GLM-4.7-Flash). **Gemma 4 26B-A4B won** (ADR-005); the others are archived on `D:`.
 > - **3.7 done:** KV bias files generated for PTQ1_0 and PQ2_0; the server loads them with q4_0 KV.
-> - **5.2 harness and B1–B3, B5–B8 run** (overnight, 2026-10-02). See the [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md) and [ADR-005](adr/ADR-005-fallback-model.md) (both Accepted 2026-10-02). 3.5 (embedding model) is still open.
+> - **5.2 harness and B1–B3, B5–B8 run** (overnight, 2026-10-02). See the [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md) and [ADR-005](adr/ADR-005-fallback-model.md) (both Accepted 2026-10-02).
 > - **B4 done (2026-10-03):** MTP speculative decoding with the ProCreations head. See the [B4 report](../bench/results/2026-10-03/report.md) and [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Accepted 2026-10-04).
+> - **3.5 done (2026-10-04):** Qwen3-Embedding-0.6B Q8_0 on the CPU (stock llama.cpp, `--embedding --pooling last --device none`). 1.2–1.8 GB of RAM with 1024-token inputs, ~250 tokens/s, no VRAM, and 1–3% slower `standard` generation while it indexes. See the [report](../bench/results/2026-10-04/report.md).
 
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
@@ -461,7 +462,7 @@ Phase 0 is done when **every** box is checked:
 **Environment**
 - [x] Page file moved off `C:`; nothing Nebula-related lives on `C:`; the recovery USB is made and tested
 - [ ] SMART health recorded for all three drives; `D:` cleared for cold data (or the plan adjusted if it isn't healthy)
-- [ ] `F:` stays within the revised budget (≤ 60 GB Nebula use, at least 30 GB free)
+- [x] `F:` stays within the revised budget (≤ 60 GB Nebula use, at least 30 GB free)
 - [ ] Every toolchain answers `--version`; `docs/ops/setup.md` reproduces the setup
 - [x] SSH works from the laptop over Tailscale with key authentication only, and is unreachable from outside the tailnet
 
@@ -472,9 +473,9 @@ Phase 0 is done when **every** box is checked:
 - [ ] CI is green on `main`
 
 **Model**
-- [ ] Benchmarks B1–B8 run, with the report committed under `bench/results/`
+- [x] Benchmarks B1–B8 run, with the report committed under `bench/results/`
 - [x] ADR-004 and ADR-005 merged; design doc tables updated with measured values
-- [ ] Unused model files deleted; `models.lock.toml` and `runtime.lock.toml` match what's on disk
+- [x] Unused model files deleted (archived to `D:\NebulaCold\models-archive\` instead); `models.lock.toml` and `runtime.lock.toml` match what's on disk
 
 **Core**
 - [ ] `nebula chat` streams through the daemon, and every model call produces a `model.call` log event with a trace ID, timings and blob references

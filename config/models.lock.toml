@@ -22,6 +22,12 @@ sha256 = "6807ede61d570bb86ba34b756a0fa109edc33668604de867c6ea6d8f1d631903"
 bytes = 629246976
 role = "vision projector"
 
+# Generated locally (PHASE0_PLAN 3.7) from calibration-corpus.txt in the same directory. Not on Hugging Face.
+[bonsai2-27b.files."Ternary-Bonsai-2-27B-PTQ1_0-kv-bias.gguf"]
+sha256 = "175943fc76f80565b566447a245fea5d78639617c5b30c9fc250133d394940f1"
+bytes = 66400
+role = "KV mean-centering bias for q4_0 KV on PTQ1_0 (--kv-mean-center)"
+
 # Bonsai with an MTP head for speculative decoding (B4, ADR-006). Needs PrismML >= PR #205.
 [bonsai2-27b-mtp]
 repo = "ProCreations/Ternary-Bonsai-2-27B-MTP"
@@ -40,6 +46,18 @@ sha256 = "eae71d658fa632cf60992b76e117f927cf144c2eb7c6cfac511017e8878186d6"
 bytes = 6397969760
 role = "not chosen (ADR-006): 1.09x at best on the current PTQ1_0 kernel; re-test after PrismML #218"
 archived = 'D:\NebulaCold\models-archive\bonsai2-27b-mtp'
+
+# CPU embedding server (PHASE0_PLAN 3.5). Revision 370f27d7.
+[embedding]
+repo = "Qwen/Qwen3-Embedding-0.6B-GGUF"
+dir = 'F:\Nebula\models\embedding'
+downloaded = "2026-10-04"
+runtime = "llama-stock"
+
+[embedding.files."Qwen3-Embedding-0.6B-Q8_0.gguf"]
+sha256 = "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439"
+bytes = 639150592
+role = "embedding server, CPU only (memory and code index)"
 
 # Fallback candidates (ADR-005). All Qwen 3.5 9B fine-tunes, Q6_K, run on llama-stock.
 [fallback]
