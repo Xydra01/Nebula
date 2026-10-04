@@ -11,6 +11,7 @@ repository = "https://github.com/Xydra01/Nebula"
 publish = false
 
 [workspace.dependencies]
+nebula-backup = { path = "crates/nebula-backup" }
 nebula-config = { path = "crates/nebula-config" }
 nebula-daemon = { path = "crates/nebula-daemon" }
 nebula-model = { path = "crates/nebula-model" }
@@ -35,6 +36,7 @@ windows = "0.62.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
+tar = "0.4.46"
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
 tokio = { version = "1.53.2", default-features = false }

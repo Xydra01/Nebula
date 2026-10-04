@@ -3,7 +3,7 @@
 use clap::Parser;
 use nebula_cli::format::{self, Style};
 use nebula_cli::{
-    ChatArgs, Cli, Command, DaemonAction, Level, LogsAction, ModelAction, Reasoning,
+    BackupAction, ChatArgs, Cli, Command, DaemonAction, Level, LogsAction, ModelAction, Reasoning,
     doctor_exit_code,
 };
 use nebula_config::NebulaConfig;
@@ -95,6 +95,19 @@ fn parses_every_command() {
     assert_eq!(level, Some(Level::Warn));
     assert_eq!(t.unwrap().to_string(), trace);
     assert!(target.is_none());
+
+    assert!(matches!(
+        parse(&["backup", "reauth", "--record-only"]).command,
+        Command::Backup {
+            action: BackupAction::Reauth { record_only: true }
+        }
+    ));
+    assert!(matches!(
+        parse(&["backup", "reauth"]).command,
+        Command::Backup {
+            action: BackupAction::Reauth { record_only: false }
+        }
+    ));
 
     assert!(matches!(parse(&["resources"]).command, Command::Resources));
     assert!(matches!(parse(&["doctor"]).command, Command::Doctor));

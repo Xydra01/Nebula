@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use nebula_config::NebulaConfig;
 use nebula_proto::{CheckStatus, DiskUsage, DoctorCheck, DoctorReport};
@@ -29,8 +29,8 @@ pub const TAILSCALE_RANGES: &[&str] = &[
 /// SMART snapshots older than this are stale.
 pub const SMART_MAX_AGE: Duration = Duration::from_secs(35 * 24 * 3600);
 
-/// Backups older than this are stale.
-pub const BACKUP_MAX_AGE: Duration = Duration::from_secs(8 * 24 * 3600);
+/// An off-site backup older than this is stale (the nightly run always uploads).
+pub const BACKUP_MAX_AGE: Duration = Duration::from_secs(36 * 3600);
 
 /// How far back the first disk-event check looks.
 pub const FIRST_EVENT_LOOKBACK: Duration = Duration::from_secs(7 * 24 * 3600);
@@ -94,13 +94,91 @@ pub struct SystemFacts {
     pub wsl: Option<bool>,
 }
 
-/// What's in the local backup folder.
+/// Off-site backups, from `state\backup-last.json` (written by `nebula backup now`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BackupState {
+    /// Age of the last successful upload; `None` if there never was one.
+    pub uploaded_age: Option<Duration>,
+    /// Its archive name.
+    pub uploaded_name: Option<String>,
+    /// The latest run's error.
+    pub last_error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct BackupRecord {
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    last_uploaded_at: Option<OffsetDateTime>,
+    #[serde(default)]
+    last_uploaded: Option<String>,
+    #[serde(default)]
+    last_error: Option<String>,
+}
+
+/// The off-site remote's sign-in, as recorded by `nebula backup reauth`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BackupState {
-    /// Missing or empty.
-    NotSetUp,
-    /// Age of the newest entry.
-    Newest(Duration),
+pub enum BackupAuth {
+    /// No rclone config file yet.
+    NoRcloneConfig,
+    /// The config exists but no sign-in was recorded.
+    Unrecorded,
+    /// Last sign-in.
+    SignedIn(OffsetDateTime),
+}
+
+/// `state\backup-auth.json`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackupAuthRecord {
+    /// The remote that was signed in to.
+    pub remote: String,
+    /// When.
+    #[serde(with = "time::serde::rfc3339")]
+    pub signed_in_at: OffsetDateTime,
+}
+
+fn backup_auth_file(cfg: &NebulaConfig) -> PathBuf {
+    cfg.paths.state.join("backup-auth.json")
+}
+
+/// Records a sign-in to the off-site remote.
+///
+/// # Errors
+/// The state file can't be written.
+pub fn record_backup_auth(cfg: &NebulaConfig, at: OffsetDateTime) -> std::io::Result<()> {
+    let path = backup_auth_file(cfg);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let record = BackupAuthRecord {
+        remote: cfg.backup.auth_remote.clone(),
+        signed_in_at: at,
+    };
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&record).map_err(std::io::Error::other)?,
+    )
+}
+
+/// Reads the recorded sign-in. A record for a different remote counts as none.
+#[must_use]
+pub fn backup_auth(cfg: &NebulaConfig) -> BackupAuth {
+    if !cfg.backup.rclone_config.exists() {
+        return BackupAuth::NoRcloneConfig;
+    }
+    std::fs::read_to_string(backup_auth_file(cfg))
+        .ok()
+        .and_then(|t| serde_json::from_str::<BackupAuthRecord>(&t).ok())
+        .filter(|r| r.remote == cfg.backup.auth_remote)
+        .map_or(BackupAuth::Unrecorded, |r| {
+            BackupAuth::SignedIn(r.signed_in_at)
+        })
+}
+
+/// When the recorded sign-in expires; `None` if it doesn't.
+#[must_use]
+pub fn backup_auth_expiry(cfg: &NebulaConfig, signed_in: OffsetDateTime) -> Option<OffsetDateTime> {
+    let days = i64::try_from(cfg.backup.token_lifetime_days).unwrap_or(i64::MAX);
+    (days > 0).then(|| signed_in.saturating_add(time::Duration::days(days)))
 }
 
 /// Everything [`evaluate`] judges.
@@ -120,6 +198,8 @@ pub struct LocalInputs {
     pub smart_files: Option<Vec<(String, String)>>,
     /// Local backups.
     pub backups: BackupState,
+    /// Off-site sign-in.
+    pub backup_auth: BackupAuth,
     /// Hot log bytes (logs + blobs).
     pub log_bytes: Result<u64, String>,
     /// Whether a file could be created in the log directory.
@@ -146,6 +226,7 @@ pub fn evaluate(cfg: &NebulaConfig, i: &LocalInputs) -> Vec<DoctorCheck> {
     out.push(disk_events_check(&i.facts, i.events_since));
     out.extend(smart_checks(i.smart_files.as_deref(), i.now));
     out.push(backup_check(&i.backups));
+    out.push(backup_auth_check(cfg, &i.backup_auth, i.now));
     out.push(wsl_check(&i.facts));
     out.push(ssh_check(&i.facts));
     out.extend(log_checks(cfg, &i.log_bytes, &i.log_writable));
@@ -538,18 +619,95 @@ fn judge_smart(dev: &str, cur: &Smart, prev: Option<&Smart>) -> DoctorCheck {
 }
 
 fn backup_check(b: &BackupState) -> DoctorCheck {
-    match b {
-        BackupState::NotSetUp => check("backup", CheckStatus::Warn, "not set up (PHASE0_PLAN 7.1)"),
-        BackupState::Newest(age) if *age > BACKUP_MAX_AGE => check(
+    let failed = b
+        .last_error
+        .as_deref()
+        .map_or_else(String::new, |e| format!("; last run failed: {e}"));
+    let Some(age) = b.uploaded_age else {
+        return check(
+            "backup",
+            CheckStatus::Fail,
+            format!("no successful off-site backup yet (`nebula backup now`){failed}"),
+        );
+    };
+    let hours = age.as_secs() / 3600;
+    let name = b.uploaded_name.as_deref().unwrap_or("?");
+    if age > BACKUP_MAX_AGE {
+        check(
             "backup",
             CheckStatus::Warn,
-            format!("newest local backup is {} days old", age.as_secs() / 86_400),
-        ),
-        BackupState::Newest(age) => check(
+            format!("last off-site backup {hours} h ago ({name}){failed}"),
+        )
+    } else if b.last_error.is_some() {
+        check(
+            "backup",
+            CheckStatus::Warn,
+            format!("last off-site backup {hours} h ago{failed}"),
+        )
+    } else {
+        check(
             "backup",
             CheckStatus::Ok,
-            format!("newest local backup is {} h old", age.as_secs() / 3600),
+            format!("last off-site backup {hours} h ago ({name})"),
+        )
+    }
+}
+
+fn backup_auth_check(cfg: &NebulaConfig, auth: &BackupAuth, now: OffsetDateTime) -> DoctorCheck {
+    const NAME: &str = "backup.auth";
+    const FIX: &str = "run `nebula backup reauth`";
+    let remote = &cfg.backup.auth_remote;
+    match auth {
+        BackupAuth::NoRcloneConfig => check(
+            NAME,
+            CheckStatus::Warn,
+            format!(
+                "no rclone config at {} (docs/ops/backup.md)",
+                cfg.backup.rclone_config.display()
+            ),
         ),
+        BackupAuth::Unrecorded => check(
+            NAME,
+            CheckStatus::Warn,
+            format!("sign-in date for {remote} unknown; {FIX}"),
+        ),
+        BackupAuth::SignedIn(at) => {
+            let Some(expiry) = backup_auth_expiry(cfg, *at) else {
+                return check(
+                    NAME,
+                    CheckStatus::Ok,
+                    format!("{remote} sign-in does not expire"),
+                );
+            };
+            let left = expiry - now;
+            let when = expiry.date();
+            let warn_days = i64::try_from(cfg.backup.token_warn_days).unwrap_or(i64::MAX);
+            if left <= time::Duration::ZERO {
+                check(
+                    NAME,
+                    CheckStatus::Fail,
+                    format!("{remote} sign-in expired {when}; off-site backups stopped; {FIX}"),
+                )
+            } else if left <= time::Duration::days(warn_days) {
+                check(
+                    NAME,
+                    CheckStatus::Warn,
+                    format!(
+                        "{remote} sign-in expires in {} h ({when}); {FIX}",
+                        left.whole_hours()
+                    ),
+                )
+            } else {
+                check(
+                    NAME,
+                    CheckStatus::Ok,
+                    format!(
+                        "{remote} sign-in expires in {} days ({when})",
+                        left.whole_days()
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -697,17 +855,20 @@ fn read_smart_files(dir: &Path) -> Option<Vec<(String, String)>> {
     )
 }
 
-fn backup_state(dir: &Path) -> BackupState {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return BackupState::NotSetUp;
+fn backup_state(cfg: &NebulaConfig, now: OffsetDateTime) -> BackupState {
+    let Some(r) = std::fs::read_to_string(cfg.paths.state.join("backup-last.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<BackupRecord>(&t).ok())
+    else {
+        return BackupState::default();
     };
-    entries
-        .filter_map(Result::ok)
-        .filter_map(|e| e.metadata().ok()?.modified().ok())
-        .max()
-        .map_or(BackupState::NotSetUp, |t| {
-            BackupState::Newest(SystemTime::now().duration_since(t).unwrap_or_default())
-        })
+    BackupState {
+        uploaded_age: r
+            .last_uploaded_at
+            .map(|t| (now - t).try_into().unwrap_or_default()),
+        uploaded_name: r.last_uploaded,
+        last_error: r.last_error,
+    }
 }
 
 fn probe_writable(dir: &Path) -> Result<(), String> {
@@ -851,7 +1012,8 @@ pub fn gather(cfg: &NebulaConfig) -> LocalInputs {
         facts,
         events_since,
         smart_files: read_smart_files(&cfg.paths.state.join("smart")),
-        backups: backup_state(&cfg.paths.backups_local),
+        backups: backup_state(cfg, now),
+        backup_auth: backup_auth(cfg),
         log_bytes: nebula_telemetry::budget::usage(&log_dir)
             .map(|u| u.log_bytes + u.blob_bytes)
             .map_err(|e| e.to_string()),

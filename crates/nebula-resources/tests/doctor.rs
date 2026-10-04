@@ -5,8 +5,8 @@ use std::time::Duration;
 use nebula_config::NebulaConfig;
 use nebula_proto::{CheckStatus, DiskUsage, DoctorCheck};
 use nebula_resources::doctor::{
-    BackupState, DiskEvent, EFI_GPT_TYPE, FirewallRule, LocalInputs, Partition, SystemFacts,
-    evaluate, smart_checks,
+    BackupAuth, BackupState, DiskEvent, EFI_GPT_TYPE, FirewallRule, LocalInputs, Partition,
+    SystemFacts, backup_auth, evaluate, record_backup_auth, smart_checks,
 };
 use nebula_resources::sources::GpuReading;
 use nebula_resources::{Commit, GB};
@@ -80,7 +80,12 @@ fn healthy() -> LocalInputs {
             "dev_sdc-2026-10-01_1932.json".into(),
             nvme_json("S1", 2, 99),
         )]),
-        backups: BackupState::Newest(Duration::from_secs(3600)),
+        backups: BackupState {
+            uploaded_age: Some(Duration::from_secs(3600)),
+            uploaded_name: Some("nebula-20261004T110000Z.tar.zst".into()),
+            last_error: None,
+        },
+        backup_auth: BackupAuth::SignedIn(datetime!(2026-10-03 12:00 UTC)),
         log_bytes: Ok(50 * 1024 * 1024),
         log_writable: Ok(()),
         now: datetime!(2026-10-04 12:00 UTC),
@@ -136,6 +141,7 @@ fn healthy_machine_is_all_ok() {
         "smart.age",
         "smart.sdc",
         "backup",
+        "backup.auth",
         "wsl",
         "ssh.firewall",
         "logs.budget",
@@ -261,14 +267,111 @@ fn facts_unavailable_warns_but_does_not_fail() {
 #[test]
 fn backups_and_logs() {
     let mut i = healthy();
-    i.backups = BackupState::NotSetUp;
+    i.backups = BackupState::default();
     i.log_bytes = Ok(3 * GB);
     i.log_writable = Err("access denied".into());
     let checks = evaluate(&cfg(), &i);
-    assert_eq!(status(&checks, "backup"), CheckStatus::Warn);
-    assert!(find(&checks, "backup").detail.contains("not set up"));
+    assert_eq!(status(&checks, "backup"), CheckStatus::Fail);
+    assert!(
+        find(&checks, "backup")
+            .detail
+            .contains("no successful off-site backup")
+    );
     assert_eq!(status(&checks, "logs.budget"), CheckStatus::Warn);
     assert_eq!(status(&checks, "logs.writable"), CheckStatus::Fail);
+}
+
+#[test]
+fn backup_age_and_errors() {
+    let judge = |b: BackupState| {
+        let mut i = healthy();
+        i.backups = b;
+        find(&evaluate(&cfg(), &i), "backup").clone()
+    };
+    let hours = |h: u64| Some(Duration::from_secs(h * 3600));
+
+    let c = judge(BackupState {
+        uploaded_age: hours(40),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Warn);
+    assert!(c.detail.contains("40 h ago"), "{c:?}");
+
+    let c = judge(BackupState {
+        uploaded_age: hours(5),
+        last_error: Some("rclone copyto failed".into()),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Warn);
+    assert!(
+        c.detail.contains("last run failed: rclone copyto failed"),
+        "{c:?}"
+    );
+
+    let c = judge(BackupState {
+        last_error: Some("token expired".into()),
+        ..BackupState::default()
+    });
+    assert_eq!(c.status, CheckStatus::Fail);
+    assert!(c.detail.contains("token expired"), "{c:?}");
+}
+
+#[test]
+fn backup_sign_in_expiry() {
+    let judge = |cfg: &NebulaConfig, auth: BackupAuth| {
+        let mut i = healthy();
+        i.backup_auth = auth;
+        find(&evaluate(cfg, &i), "backup.auth").clone()
+    };
+    let at = |d: time::OffsetDateTime| BackupAuth::SignedIn(d);
+    let cfg = cfg();
+
+    // Now is 2026-10-04 12:00; the sign-in lasts 7 days and doctor warns 2 days ahead.
+    let c = judge(&cfg, at(datetime!(2026-10-03 12:00 UTC)));
+    assert_eq!(c.status, CheckStatus::Ok, "{c:?}");
+    assert!(c.detail.contains("expires in 6 days (2026-10-10)"), "{c:?}");
+
+    let c = judge(&cfg, at(datetime!(2026-09-29 12:00 UTC)));
+    assert_eq!(c.status, CheckStatus::Warn, "{c:?}");
+    assert!(c.detail.contains("expires in 48 h") && c.detail.contains("nebula backup reauth"));
+
+    let c = judge(&cfg, at(datetime!(2026-09-27 12:00 UTC)));
+    assert_eq!(c.status, CheckStatus::Fail, "{c:?}");
+    assert!(c.detail.contains("expired 2026-10-04"), "{c:?}");
+
+    assert_eq!(
+        judge(&cfg, BackupAuth::Unrecorded).status,
+        CheckStatus::Warn
+    );
+    assert_eq!(
+        judge(&cfg, BackupAuth::NoRcloneConfig).status,
+        CheckStatus::Warn
+    );
+
+    let mut forever = cfg.clone();
+    forever.backup.token_lifetime_days = 0;
+    let c = judge(&forever, at(datetime!(2020-01-01 00:00 UTC)));
+    assert_eq!(c.status, CheckStatus::Ok);
+    assert!(c.detail.contains("does not expire"));
+}
+
+#[test]
+fn backup_sign_in_is_recorded_per_remote() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = cfg();
+    cfg.paths.state = dir.path().join("state");
+    cfg.backup.rclone_config = dir.path().join("rclone.conf");
+    assert_eq!(backup_auth(&cfg), BackupAuth::NoRcloneConfig);
+
+    std::fs::write(&cfg.backup.rclone_config, "x").unwrap();
+    assert_eq!(backup_auth(&cfg), BackupAuth::Unrecorded);
+
+    let t = datetime!(2026-10-04 12:34:56 UTC);
+    record_backup_auth(&cfg, t).unwrap();
+    assert_eq!(backup_auth(&cfg), BackupAuth::SignedIn(t));
+
+    cfg.backup.auth_remote = "b2:".into();
+    assert_eq!(backup_auth(&cfg), BackupAuth::Unrecorded);
 }
 
 #[test]

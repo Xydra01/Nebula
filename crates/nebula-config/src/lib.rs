@@ -53,6 +53,8 @@ pub struct Paths {
     pub logs: PathBuf,
     /// Daemon state (doctor history, hash cache, SMART JSON, ...).
     pub state: PathBuf,
+    /// Local config: the override file and `rclone.conf`. Backed up with `state`.
+    pub config: PathBuf,
     /// Log archive on the cold drive.
     pub archive: PathBuf,
     /// Local copies of backups (PHASE0_PLAN 7.1).
@@ -123,12 +125,46 @@ pub struct ResourcesConfig {
     pub volumes: Vec<VolumeGuard>,
 }
 
+/// The `[backup]` section (PHASE0_PLAN 7.1).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackupConfig {
+    /// The rclone executable.
+    pub rclone: PathBuf,
+    /// rclone's config file, encrypted with the `nebula/rclone_config_pass` credential.
+    pub rclone_config: PathBuf,
+    /// The cloud remote that holds the OAuth sign-in, e.g. `gdrive:`.
+    pub auth_remote: String,
+    /// The encrypted remote backups are written to, e.g. `gdrive-crypt:`.
+    pub remote: String,
+    /// How long a sign-in lasts (7 for a Google app in Testing); 0 if it doesn't expire.
+    pub token_lifetime_days: u64,
+    /// Doctor warns this many days before the sign-in expires.
+    pub token_warn_days: u64,
+    /// Cloud retention: the newest this many backups...
+    pub keep_recent: usize,
+    /// ...plus the newest of each of this many days...
+    pub keep_daily: usize,
+    /// ...ISO weeks...
+    pub keep_weekly: usize,
+    /// ...and months.
+    pub keep_monthly: usize,
+    /// Local copies in `paths.backups_local` are kept this many days.
+    pub local_keep_days: u64,
+    /// A retention pass that would delete more than this many files...
+    pub max_delete_files: usize,
+    /// ...or more than this many MiB stops and asks (`--allow-large-delete`).
+    pub max_delete_mib: u64,
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NebulaConfig {
     /// Data locations.
     pub paths: Paths,
+    /// Off-site backups.
+    pub backup: BackupConfig,
     /// Logging; `log_dir` defaults to `paths.logs`.
     #[serde(default)]
     pub telemetry: TelemetryConfig,
@@ -218,10 +254,15 @@ impl NebulaConfig {
             ("paths.data_root".to_owned(), self.paths.data_root.clone()),
             ("paths.logs".to_owned(), self.paths.logs.clone()),
             ("paths.state".to_owned(), self.paths.state.clone()),
+            ("paths.config".to_owned(), self.paths.config.clone()),
             ("paths.archive".to_owned(), self.paths.archive.clone()),
             (
                 "paths.backups_local".to_owned(),
                 self.paths.backups_local.clone(),
+            ),
+            (
+                "backup.rclone_config".to_owned(),
+                self.backup.rclone_config.clone(),
             ),
         ];
         if let Some(d) = &self.telemetry.log_dir {

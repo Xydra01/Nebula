@@ -6,8 +6,28 @@
 data_root = 'F:\Nebula'
 logs = 'F:\Nebula\logs'
 state = 'F:\Nebula\state'
+config = 'F:\Nebula\config'
 archive = 'D:\NebulaCold\logs-archive'
 backups_local = 'D:\NebulaCold\backups-local'
+
+[backup]
+rclone = "rclone"
+rclone_config = 'F:\Nebula\config\rclone.conf'
+auth_remote = "gdrive:"
+remote = "gdrive-crypt:"
+# The Google app is unpublished (Testing), so its sign-in expires 7 days after
+# `nebula backup reauth`. Set to 0 once it is published or for a key-based remote.
+token_lifetime_days = 7
+token_warn_days = 2
+# Retention approved 2026-10-04 (PHASE0_PLAN 7.1).
+keep_recent = 8
+keep_daily = 14
+keep_weekly = 8
+keep_monthly = 6
+local_keep_days = 7
+# Deleting more than this asks first (Phase 0 delete rule).
+max_delete_files = 500
+max_delete_mib = 1024
 
 [telemetry]
 filter = "info"
