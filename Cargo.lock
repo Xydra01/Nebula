@@ -12,6 +12,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -758,6 +764,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "nebula-daemon"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "hex",
+ "nebula-config",
+ "nebula-model",
+ "nebula-proto",
+ "nebula-resources",
+ "nebula-telemetry",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "windows",
+]
+
+[[package]]
 name = "nebula-model"
 version = "0.0.1"
 dependencies = [
@@ -767,6 +799,7 @@ dependencies = [
  "futures-util",
  "getrandom",
  "hex",
+ "nebula-model",
  "nebula-proto",
  "nebula-telemetry",
  "reqwest",
@@ -1458,6 +1491,8 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]

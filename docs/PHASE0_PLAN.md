@@ -401,6 +401,14 @@ flags     = ["-ngl", "99", "-fa", "on", "-np", "1",
 - **Startup mode for Phase 0:** started manually (`nebula daemon start` spawns it detached). Auto-start at login (Task Scheduler) is postponed to Phase 1, once it has proven stable.
 - **Tests:** the pipe protocol over a test pipe name with the fake model backend; two concurrent clients; a client disconnecting mid-stream doesn't crash the daemon.
 
+**As built (WS4):**
+- **Structure:** `nebula_daemon::start(config, Deps)` brings the daemon up and `run` adds the wait for `daemon.shutdown` or Ctrl-C. `Deps` injects the launcher, resource sources, preflight, supervisor policy, instance-mutex name and local doctor checks, so the tests run the whole daemon in-process with the fake llama-server (`nebula_model::testing`, feature `test-support`). `main.rs` wires the real ones.
+- **Pipe security:** the DACL is `D:P(A;;GA;;;<current user SID>)`, which is protected, current user only, and excludes even administrators. Remote clients are rejected. The first instance is created with `first_pipe_instance`, so a second daemon fails even under a different mutex name.
+- **Startup:** the chat model (`load_on_start`) and the embedding server load in the background after the pipe is up, so `daemon.status` answers during the load. `nebula daemon start` waits for `Ready`. Secrets are read from Credential Manager by `main.rs` (`[daemon] secrets`) and registered before anything else is logged.
+- **Chats:** `chat.start` replies with `ChatStarted` before the first token. If the model isn't on the requested profile (or isn't ready), the chat switches or loads it first. The default `max_tokens` is 4096. A chat is cancelled by `chat.cancel`, by its client disconnecting, or by shutdown, and it ends with `chat.error` code `CANCELLED`.
+- **Doctor:** `doctor.run` adds `model.chat` and `model.embedding` state, `runtime.<name>` (`--version` against `config/runtime.lock.toml`) and `model.hash.<profile>` (against `config/models.lock.toml`). Hashes are cached in `state\model-hashes.json` by path, size and mtime; the first run hashes the files (~8 GB).
+- **Log maintenance:** `main.rs` archives daily logs older than 7 days and enforces the archive cap at startup and every 6 hours.
+
 ### 6.7 `nebula-cli` (4–5 h)
 
 | Command | Behavior |

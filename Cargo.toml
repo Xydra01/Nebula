@@ -12,11 +12,13 @@ publish = false
 
 [workspace.dependencies]
 nebula-config = { path = "crates/nebula-config" }
+nebula-daemon = { path = "crates/nebula-daemon" }
 nebula-model = { path = "crates/nebula-model" }
 nebula-proto = { path = "crates/nebula-proto" }
 nebula-resources = { path = "crates/nebula-resources" }
 nebula-telemetry = { path = "crates/nebula-telemetry" }
 
+anyhow = "1.0.104"
 async-trait = "0.1.92"
 eventsource-stream = "0.2.3"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
@@ -43,6 +45,10 @@ zstd = "0.14.0"
 axum = "0.8.9"
 insta = { version = "1.49.0", features = ["json"] }
 tempfile = "3.27.0"
+
+# Model hashing (GBs) is unbearably slow unoptimized.
+[profile.dev.package.sha2]
+opt-level = 3
 
 [workspace.lints.rust]
 unsafe_code = "deny"

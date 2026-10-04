@@ -15,6 +15,8 @@ pub mod config;
 pub mod launcher;
 pub mod sse;
 pub mod supervisor;
+#[cfg(feature = "test-support")]
+pub mod testing;
 pub mod types;
 
 pub use backend::{Activity, LlamaServerBackend, ModelBackend};
