@@ -269,6 +269,7 @@ rust-toolchain.toml        # pinned stable version
 crates/
   nebula-proto/            # IPC + event types, JSON-RPC envelopes, protocol version
   nebula-telemetry/        # tracing setup, JSONL writer, trace IDs, blob store, redaction
+  nebula-config/           # typed config: embedded default.toml + local override (added in WS4)
   nebula-model/            # ModelBackend trait, llama-server backend + supervisor, profiles
   nebula-resources/        # GPU/CPU/RAM/disk sampling, disk guard, drive checks
   nebula-daemon/           # binary: service, named pipe server, event bus
@@ -363,7 +364,8 @@ flags     = ["-ngl", "99", "-fa", "on", "-np", "1",
 - The chat model and the CPU embedding server are two `ModelManager`s. `config/default.toml` has the `standard`, `long`, `lean` and `embedding` profiles. `vision` waits until `--mmproj` is benchmarked.
 - `LLAMA_API_KEY` is 32 random bytes per launch, passed by environment.
 - GPU tests: `standard` chat plus restart-after-kill, and the embedding server (`cargo nextest run -p nebula-model --run-ignored only`). The `json_schema` and tool-call GPU tests come with the daemon's chat path.
-- Not yet done: the commit-charge preflight before a load (needs `nebula-resources`), and ADR-006's automatic `--spec-type none` fallback.
+- `ModelManager::spawn_with` takes an optional `Preflight` hook that runs before every launch. If it refuses, the server stays `Stopped` (not `Failed`) and callers get `ModelError::Preflight`. `nebula-resources` supplies the commit-charge check.
+- Not yet done: ADR-006's automatic `--spec-type none` fallback.
 
 ### 6.5 `nebula-resources` (5–6 h)
 
@@ -382,6 +384,12 @@ flags     = ["-ngl", "99", "-fa", "on", "-np", "1",
   All are reported to `doctor`. The path ban itself is Phase 1 (sandbox).
 - Publishes a `ResourceSnapshot` every 2 s on the daemon event bus and writes one sample per 30 s to the logs.
 - **Tests:** snapshot serialization, threshold logic with fake disk values, PDH/NVML adapters behind a trait with fakes.
+
+**As built (WS4):**
+- **Config:** `nebula-config` holds the typed config. `config/default.toml` is embedded in the binaries, and `F:\Nebula\config\nebula.toml` (or `$NEBULA_CONFIG`) is merged over it. Validation rejects any configured path on the retired drive.
+- **Per-process VRAM:** on this machine NVML lists the GPU processes but reports no amounts (WDDM), so the PDH counters are what work. The sampler uses NVML amounts when it gets them, otherwise PDH, and logs which source it used.
+- **Commit-charge preflight:** a load is refused when `commit_estimate_mib` (per profile) plus `resources.commit_margin_mib` doesn't fit. Commit is read fresh at launch. The limit counts page-file growth (physical RAM plus the page-file maximums in the registry), because Windows grows the page file on demand.
+- **Doctor:** `doctor::local_checks` runs without the daemon. System facts come from one PowerShell run; the firewall goes through `HNetCfg.FwPolicy2`, because `Get-NetFirewallPortFilter` needs admin rights when it enumerates and takes ~20 s otherwise. `state\doctor.json` holds the end of the last disk-event window. SMART reads the newest batch in `state\smart\` and compares each device with its previous snapshot.
 
 ### 6.6 `nebula-daemon` (6–8 h)
 

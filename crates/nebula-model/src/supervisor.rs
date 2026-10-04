@@ -13,7 +13,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 use crate::ModelError;
 use crate::backend::{Activity, LlamaServerBackend, ModelBackend};
-use crate::config::ModelConfig;
+use crate::config::{ModelConfig, ModelProfile};
 use crate::launcher::{LaunchSpec, Launcher, ServerProcess};
 use crate::types::BackendHealth;
 
@@ -53,6 +53,15 @@ impl Default for SupervisorConfig {
     }
 }
 
+/// A check run before each launch. Returning `Err(reason)` refuses the launch.
+pub trait Preflight: Send + Sync {
+    /// Decides whether `profile` may be launched now.
+    ///
+    /// # Errors
+    /// A human-readable reason for refusing.
+    fn check(&self, name: &str, profile: &ModelProfile) -> Result<(), String>;
+}
+
 type Reply = oneshot::Sender<Result<ModelStatus, ModelError>>;
 
 enum Command {
@@ -83,6 +92,22 @@ impl ModelManager {
         launcher: Arc<dyn Launcher>,
         blobs: Option<BlobStore>,
     ) -> Result<Self, ModelError> {
+        Self::spawn_with(config, policy, launcher, blobs, None)
+    }
+
+    /// Like [`ModelManager::spawn`], with a check that runs before every launch (e.g.
+    /// commit-charge headroom). A refused launch leaves the server `Stopped` with the reason
+    /// in `last_error`; it is not retried.
+    ///
+    /// # Errors
+    /// See [`ModelManager::spawn`].
+    pub fn spawn_with(
+        config: ModelConfig,
+        policy: SupervisorConfig,
+        launcher: Arc<dyn Launcher>,
+        blobs: Option<BlobStore>,
+        preflight: Option<Arc<dyn Preflight>>,
+    ) -> Result<Self, ModelError> {
         config.validate()?;
         let (cmd_tx, cmd_rx) = mpsc::channel(16);
         let initial = ModelStatus {
@@ -102,6 +127,7 @@ impl ModelManager {
             policy,
             launcher,
             blobs,
+            preflight,
             state: ModelState::Stopped,
             since: OffsetDateTime::now_utc(),
             last_error: None,
@@ -225,6 +251,7 @@ struct Actor {
     policy: SupervisorConfig,
     launcher: Arc<dyn Launcher>,
     blobs: Option<BlobStore>,
+    preflight: Option<Arc<dyn Preflight>>,
     profile: String,
     state: ModelState,
     since: OffsetDateTime,
@@ -371,6 +398,14 @@ impl Actor {
 
     async fn launch(&mut self) {
         self.restart_at = None;
+        if let Err(reason) = self.run_preflight() {
+            tracing::warn!(event = "model.preflight_refused", profile = %self.profile, reason = %reason);
+            self.last_error = Some(reason.clone());
+            let refused = Err(ModelError::Preflight(reason.clone()));
+            self.resolve_waiters(&refused);
+            self.set_state(ModelState::Stopped, Some(reason));
+            return;
+        }
         match self.try_launch().await {
             Ok(()) => {
                 self.started_at = Instant::now();
@@ -379,6 +414,17 @@ impl Actor {
             }
             Err(e) => self.fail(format!("launch failed: {e}")).await,
         }
+    }
+
+    fn run_preflight(&self) -> Result<(), String> {
+        let Some(preflight) = &self.preflight else {
+            return Ok(());
+        };
+        let profile = self
+            .config
+            .profile(&self.profile)
+            .map_err(|e| e.to_string())?;
+        preflight.check(&self.profile, profile)
     }
 
     async fn try_launch(&mut self) -> Result<(), ModelError> {
