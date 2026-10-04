@@ -9,7 +9,7 @@ Log: `F:\Nebula\setup\ws1-admin.log`
 ### 1.1a Page file moved off `C:`
 
 - `AutomaticManagedPagefile` disabled; non-`F:` page files removed.
-- `F:\pagefile.sys`: initial 4096 MB, max 12288 MB.
+- `F:\pagefile.sys`: initial 4096 MB, max 12288 MB. (Raised to a 32768 MB maximum on 2026-10-04; see "commit charge and the page file" below.)
 - **Takes effect after reboot.** Verify with `Get-CimInstance Win32_PageFileUsage` (expect only `F:\pagefile.sys`).
 
 ### 1.13 smartmontools
@@ -126,3 +126,24 @@ Results in [bench/results/2026-10-04/](../../bench/results/2026-10-04/report.md)
 - **Model:** `Qwen/Qwen3-Embedding-0.6B-GGUF` Q8_0 (639 MB) into `F:\Nebula\models\embedding\`, hash recorded in `config/models.lock.toml`. Runs on stock llama.cpp `b11342` with `--device none`, so the CUDA build never touches the GPU.
 - **Batch size drives RAM:** the first profile (`-ub 4096`, 8K context, 2 slots) used 3.8–5.0 GB of RAM for the same ~240 tokens/s as `-ub 1024`. The profile now caps inputs at 1024 tokens (1.2–1.8 GB). The design's RAM row was raised from 0.5–1.5 GB to 1.8–2.4 GB, counting the memory-mapped weights.
 - **Phase 2 notes:** code-index chunks must stay under ~1000 tokens; longer inputs get HTTP 400. Queries need the `Instruct: ...\nQuery:` prefix and documents must not have it. The first full index of a large repo takes hours at ~250 tokens/s, so it runs in the background.
+
+## 2026-10-04: 2.5, planted fake secret
+
+- **Local hook: blocked.** A commit of `fake-secret-test.env` containing a fake `ghp_` token was stopped by the pre-commit hook (gitleaks rule `github-pat`).
+- **GitHub push protection: blocked**, but only once the fake token had a valid checksum. Pushed over SSH with `--no-verify` (local hooks skipped):
+  - **First attempt:** the checksum was computed with the wrong base62 alphabet. GitHub did not recognize it as a token, the push went through, and no alert was raised. The branch was deleted within a minute. The token was fake and never valid.
+  - **Second attempt:** classic PAT format, `ghp_` + 30 random characters + 6-character base62 CRC32 of those 30 (alphabet `0-9A-Za-z`). Rejected with `GH013` "Push cannot contain secrets", detected as a GitHub Personal Access Token.
+- **Takeaway:** GitHub only blocks secrets in formats it recognizes and that pass its checks. gitleaks matches the pattern alone, so the local hook is the broader guard, and GitHub is the backstop for well-formed provider tokens.
+
+## 2026-10-04: commit charge and the page file
+
+While checking `docs/ops/setup.md`, `nebula-smoke --profile pq2mtp` failed `chat` and `tool_call` with HTTP 500 `bad allocation`. A 150 MB prompt-cache save failed the same way.
+
+- **Cause: the Windows commit limit.**
+  - llama-server commits about as much system memory as the VRAM it uses: 10.7 GB private bytes for `standard`, 8.9 GB without the MTP head, and the same with `--cache-ram 0`.
+  - With Firefox and the rest of the desktop open, commit was already 33 GB before the server started.
+  - The page file maximum from task 1.1a (12 GB) put the limit at ~44 GB, and loading `standard` took commit to 43.6 GB, so any allocation could fail. A repeat run passed, which fits random failure at the edge.
+  - The overnight benchmarks ran with a mostly idle desktop.
+- **Free RAM was not the issue** (12 GB free). The fix is a larger commit limit: page file 4 GB initial, **32 GB maximum** (`scripts/set-pagefile.ps1`; `phase0-ws1-admin.ps1` updated to match), which gives a limit of ~64 GB. The file grows only when needed, and F: keeps ≥ 46 GB free in the worst case.
+- **Verified after the reboot:** a helper process committed 32 GB without touching it, to simulate the busy desktop, and then `nebula-smoke --profile pq2mtp` passed all six checks. Commit reached 44.4 GB, past the old 43.8 GB limit. The page file grew on demand (limit 55.8 GB) and dropped back to 4 GB when the memory was released. The load took 15 s instead of ~6 s, because the page file grew during it. Results: `bench/results/2026-10-04/smoke-pq2mtp.md`.
+- **For WS4:** `nebula-resources` and `doctor` should track commit charge against the commit limit, not just free RAM, and the model manager should check commit headroom before loading a profile.

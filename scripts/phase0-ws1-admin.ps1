@@ -1,5 +1,5 @@
 # Phase 0, WS1 one-time admin setup:
-#   1.1a  move the page file from C: to F: (4-12 GB); takes effect after reboot
+#   1.1a  move the page file from C: to F: (4-32 GB; see set-pagefile.ps1 for why); takes effect after reboot
 #   1.13  install smartmontools, take a first SMART snapshot, schedule monthly + on-disk-error snapshots
 # Run elevated. Log: F:\Nebula\setup\ws1-admin.log
 $ErrorActionPreference = 'Stop'
@@ -22,7 +22,7 @@ try {
     if (-not $f) {
         $f = New-CimInstance -ClassName Win32_PageFileSetting -Property @{ Name = 'F:\pagefile.sys' }
     }
-    Set-CimInstance -InputObject $f -Property @{ InitialSize = [uint32]4096; MaximumSize = [uint32]12288 }
+    Set-CimInstance -InputObject $f -Property @{ InitialSize = [uint32]4096; MaximumSize = [uint32]32768 }
     Get-CimInstance Win32_PageFileSetting | Format-Table Name, InitialSize, MaximumSize -AutoSize | Out-String | Write-Host
 
     Write-Host '== 1.13 smartmontools =='

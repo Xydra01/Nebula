@@ -158,6 +158,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | Windows + your apps | 8–10 GB | Reserve |
 | Nebula daemon (Rust) | 100–300 MB | Includes the SQLite page cache |
 | Python tool servers | 200 MB–1 GB | Depends on active tools |
+| llama-server (`standard`) | **~10.7 GB committed** | Measured as private bytes; 8.9 GB without the MTP head. On Windows (WDDM), GPU allocations are backed by commit charge, so the server commits about as much as its VRAM use. This counts against the commit limit (RAM + page file) even if little of it is resident. The page file maximum is 32 GB for this reason (Phase 0, 2026-10-04). |
 | Embedding model (CPU) | 1.8–2.4 GB | Qwen3-Embedding-0.6B Q8_0: 1.2–1.8 GB private plus 0.6 GB of memory-mapped weights, with inputs capped at 1024 tokens (Phase 0 task 3.5) |
 | Code index + vector store | 100 MB–1 GB | sqlite-vec, memory-mapped |
 | Headless Chromium (Playwright) | 0.5–2 GB | Heavy; started on demand and stopped when idle |
@@ -171,7 +172,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | Item | Drive | Budget | Notes |
 | --- | --- | --- | --- |
 | Toolchains: VS Build Tools (MSVC), Rust, uv, Node, misc. | `F:` | ~18 GB | CUDA toolkit installed only if the fork must be built from source |
-| Page file (moved off `C:`) | `F:` | 4–12 GB | |
+| Page file (moved off `C:`) | `F:` | 4–32 GB | Grows on demand; the 32 GB maximum covers llama-server's commit charge (Section 2.4) |
 | Active models | `F:` | ~33 GB | Bonsai PTQ1_0 + mmproj + KV bias (6.6 GB), Bonsai PQ2_0 + MTP head (7.7 GB), the Gemma 4 fallback (17 GB), embedding model. Kept on the NVMe for fast loading (game-mode resume). |
 | Rust build output | `F:` | ~10 GB | Shared `CARGO_TARGET_DIR`, `sccache` capped at 6 GB, weekly `cargo sweep` |
 | Worktrees, package caches, state DB | `F:` | ~8 GB | Finished worktrees pruned automatically |

@@ -67,7 +67,7 @@ If a week slips, **M0.4 has priority over M0.5–M0.6**. The measurements decide
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
 | 1.1 | **Done (2026-10-01): `C:` retired from the boot path.** The boot loader moved to a new ESP on the NVMe and the drive is disabled in BIOS (still physically installed). See Section 3.1. | — | Done |
-| 1.1a | **Done.** Page file moved to `F:\pagefile.sys`, **4096 MB initial / 12288 MB maximum**, by `scripts/phase0-ws1-admin.ps1`. | `Win32_PageFileUsage` lists only `F:\pagefile.sys`; `C:\pagefile.sys` is gone | Done |
+| 1.1a | **Done.** Page file moved to `F:\pagefile.sys`, **4096 MB initial / 12288 MB maximum**, by `scripts/phase0-ws1-admin.ps1`. **2026-10-04:** maximum raised to 32768 MB (`scripts/set-pagefile.ps1`), because llama-server's commit charge hit the ~44 GB limit (see the ops notes). | `Win32_PageFileUsage` lists only `F:\pagefile.sys`; `C:\pagefile.sys` is gone | Done |
 | 1.1b | **Done.** SMART health for all three drives: the WD 240 GB SSD (`C:`), the Samsung 980 (`F:`), and the WD Blue 1 TB HDD (`D:`). All passed; the baseline is in `docs/ops/phase0-notes.md`. Windows had logged **two bad-block events on the Samsung 980 / `F:`** (2026-06-26 and 2026-08-27), and SMART shows `media_errors=2`. | Health status and key attributes (media errors, reallocated/pending sectors, % used) recorded in `docs/ops/phase0-notes.md` | Done |
 | 1.2 | ~~Free 100–150 GB on `F:`~~ **Done: 105 GB freed** (113.8 GB free when checked on 2026-10-01). The disk budget is revised for this in Section 3.2. | `F:` has at least 100 GB free | Done |
 | 1.3 | Create the data roots. **Hot data:** `F:\Nebula\` with `state\`, `logs\`, `models\`, `worktrees\`, `build\`. **Cold/bulk data:** `D:\NebulaCold\` with `models-archive\`, `logs-archive\`, `research\`, `backups-tmp\`, `backups-local\`, `downloads\`, `wsl\` (`D:` approved by you; if 1.1b shows it is unhealthy, fall back to the contingency in Section 10) | Folders exist | 0.1 h |
@@ -122,7 +122,7 @@ Free space on `F:` after the cleanup: ~105 GB. A **second, larger drive is avail
 | Item | Budget |
 | --- | --- |
 | Toolchains (VS Build Tools, Rust, uv, Node, Git, misc.); CUDA toolkit skipped | ~18 GB |
-| Page file moved from `C:` (4–12 GB) | ~8 GB typical |
+| Page file moved from `C:` (4–32 GB) | ~10 GB typical, 32 GB worst case |
 | Active models: Bonsai PTQ1_0 + mmproj + KV bias, Bonsai PQ2_0 + MTP head (ADR-006), Gemma 4 fallback, embedding model | ~33 GB |
 | Rust build output (shared target, `sccache` capped at 6 GB) | ~10 GB |
 | Worktrees, package caches, state DB | ~8 GB |
@@ -461,15 +461,15 @@ Phase 0 is done when **every** box is checked:
 
 **Environment**
 - [x] Page file moved off `C:`; nothing Nebula-related lives on `C:`; the recovery USB is made and tested
-- [ ] SMART health recorded for all three drives; `D:` cleared for cold data (or the plan adjusted if it isn't healthy)
+- [x] SMART health recorded for all three drives; `D:` cleared for cold data (or the plan adjusted if it isn't healthy)
 - [x] `F:` stays within the revised budget (≤ 60 GB Nebula use, at least 30 GB free)
-- [ ] Every toolchain answers `--version`; `docs/ops/setup.md` reproduces the setup
+- [x] Every toolchain answers `--version`; `docs/ops/setup.md` reproduces the setup
 - [x] SSH works from the laptop over Tailscale with key authentication only, and is unreachable from outside the tailnet
 
 **Repo**
 - [x] `Xydra01/Nebula` is public under MIT; `main` is protected (PR, 1 code-owner approval, required CI)
 - [x] `Nebula-dev-bot` opened at least one PR that you approved and merged
-- [ ] A planted fake secret is blocked by both the local hook and GitHub push protection
+- [x] A planted fake secret is blocked by both the local hook and GitHub push protection
 - [x] CI is green on `main`
 
 **Model**
