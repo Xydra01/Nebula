@@ -1,0 +1,31 @@
+{
+  "model": "F:\\Nebula\\models\\bonsai2-27b-mtp\\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf",
+  "rows": [
+    {
+      "ctx": 131072,
+      "kv_type": "q4_0",
+      "estimated_mib": 9946,
+      "load_seconds": 5.77,
+      "vram_loaded_mib": 11663,
+      "prompt_tokens": 117700,
+      "pp_tps": 661.5,
+      "tg_at_depth_tps": 34.02,
+      "tg_short_tps": 84.01,
+      "pp_runs": [
+        661.4,
+        661.5
+      ],
+      "tg_runs": [
+        33.95,
+        34.09
+      ],
+      "vram_peak_mib": 11685,
+      "shared_mib": 443,
+      "server_ram_mib": 13635,
+      "vram_baseline_mib": 296,
+      "model_plus_ctx_mib": 11389,
+      "spill_mib": 424,
+      "headroom_mib": 597
+    }
+  ]
+}

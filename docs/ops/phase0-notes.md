@@ -62,7 +62,7 @@ Things on this machine Nebula has to account for:
 
 ### 1.12 Recovery USB
 
-Pending: needs a physical USB stick (8 GB+) and the user. Use the Windows 11 Media Creation Tool.
+Done (user, confirmed 2026-10-02).
 
 ## 2026-10-02: WS3 runtime and first smoke test
 
@@ -102,3 +102,12 @@ Unattended run of `uv run python -m nebula_bench.run_all` from 02:06 to ~07:00. 
 - **Fallback round 2 (same day, 10:00–16:35):** three MoE models with routed experts in system RAM (`--fit on --fit-target 1536`): Qwen3.6-35B-A3B, Gemma 4 26B-A4B and GLM-4.7-Flash, all Unsloth UD-Q4_K_XL. `--fit` worked on the first try and fills the GPU to ~11.1 GB. Gemma 4 is the proposed fallback (ADR-005). Qwen3.6, GLM and DeltaCoder were moved to `D:\NebulaCold\models-archive\` and their hashes re-checked after the move. Git Bash `mv` prints "cannot stat" errors on cross-drive moves that actually succeed, so check the destination before assuming a move failed.
 - MoE prompt processing is CPU-bound (334–620 t/s against Bonsai's 1,055), so a prompt-cache miss is 2–3x more expensive. Larger `-ub`/`-b` batches might help; not tested yet.
 - The 9B fallbacks process prompts ~3x faster than Bonsai (~3,000 t/s against ~1,050 at 32K) and generate ~25% faster (51 against 41 t/s). They need far more thinking tokens to reach a lower pass rate.
+
+## 2026-10-03: B4, MTP speculative decoding
+
+Results in [bench/results/2026-10-03/](../../bench/results/2026-10-03/report.md); decision in ADR-006 (Proposed).
+
+- **Drafter:** `ProCreations/Ternary-Bonsai-2-27B-MTP` (PQ2_0 + Q8_0 MTP layer, 7.66 GB) into `F:\Nebula\models\bonsai2-27b-mtp\`. Hugging Face downloads ran at ~8 MB/s.
+- **Graft:** the stock `gguf` Python package rejects PrismML quant types (PTQ1_0 is type 143), so `nebula_bench/gguf_header.py` parses headers directly and `nebula_bench/graft_mtp.py` appends the head to the PTQ1_0 file. The grafted file loads and drafts at the same acceptance as on PQ2_0 but is only 1.09x faster; it was moved to `D:\NebulaCold\models-archive\bonsai2-27b-mtp\` with its hash re-checked.
+- **Known issue:** with MTP at 128K, llama-server crashed while saving a 2.7 GB slot state to the host-RAM prompt cache (`--cache-ram 4096`). `--cache-ram 0` avoids it; a 20K-token save works.
+- PrismML's newer `prism-b10754-2459f68` (2026-10-02) was not tested; everything ran on `b10743`.

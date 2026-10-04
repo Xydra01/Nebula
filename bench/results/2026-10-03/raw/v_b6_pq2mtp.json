@@ -1,0 +1,76 @@
+{
+  "cases": 100,
+  "modes": {
+    "native": {
+      "summary": {
+        "valid": 100.0,
+        "tool_ok": 100.0,
+        "args_ok": 99.0
+      },
+      "failures": [
+        {
+          "i": 47,
+          "request": "Search the web for 'rmcp crate' and give me 3 results.",
+          "valid": true,
+          "tool_ok": true,
+          "args_ok": false,
+          "got": [
+            [
+              "web_search",
+              {
+                "query": "rmcp crate",
+                "max_results": 5
+              }
+            ]
+          ],
+          "raw": ""
+        }
+      ]
+    },
+    "schema": {
+      "summary": {
+        "valid": 100.0,
+        "tool_ok": 96.0,
+        "args_ok": 96.0
+      },
+      "failures": [
+        {
+          "i": 0,
+          "request": "Open tests/test_parser.py so I can see it.",
+          "valid": true,
+          "tool_ok": false,
+          "args_ok": false,
+          "got": [],
+          "raw": "{\"calls\": []}"
+        },
+        {
+          "i": 2,
+          "request": "Open app/api/routes.py so I can see it.",
+          "valid": true,
+          "tool_ok": false,
+          "args_ok": false,
+          "got": [],
+          "raw": "{\"calls\": []}"
+        },
+        {
+          "i": 77,
+          "request": "Please read docs/adr/README.md.",
+          "valid": true,
+          "tool_ok": false,
+          "args_ok": false,
+          "got": [],
+          "raw": "{\"calls\": []}"
+        },
+        {
+          "i": 99,
+          "request": "Please read src/main.rs.",
+          "valid": true,
+          "tool_ok": false,
+          "args_ok": false,
+          "got": [],
+          "raw": "{\"calls\": []}"
+        }
+      ]
+    }
+  }
+}
