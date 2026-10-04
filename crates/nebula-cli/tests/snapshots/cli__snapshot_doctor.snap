@@ -1,0 +1,9 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "format::doctor(&report, Style::PLAIN)"
+---
+ok    daemon   running
+WARN  disk.F:  90 GB free (warn < 100 GB)
+FAIL  backup   never ran
+
+overall: FAIL

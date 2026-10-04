@@ -1,0 +1,7 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "lines.join(\"\\n\")"
+---
+[prompt 120 tok, 2000.0 t/s | reply 50 tok, 50.0 t/s]
+[prompt 120 tok, 2000.0 t/s | reply 50 tok, 50.0 t/s | stopped: length]
+[prompt 0 tok, 0.0 t/s | reply 0 tok, 0.0 t/s | stopped: cancelled]

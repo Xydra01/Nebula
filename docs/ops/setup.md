@@ -191,6 +191,22 @@ A regenerated bias may not be byte-identical to the one in the lock file; if the
 
 **Archived models** (on `D:\NebulaCold\models-archive\`, not needed to run): PQ2_0 without MTP, the grafted PTQ1_0+MTP file, and the fallback candidates that lost. The graft can be rebuilt with `bench/nebula_bench/graft_mtp.py`.
 
+## 8a. The `nebula` command
+
+From the repo root, build and install `nebula.exe` and `nebula-daemon.exe` to `F:\Nebula\bin\`. Re-run this after pulling changes, with the daemon stopped (`nebula daemon stop`) so the files aren't locked.
+
+```powershell
+.\scripts\install-nebula.ps1
+```
+
+Put `F:\Nebula\bin` on the user PATH once, then open a new terminal:
+
+```powershell
+[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';F:\Nebula\bin', 'User')
+```
+
+Then `nebula daemon start`, `nebula doctor`, `nebula chat`. `nebula --help` lists everything.
+
 ## 9. GitHub repo settings (only if the repo is recreated)
 
 These live on GitHub, not on the machine. Current state, for reference:

@@ -156,3 +156,21 @@ From the `#[ignore]` tests (`cargo test -p nebula-resources -- --ignored --nocap
 - **PDH** `\GPU Process Memory(*)\Dedicated Usage` works. With an idle desktop the top users were dwm 922 MiB, Firefox 275 MiB and Cursor 169 MiB. This is the per-process source.
 - **Commit:** 20.1 GB used. The current limit is 36.8 GB (RAM + 4 GB page file), and the effective limit is 64 GB with the page file's 32 GB maximum, which is what the preflight uses.
 - **Doctor (local checks):** everything Ok except `backup` (not set up, 7.1). `C:` is not attached, the EFI partition and the page file are on disk 1 (the NVMe), and SSH is limited to the Tailscale ranges. The newest SMART snapshot (2026-10-01) shows no change: the 980 has 2 media errors and 99% spare, and the WD Green SSD has 1 reallocated sector.
+
+## 2026-10-04: WS4 daemon and CLI acceptance (section 9)
+
+The release binaries were installed with `scripts/install-nebula.ps1` and run from `F:\Nebula\bin`. The desktop was busy, with Firefox, Discord, Steam and Cursor holding ~1.9 GB of VRAM. Every daemon item in section 9 passed.
+
+- **Start:** `nebula daemon start` had `standard` ready in 6.7 s, with the embedding server loading alongside it.
+- **Chat:** a two-turn `nebula chat` streamed both replies. The second turn ("repeat what you said, uppercase") answered from the history. Speed was 57–69 t/s for generation and 40–70 t/s for the prompt. Each turn logged a `model.call` event with a `trace_id`, `prompt_blob`/`output_blob` (the zstd files exist under `logs\blobs\<2 hex>\`), token counts and timings.
+- **Crash recovery:** after `taskkill /F` on the chat llama-server, `nebula model status` showed `ready, 1 restart(s)` with the exit as `last_error` within 15 s. The next chat worked.
+- **Daemon killed:** after `taskkill /F` on `nebula-daemon.exe`, both llama-servers (chat and embedding) were gone within 2 s (the job object). `nebula daemon status` then reported "not running" and exited 1.
+- **Profile switches:** `standard` → `long` → `standard` took ~7 s each, and a chat on `long` worked. Each switch logs `model.profile_switch` with `from`/`to` (an event added during this run; before that, only `model.launch` showed the switch), followed by `model.launch` and `model.state_changed`.
+- **Resources:** `nebula resources` lists VRAM by process: llama-server 8.7 GB on `standard` and 5.5 GB on `long`, the embedding server 137 MiB, then Firefox, dwm and the rest.
+- **Doctor:** with the daemon running, every check was Ok except `backup` (exit 1). That includes runtime builds and model hashes from the cache, and SMART. Started with `NEBULA_CONFIG` pointing at an override with `vram_headroom_warn_mib = 8000`, `gpu` turned WARN (1.5 GB free) and doctor exited 1. With the daemon down, `daemon` is FAIL, the local checks still run, and doctor exits 2.
+- **`logs tail`** streamed `resources.sample` and the chat's `model.call` live.
+- **Graceful stop:** `nebula daemon stop` returns once the daemon process has exited (~1 s), with no llama-server left.
+
+Two fixes came out of the run, both in PR #22:
+- **Inherited pipes:** `nebula daemon start | tail` hung. Rust's `Command` passes every inheritable handle to the child, so the detached daemon held the caller's stdout pipe open, and an SSH session would have hung the same way. The CLI now clears the inherit flag on its standard handles before spawning.
+- **Early stop:** `daemon stop` returned when the pipe closed, ~1 s before the model servers were stopped. It now also waits for the process to exit.

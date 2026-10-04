@@ -423,6 +423,14 @@ flags     = ["-ngl", "99", "-fa", "on", "-np", "1",
 
 All output works in a plain SSH session: no mouse, colors that degrade cleanly, and `--json` on every command for scripting (and for Nebula itself, later).
 
+**As built (WS4):**
+- **Structure:** the commands live in the `nebula_cli` library (`run(command, ctx, input, out)`), so the end-to-end test drives them against an in-process daemon with the fake llama-server. Output formatting is pure functions, snapshot-tested with `insta`. Colors appear only when stdout is a terminal and `NO_COLOR` is unset.
+- **`daemon start`:** spawns `nebula-daemon.exe` from next to `nebula.exe`, detached and outside the console's job when Windows allows it, so it survives the terminal or SSH session closing. It then waits (up to 5 minutes) until the `load_on_start` profile is ready, printing each state change. If a daemon is already running, it shows its status instead.
+- **`chat`:** one line per message. The history is kept by the CLI and sent whole on each turn. `/reset` clears it and `/exit` quits. Reasoning is shown dimmed only in an interactive terminal. Ctrl-C during a reply cancels it; Ctrl-C at the prompt quits. With `--json`, one object per turn: `chat_id`, `text`, `reasoning`, `stop_reason`, `usage`. `--reasoning` and `--max-tokens` are also available.
+- **`doctor`:** prepends a `daemon` check. When the daemon is down, it runs the local checks itself and reports `daemon` as FAIL. `resources` also falls back to a local snapshot.
+- **Not built yet:** `nebula backup` (with WS5).
+- **Install:** `scripts/install-nebula.ps1` builds release binaries and copies both to `F:\Nebula\bin\` (see `docs/ops/setup.md`).
+
 ---
 
 ## 7. WS5: Ops

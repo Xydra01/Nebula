@@ -1,0 +1,14 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "format::resources(&snap, &cfg.resources.volumes, Style::PLAIN)"
+---
+VRAM     9.0 / 11.9 GB, 87% busy
+RAM      20.0 / 31.8 GB
+commit   36.1 / 63.8 GB (limit includes page-file growth)
+CPU      12%
+disk     F:\  700 / 1863 GB free  guard ok (warn < 30 GB)
+disk     D:\  40 / 931 GB free  guard warn (warn < 50 GB)
+
+GPU memory by process
+     8900 MiB    4242  llama-server.exe
+      210 MiB      77  dwm.exe
