@@ -1,0 +1,120 @@
+{
+  "model": "F:\\Nebula\\models\\bonsai2-27b-mtp\\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf",
+  "rows": [
+    {
+      "ctx": 32768,
+      "kv_type": "f16",
+      "estimated_mib": 9690,
+      "load_seconds": 5.75,
+      "vram_loaded_mib": 11605,
+      "prompt_tokens": 29163,
+      "pp_tps": 1060.5,
+      "tg_at_depth_tps": 71.61,
+      "tg_short_tps": 81.29,
+      "pp_runs": [
+        1052.0,
+        1060.5,
+        1061.3
+      ],
+      "tg_runs": [
+        71.23,
+        71.9,
+        71.61
+      ],
+      "vram_peak_mib": 11626,
+      "shared_mib": 273,
+      "server_ram_mib": 14794,
+      "vram_baseline_mib": 1747,
+      "model_plus_ctx_mib": 9879,
+      "spill_mib": 232,
+      "headroom_mib": 656
+    },
+    {
+      "ctx": 32768,
+      "kv_type": "q8_0",
+      "estimated_mib": 8730,
+      "load_seconds": 6.28,
+      "vram_loaded_mib": 10728,
+      "prompt_tokens": 29163,
+      "pp_tps": 1052.6,
+      "tg_at_depth_tps": 61.01,
+      "tg_short_tps": 82.37,
+      "pp_runs": [
+        1046.4,
+        1053.5,
+        1052.6
+      ],
+      "tg_runs": [
+        60.27,
+        61.1,
+        61.01
+      ],
+      "vram_peak_mib": 10750,
+      "shared_mib": 273,
+      "server_ram_mib": 13060,
+      "vram_baseline_mib": 1508,
+      "model_plus_ctx_mib": 9242,
+      "spill_mib": 232,
+      "headroom_mib": 1532
+    },
+    {
+      "ctx": 32768,
+      "kv_type": "q4_0",
+      "estimated_mib": 8218,
+      "load_seconds": 5.25,
+      "vram_loaded_mib": 10216,
+      "prompt_tokens": 29163,
+      "pp_tps": 1054.8,
+      "tg_at_depth_tps": 60.5,
+      "tg_short_tps": 84.13,
+      "pp_runs": [
+        1042.9,
+        1055.9,
+        1054.8
+      ],
+      "tg_runs": [
+        61.33,
+        60.5,
+        60.28
+      ],
+      "vram_peak_mib": 10238,
+      "shared_mib": 273,
+      "server_ram_mib": 12087,
+      "vram_baseline_mib": 1507,
+      "model_plus_ctx_mib": 8731,
+      "spill_mib": 232,
+      "headroom_mib": 2044
+    },
+    {
+      "ctx": 65536,
+      "kv_type": "q4_0",
+      "estimated_mib": 8794,
+      "load_seconds": 5.23,
+      "vram_loaded_mib": 11082,
+      "prompt_tokens": 57802,
+      "pp_tps": 892.4,
+      "tg_at_depth_tps": 44.32,
+      "tg_short_tps": 84.2,
+      "pp_runs": [
+        891.5,
+        893.3
+      ],
+      "tg_runs": [
+        44.14,
+        44.5
+      ],
+      "vram_peak_mib": 11101,
+      "shared_mib": 337,
+      "server_ram_mib": 13882,
+      "vram_baseline_mib": 1507,
+      "model_plus_ctx_mib": 9594,
+      "spill_mib": 297,
+      "headroom_mib": 1181
+    },
+    {
+      "ctx": 131072,
+      "kv_type": "q4_0",
+      "error": "ReadError('[WinError 10054] An existing connection was forcibly closed by the remote host')"
+    }
+  ]
+}

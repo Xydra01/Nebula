@@ -1,0 +1,40 @@
+# PQ2_0 with the ProCreations MTP head embedded (B4, 2026-10-03). f16 KV at 32K does not leave
+# enough headroom next to the head, so the default here is q4_0.
+name = "pq2mtp"
+runtime = "llama-prism"
+model = 'F:\Nebula\models\bonsai2-27b-mtp\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf'
+ctx = 32768
+kv_type = "q4_0"
+reasoning_style = "effort"
+flags = [
+    "-ngl", "99",
+    "-fa", "on",
+    "-np", "1",
+    "--jinja",
+    "--reasoning", "auto",
+    "--ctx-checkpoints", "32",
+    "--cache-ram", "4096",
+    "--cache-idle-slots",
+    "--spec-type", "draft-mtp",
+    "--spec-draft-n-max", "2",
+    # The default allows every origin, so any web page could drive the local server.
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+    "-lv", "4",
+]
+
+[sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.05
+presence_penalty = 0.0
+repeat_penalty = 1.0
+
+[sampling.instruct]
+temperature = 0.7
+top_p = 0.80
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
+repeat_penalty = 1.0
