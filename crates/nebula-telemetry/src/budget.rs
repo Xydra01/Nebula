@@ -1,9 +1,13 @@
 //! Log disk accounting and the log budget: hot days on `F:`, older days moved to the archive.
 //!
-//! Deleting from the archive is only ever *planned* here. [`execute_prune`] refuses a plan
-//! above the delete threshold (1 GiB or 500 files, from the Phase 0 plan's "ask before
-//! deleting" rule) unless the caller passes [`Confirmation::UserApproved`], which only a
-//! human-facing prompt may do.
+//! The log archive is the one exception to the "ask before deleting more than 1 GiB or 500
+//! files" rule, since it would otherwise grow without bound: [`enforce_archive_cap`] deletes
+//! the oldest archived days on its own. It only ever touches `nebula-YYYY-MM-DD.jsonl` files
+//! in the archive directory and always keeps the newest day.
+//!
+//! Every other prune goes through [`execute_prune`], which refuses a plan above the threshold
+//! unless the caller passes [`Confirmation::UserApproved`], which only a human-facing prompt
+//! may do.
 
 use std::fs;
 use std::io;
@@ -17,6 +21,8 @@ use crate::writer::date_of_file_name;
 pub const CONFIRM_BYTES: u64 = 1 << 30;
 /// Deletes above this many files need explicit user approval.
 pub const CONFIRM_FILES: usize = 500;
+/// Size cap for the log archive on `D:` (PHASE0_PLAN disk budget).
+pub const ARCHIVE_CAP_BYTES: u64 = 8 << 30;
 
 /// Budget failures.
 #[derive(Debug, thiserror::Error)]
@@ -212,18 +218,19 @@ impl PrunePlan {
     }
 }
 
-/// Plans deleting the oldest archived days until the archive is at most `max_bytes`.
-/// Deletes nothing.
+/// Plans deleting the oldest archived days until the archive is at most `max_bytes`, never
+/// including the newest day. Deletes nothing.
 ///
 /// # Errors
 /// Filesystem errors reading the archive.
 pub fn plan_archive_prune(archive_dir: &Path, max_bytes: u64) -> Result<PrunePlan, BudgetError> {
-    let logs = daily_logs(archive_dir)?;
+    let mut logs = daily_logs(archive_dir)?;
     let archive_bytes: u64 = logs.iter().map(|(_, _, len)| len).sum();
     let mut plan = PrunePlan {
         archive_bytes,
         ..PrunePlan::default()
     };
+    logs.pop();
     let mut remaining = archive_bytes;
     for (_, path, len) in logs {
         if remaining <= max_bytes {
@@ -258,8 +265,35 @@ pub fn execute_prune(plan: &PrunePlan, confirmation: Confirmation) -> Result<(),
             bytes: plan.bytes,
         });
     }
+    remove_all(plan)
+}
+
+fn remove_all(plan: &PrunePlan) -> Result<(), BudgetError> {
     for (path, _) in &plan.files {
         fs::remove_file(path).map_err(io_err(path))?;
     }
     Ok(())
+}
+
+/// Deletes the oldest archived days until the archive is at most `max_bytes` (normally
+/// [`ARCHIVE_CAP_BYTES`]), without asking: the archive is exempt from the big-delete rule.
+/// Returns what was deleted.
+///
+/// # Errors
+/// Filesystem errors (files deleted before the error stay deleted).
+#[tracing::instrument(level = "debug", skip_all, fields(max_bytes))]
+pub fn enforce_archive_cap(archive_dir: &Path, max_bytes: u64) -> Result<PrunePlan, BudgetError> {
+    let plan = plan_archive_prune(archive_dir, max_bytes)?;
+    if plan.files.is_empty() {
+        return Ok(plan);
+    }
+    remove_all(&plan)?;
+    tracing::info!(
+        event = "logs.archive_pruned",
+        files = plan.files.len(),
+        bytes = plan.bytes,
+        archive_bytes = plan.archive_bytes,
+        max_bytes,
+    );
+    Ok(plan)
 }

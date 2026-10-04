@@ -154,7 +154,7 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 
 - Nebula reads and writes only inside `D:\NebulaCold\`. Everything else on `D:` is your data, and Nebula never deletes it.
 - **Big deletes need your approval**: more than 1 GB or 500 files in one operation, any model file, or anything outside Nebula's own folders. Routine retention is grouped into one summary approval.
-- In Phase 0 this rule applies to *you and the scripts*: the archive and retention code in `nebula-telemetry` and `nebula backup` must ask (CLI prompt) before any delete above the threshold. Phase 1 turns it into an enforced sandbox rule.
+- In Phase 0 this rule applies to *you and the scripts*: the retention code in `nebula backup` and any model cleanup must ask (CLI prompt) before any delete above the threshold. The log archive's 8 GB cap is the one exception: it prunes the oldest days automatically (decided 2026-10-04). Phase 1 turns it into an enforced sandbox rule.
 
 **Living with the aging Samsung 980 (`F:`) for ~1 more year:**
 
@@ -306,7 +306,7 @@ config/
 - Every event carries `trace_id`, `span_id`, `parent_span_id`, `task_id`/`step_id` when present, `target`, `level` and `event`.
 - **Blob store:** `put(bytes) -> BlobRef` writes zstd-compressed, content-addressed files to `logs\blobs\ab\cdef...zst` (SHA-256), with deduplication. Log events reference large payloads such as prompts, outputs and stderr by `BlobRef`.
 - **Redaction filter (v0):** masks the values of registered secrets and common token patterns (GitHub `ghp_`/`gho_`/`ghs_`…/`github_pat_`, `cursor_` keys, generic `Bearer` tokens) before writing. Secrets are registered through `Telemetry::redactor().register(value)`. The daemon loads them from Credential Manager, so the telemetry crate needs no `unsafe` Windows calls.
-- **Disk accounting:** reports log + blob size to `nebula-resources` and enforces the log budget: hot logs (last 7 days, ~2 GB) stay on `F:`, and older days are moved to `D:\NebulaCold\logs-archive\`. For the archive beyond 8 GB, the crate only *plans* deleting the oldest days. `execute_prune` refuses a plan above 1 GB / 500 files unless the user approved it at a prompt, and nothing runs it automatically.
+- **Disk accounting:** reports log + blob size to `nebula-resources` and enforces the log budget: hot logs (last 7 days, ~2 GB) stay on `F:`, and older days are moved to `D:\NebulaCold\logs-archive\`. `enforce_archive_cap` deletes the archive's oldest days beyond 8 GB without asking. The archive is exempt from the big-delete rule, but only for daily log files, and the newest day is always kept. Every other prune goes through `execute_prune`, which refuses plans above 1 GB / 500 files without approval at a prompt.
 - **Tests:** an event written produces valid JSONL with the IDs; blob deduplication; redaction masks a planted token in both the event fields and the blob content.
 
 ### 6.4 `nebula-model` (10–12 h): the largest piece
@@ -497,7 +497,7 @@ Phase 0 is done when **every** box is checked:
 **Ops**
 - [ ] Scheduled encrypted backups (6-hourly + nightly) have run for at least 2 days, with local copies on `D:`, and one test restore succeeded
 - [ ] SMART JSON exists for all drives and `doctor` shows the trend
-- [ ] Every delete path in Phase 0 code (log archive, backup retention, model cleanup) asks before deleting more than 1 GB or 500 files
+- [ ] Every delete path in Phase 0 code (backup retention, model cleanup) asks before deleting more than 1 GB or 500 files. The log archive's 8 GB cap is exempt and prunes automatically.
 - [ ] The crypt passwords are stored offline
 
 **Docs**

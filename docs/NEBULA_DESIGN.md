@@ -192,7 +192,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 - **`F:` below 20 GB free:** refuse to start new tasks, builds or downloads.
 - **`F:` below 12 GB free:** pause running tasks.
 - **`D:` below 50 GB free:** warn. **Below 25 GB:** stop archive writes.
-- Automatic cleanup at any threshold still follows the **big-delete rule** (Section 7.6). Anything above 1 GB is proposed to you as one grouped approval.
+- Automatic cleanup at any threshold still follows the **big-delete rule** (Section 7.6). Anything above 1 GB is proposed to you as one grouped approval. The one exception is the log archive's 8 GB cap (Section 7.6).
 
 **Living with an aging NVMe (`F:`).** The Samsung 980 has logged bad blocks but stays in service for about a year. To reduce wear and risk:
 
@@ -789,7 +789,8 @@ Approval requests show up in the TUI as a modal:
 - Nebula may close only processes **it started**, meaning those inside its own Job Objects, without asking.
 - Closing anything else needs approval every time. The "OK to close" allowlist stays empty until you add entries.
 - **Never-touch list**, enforced in code: system processes, `explorer.exe`, security software, drivers, elevated processes, and games (Section 2.6).
-- **Big deletes need approval** (tier 3) on every drive. A delete operation, or a cleanup run, counts as big if it would remove **more than 1 GB or more than 500 files**, or **any file outside Nebula's own data roots and the task worktree**. Routine retention (old log archives, finished worktrees) is grouped into one summary approval ("Delete 3.4 GB: logs older than 90 days, 6 finished worktrees?") rather than asked file by file. Deleting a **model** always asks.
+- **Big deletes need approval** (tier 3) on every drive. A delete operation, or a cleanup run, counts as big if it would remove **more than 1 GB or more than 500 files**, or **any file outside Nebula's own data roots and the task worktree**. Routine retention (finished worktrees, backup rotation) is grouped into one summary approval ("Delete 3.4 GB: 6 finished worktrees?") rather than asked file by file. Deleting a **model** always asks.
+  - **Exception: the log archive.** `D:\NebulaCold\logs-archive\` is capped at 8 GB, and the oldest days are deleted automatically to stay under it, because otherwise it grows without bound. The cleanup only touches Nebula's daily `nebula-YYYY-MM-DD.jsonl` files there, always keeps the newest day, and logs a `logs.archive_pruned` event.
 - **`D:` rules:** Nebula reads and writes only inside `D:\NebulaCold\`. Everything else on `D:` is treated as your data: read-only by default, and never deleted.
 - **Forbidden paths:** the `C:` drive is physically failing, but it stays connected for now because it still holds the PC's **boot loader** (EFI System partition). Any path on it is rejected outright, even for reads. Nebula never runs disk or partition tools (`diskpart`, `bcdedit`, `bcdboot`, `Set-Disk`, `format`) against any drive; those are tier 3, and retiring `C:` is a hands-on job for you. `nebula doctor` warns for as long as the drive is attached.
 
