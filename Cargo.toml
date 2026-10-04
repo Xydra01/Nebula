@@ -12,14 +12,23 @@ publish = false
 
 [workspace.dependencies]
 nebula-proto = { path = "crates/nebula-proto" }
+nebula-telemetry = { path = "crates/nebula-telemetry" }
 
+hex = "0.4.3"
+regex = "1.13.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.11.0"
 thiserror = "2.0.21"
 time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
+tokio = { version = "1.53.2", default-features = false }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["std", "registry", "env-filter"] }
 ulid = { version = "3.0.0", features = ["serde"] }
+zstd = "0.14.0"
 
 insta = { version = "1.49.0", features = ["json"] }
+tempfile = "3.27.0"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

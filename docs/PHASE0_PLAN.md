@@ -299,14 +299,14 @@ config/
 
 ### 6.3 `nebula-telemetry` (5–6 h)
 
-- `init(config) -> TelemetryGuard` sets up `tracing-subscriber` with:
-  - a **JSON file layer**: daily rotation via `tracing-appender` to `F:\Nebula\logs\nebula-YYYY-MM-DD.jsonl`
-  - a pretty console layer for the CLI and dev use
-  - an in-process **broadcast layer** that feeds `logs.subscribe` (for `nebula logs tail`)
+- `init(config) -> Telemetry` sets up `tracing-subscriber` with one layer that builds a redacted `LogEvent` and sends it to:
+  - a **JSONL file**, rotated daily (UTC dates) to `F:\Nebula\logs\nebula-YYYY-MM-DD.jsonl`. A small built-in writer replaces `tracing-appender`, whose file names can't take this form; it flushes every line.
+  - the console (stderr) for the CLI and dev use. The console line is built from the redacted event, so secrets never reach the terminal either.
+  - an in-process **broadcast channel** that feeds `logs.subscribe` (for `nebula logs tail`)
 - Every event carries `trace_id`, `span_id`, `parent_span_id`, `task_id`/`step_id` when present, `target`, `level` and `event`.
 - **Blob store:** `put(bytes) -> BlobRef` writes zstd-compressed, content-addressed files to `logs\blobs\ab\cdef...zst` (SHA-256), with deduplication. Log events reference large payloads such as prompts, outputs and stderr by `BlobRef`.
-- **Redaction filter (v0):** masks the values of registered secrets (loaded from Credential Manager names in config) and common token patterns (GitHub `ghp_`/`github_pat_`, `cursor_` keys, generic `Bearer` tokens) before writing.
-- **Disk accounting:** reports log + blob size to `nebula-resources` and enforces the log budget: hot logs (last 7 days, ~2 GB) stay on `F:`, older days are moved to `D:\NebulaCold\logs-archive\`, and the archive's oldest days are deleted beyond 8 GB.
+- **Redaction filter (v0):** masks the values of registered secrets and common token patterns (GitHub `ghp_`/`gho_`/`ghs_`…/`github_pat_`, `cursor_` keys, generic `Bearer` tokens) before writing. Secrets are registered through `Telemetry::redactor().register(value)`. The daemon loads them from Credential Manager, so the telemetry crate needs no `unsafe` Windows calls.
+- **Disk accounting:** reports log + blob size to `nebula-resources` and enforces the log budget: hot logs (last 7 days, ~2 GB) stay on `F:`, and older days are moved to `D:\NebulaCold\logs-archive\`. For the archive beyond 8 GB, the crate only *plans* deleting the oldest days. `execute_prune` refuses a plan above 1 GB / 500 files unless the user approved it at a prompt, and nothing runs it automatically.
 - **Tests:** an event written produces valid JSONL with the IDs; blob deduplication; redaction masks a planted token in both the event fields and the blob content.
 
 ### 6.4 `nebula-model` (10–12 h): the largest piece
