@@ -106,6 +106,10 @@ pub struct ModelProfile {
     /// Serves embeddings rather than chat.
     #[serde(default)]
     pub embedding: bool,
+    /// Commit charge the server is expected to take, checked before loading. On WDDM,
+    /// llama-server commits about as much system memory as it uses in VRAM.
+    #[serde(default)]
+    pub commit_estimate_mib: Option<u64>,
 }
 
 impl ModelProfile {

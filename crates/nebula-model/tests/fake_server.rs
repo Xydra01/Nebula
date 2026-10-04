@@ -411,6 +411,39 @@ async fn unknown_profile_stop_and_unload() {
     assert!(launcher.current().exited());
 }
 
+struct RefuseB;
+
+impl nebula_model::Preflight for RefuseB {
+    fn check(&self, name: &str, _profile: &nebula_model::ModelProfile) -> Result<(), String> {
+        if name == "b" {
+            Err("not enough commit headroom".into())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[tokio::test]
+async fn preflight_refusal_leaves_the_server_stopped() {
+    let launcher = FakeLauncher::new(FakeState::new());
+    let m = ModelManager::spawn_with(
+        fake::config(),
+        policy(),
+        Arc::clone(&launcher) as _,
+        None,
+        Some(Arc::new(RefuseB)),
+    )
+    .unwrap();
+    m.set_profile("a").await.unwrap();
+    let err = m.set_profile("b").await.unwrap_err();
+    assert!(matches!(err, ModelError::Preflight(_)), "{err}");
+    let s = m.status();
+    assert_eq!((s.profile.as_str(), s.state), ("b", ModelState::Stopped));
+    assert!(s.last_error.unwrap().contains("commit"));
+    assert_eq!(launcher.launches().len(), 1);
+    assert!(m.backend().is_err());
+}
+
 #[tokio::test]
 async fn dropping_the_manager_stops_the_server() {
     let launcher = FakeLauncher::new(FakeState::new());

@@ -1,0 +1,22 @@
+[package]
+name = "nebula-config"
+description = "Typed Nebula configuration: shipped defaults plus a local override"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+nebula-model.workspace = true
+nebula-telemetry.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

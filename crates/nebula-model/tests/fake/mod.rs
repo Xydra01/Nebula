@@ -281,6 +281,7 @@ pub fn profile(model: &str) -> ModelProfile {
         reasoning_style: ReasoningStyle::Effort,
         sampling: Sampling { thinking, instruct },
         embedding: false,
+        commit_estimate_mib: None,
     }
 }
 

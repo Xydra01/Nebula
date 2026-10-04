@@ -147,3 +147,12 @@ While checking `docs/ops/setup.md`, `nebula-smoke --profile pq2mtp` failed `chat
 - **Free RAM was not the issue** (12 GB free). The fix is a larger commit limit: page file 4 GB initial, **32 GB maximum** (`scripts/set-pagefile.ps1`; `phase0-ws1-admin.ps1` updated to match), which gives a limit of ~64 GB. The file grows only when needed, and F: keeps ≥ 46 GB free in the worst case.
 - **Verified after the reboot:** a helper process committed 32 GB without touching it, to simulate the busy desktop, and then `nebula-smoke --profile pq2mtp` passed all six checks. Commit reached 44.4 GB, past the old 43.8 GB limit. The page file grew on demand (limit 55.8 GB) and dropped back to 4 GB when the memory was released. The load took 15 s instead of ~6 s, because the page file grew during it. Results: `bench/results/2026-10-04/smoke-pq2mtp.md`.
 - **For WS4:** `nebula-resources` and `doctor` should track commit charge against the commit limit, not just free RAM, and the model manager should check commit headroom before loading a profile.
+
+## 2026-10-04: WS4 `nebula-resources` on the real machine
+
+From the `#[ignore]` tests (`cargo test -p nebula-resources -- --ignored --nocapture`):
+
+- **NVML** works (RTX 4070, driver 596.49, 12,282 MiB). It lists 26 GPU processes but reports no memory for any of them (WDDM), as expected.
+- **PDH** `\GPU Process Memory(*)\Dedicated Usage` works. With an idle desktop the top users were dwm 922 MiB, Firefox 275 MiB and Cursor 169 MiB. This is the per-process source.
+- **Commit:** 20.1 GB used. The current limit is 36.8 GB (RAM + 4 GB page file), and the effective limit is 64 GB with the page file's 32 GB maximum, which is what the preflight uses.
+- **Doctor (local checks):** everything Ok except `backup` (not set up, 7.1). `C:` is not attached, the EFI partition and the page file are on disk 1 (the NVMe), and SSH is limited to the Tailscale ranges. The newest SMART snapshot (2026-10-01) shows no change: the 980 has 2 media errors and 99% spare, and the WD Green SSD has 1 reallocated sector.

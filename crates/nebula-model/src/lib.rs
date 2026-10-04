@@ -20,7 +20,7 @@ pub mod types;
 pub use backend::{Activity, LlamaServerBackend, ModelBackend};
 pub use config::{ModelConfig, ModelProfile, ReasoningStyle, Sampling};
 pub use launcher::{LaunchSpec, Launcher, ProcessLauncher, ServerProcess};
-pub use supervisor::{ModelManager, SupervisorConfig};
+pub use supervisor::{ModelManager, Preflight, SupervisorConfig};
 pub use types::{BackendHealth, ChatOutput, ChatRequest, ChatStream, StreamItem, ToolCall};
 
 /// Model backend and supervisor failures.
@@ -38,6 +38,9 @@ pub enum ModelError {
     /// The server could not be kept running.
     #[error("model failed: {0}")]
     Failed(String),
+    /// A pre-launch check (e.g. commit headroom) refused the launch.
+    #[error("launch refused: {0}")]
+    Preflight(String),
     /// The process could not be started.
     #[error("launch: {0}")]
     Launch(String),

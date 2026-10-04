@@ -11,7 +11,10 @@ repository = "https://github.com/Xydra01/Nebula"
 publish = false
 
 [workspace.dependencies]
+nebula-config = { path = "crates/nebula-config" }
+nebula-model = { path = "crates/nebula-model" }
 nebula-proto = { path = "crates/nebula-proto" }
+nebula-resources = { path = "crates/nebula-resources" }
 nebula-telemetry = { path = "crates/nebula-telemetry" }
 
 async-trait = "0.1.92"
@@ -19,6 +22,8 @@ eventsource-stream = "0.2.3"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 getrandom = "0.4.3"
 hex = "0.4.3"
+nvml-wrapper = "0.13.0"
+sysinfo = { version = "0.39.6", default-features = false, features = ["system", "disk"] }
 regex = "1.13.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream"] }
 tokio-util = "0.7.19"

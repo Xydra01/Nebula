@@ -1,6 +1,49 @@
-# Nebula daemon defaults. Model profiles come from ADR-004 and ADR-006; `standard` matches
-# bench/profiles/pq2mtp.toml. A test in nebula-model checks that this file parses and that the
-# `standard` launch arguments match the benchmarked ones.
+# Nebula daemon defaults, embedded in the binaries by nebula-config. Local changes go in
+# F:\Nebula\config\nebula.toml (or the file named by NEBULA_CONFIG), which is merged over this.
+# Model profiles come from ADR-004 and ADR-006; `standard` matches bench/profiles/pq2mtp.toml.
+
+[paths]
+data_root = 'F:\Nebula'
+logs = 'F:\Nebula\logs'
+state = 'F:\Nebula\state'
+archive = 'D:\NebulaCold\logs-archive'
+backups_local = 'D:\NebulaCold\backups-local'
+
+[telemetry]
+filter = "info"
+
+[daemon]
+pipe_name = "nebula"
+# Profile loaded at startup; "" starts with no model.
+load_on_start = "standard"
+# CPU embedding server; "" disables it.
+embedding_profile = "embedding"
+# Credential Manager targets whose values are masked in every log and blob.
+secrets = ["nebula/github_bot_token", "nebula/cursor_api_key", "nebula/rclone_config_pass"]
+
+[resources]
+sample_interval_ms = 2000
+log_interval_s = 30
+# Free commit charge kept on top of a profile's estimate before it may load.
+commit_margin_mib = 1024
+vram_headroom_warn_mib = 1024
+# Hot logs on F: (7 days) and the archive cap on D:.
+log_budget_gb = 2
+archive_cap_gb = 8
+# The failing drive that must not come back into use (PHASE0_PLAN 3.1).
+retired_drive = "C:"
+
+# Disk guard (PHASE0_PLAN 3.2). Phase 0 reports these; enforcement comes with tasks in Phase 1.
+[[resources.volumes]]
+mount = 'F:\'
+warn_gb = 30
+block_gb = 20
+pause_gb = 12
+
+[[resources.volumes]]
+mount = 'D:\'
+warn_gb = 50
+block_gb = 25
 
 [model]
 default_profile = "standard"
@@ -15,6 +58,8 @@ runtime = "llama-prism"
 model = 'F:\Nebula\models\bonsai2-27b-mtp\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf'
 ctx = 32768
 kv_type = "q4_0"
+# Measured 2026-10-04: on WDDM, llama-server commits about as much as it uses in VRAM.
+commit_estimate_mib = 10700
 flags = [
     "-ngl", "99",
     "-fa", "on",
@@ -55,6 +100,8 @@ model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
 ctx = 131072
 kv_type = "q4_0"
 kv_bias = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0-kv-bias.gguf'
+# Not measured; 10.2 GB VRAM (ADR-004) plus the same margin as `standard`.
+commit_estimate_mib = 10700
 flags = [
     "-ngl", "99",
     "-fa", "on",
@@ -92,6 +139,8 @@ model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
 ctx = 16384
 kv_type = "q4_0"
 kv_bias = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0-kv-bias.gguf'
+# Not measured; below the 7.97 GB of q4_0 at 32K (ADR-004), rounded up.
+commit_estimate_mib = 8500
 flags = [
     "-ngl", "99",
     "-fa", "on",
@@ -130,6 +179,8 @@ model = 'F:\Nebula\models\embedding\Qwen3-Embedding-0.6B-Q8_0.gguf'
 ctx = 1024
 kv_type = "f16"
 embedding = true
+# 1.2-1.8 GB measured (PHASE0_PLAN 3.5), rounded up.
+commit_estimate_mib = 2400
 flags = [
     "--embedding",
     "--pooling", "last",
