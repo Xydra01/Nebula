@@ -1,0 +1,24 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 9,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {
+    "checks": [
+      {
+        "detail": "ready",
+        "name": "model.server",
+        "status": "ok"
+      },
+      {
+        "detail": "28 GB free (warn below 30 GB)",
+        "name": "disk.f",
+        "status": "warn"
+      }
+    ],
+    "overall": "warn"
+  }
+}

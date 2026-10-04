@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 6,
+  "jsonrpc": "2.0",
+  "method": "model.set_profile",
+  "params": {
+    "profile": "long"
+  },
+  "proto_version": 1
+}

@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 3,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {
+    "chat_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EH",
+    "trace_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EF"
+  }
+}

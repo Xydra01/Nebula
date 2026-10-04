@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "error": {
+    "code": -32001,
+    "message": "model server is restarting"
+  },
+  "id": "abc",
+  "jsonrpc": "2.0",
+  "proto_version": 1
+}

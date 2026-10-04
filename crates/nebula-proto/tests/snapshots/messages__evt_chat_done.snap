@@ -1,0 +1,19 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "chat.done",
+  "params": {
+    "chat_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EH",
+    "stop_reason": "stop",
+    "usage": {
+      "predicted_ms": 40.0,
+      "predicted_n": 3,
+      "prompt_ms": 41.5,
+      "prompt_n": 28
+    }
+  },
+  "proto_version": 1
+}

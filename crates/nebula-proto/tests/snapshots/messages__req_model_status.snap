@@ -1,0 +1,11 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 5,
+  "jsonrpc": "2.0",
+  "method": "model.status",
+  "params": {},
+  "proto_version": 1
+}

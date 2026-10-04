@@ -1,0 +1,21 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 1,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {
+    "model": {
+      "profile": "standard",
+      "restarts": 0,
+      "since": "2026-10-04T07:00:00Z",
+      "state": "ready"
+    },
+    "pid": 1234,
+    "proto_version": 1,
+    "uptime_s": 3600,
+    "version": "0.0.1"
+  }
+}
