@@ -6,6 +6,7 @@ use nebula_backup::archive::{self, Source};
 use nebula_backup::{
     BackupError, Options, Outcome, Policy, Rclone, RemoteFile, archive_name, backup_now,
     load_record, parse_name, prune_local_plan, prune_remote_plan, restore, retention,
+    stale_partials,
 };
 use nebula_config::NebulaConfig;
 use time::macros::datetime;
@@ -188,6 +189,26 @@ fn cfg(root: &Path) -> NebulaConfig {
     std::fs::create_dir_all(&remote).unwrap();
     cfg.backup.remote = format!("{}/", remote.display()).replace('\\', "/");
     cfg
+}
+
+#[test]
+fn only_old_backup_partials_are_stale() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = cfg(dir.path());
+    let local = &cfg.paths.backups_local;
+    let name = archive_name(datetime!(2026-10-04 12:00 UTC));
+    write(&local.join(format!("{name}.partial")), "half");
+    write(&local.join("someone-else.partial"), "x");
+    write(&local.join(&name), "done");
+
+    let now = OffsetDateTime::now_utc();
+    assert!(stale_partials(&cfg, now).unwrap().is_empty());
+    let later: Vec<_> = stale_partials(&cfg, now + Duration::hours(2))
+        .unwrap()
+        .into_iter()
+        .map(|f| f.name)
+        .collect();
+    assert_eq!(later, [format!("{name}.partial")]);
 }
 
 #[test]

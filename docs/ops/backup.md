@@ -11,7 +11,7 @@ Each backup is one `nebula-<UTC time>.tar.zst` with a `MANIFEST.json` listing ev
 
 ## Where it goes
 
-- **Local:** `D:\NebulaCold\backups-local\`, kept for 7 days. The newest copy is always kept.
+- **Local:** `D:\NebulaCold\backups-local\`, kept for 7 days. The newest copy is always kept. A `.partial` file older than an hour is left over from a run cut off by a shutdown, and the next backup deletes it.
 - **Cloud:** `gdrive-crypt:`, an rclone `crypt` remote over `gdrive:NebulaBackups`. Google only sees encrypted names and contents.
 - **Schedule:** Task Scheduler runs `nebula backup now --if-changed` at 00:00, 06:00, 12:00 and 18:00 (skipped when nothing changed), and `nebula backup now` at 03:00 (always uploads). Missed runs start when the PC is next on.
 - **Retention (approved 2026-10-04):** in the cloud, the newest 8 backups plus the newest of each of the last 14 days, 8 ISO weeks and 6 months. If a pass would delete more than 500 files or 1 GB, it stops and records an error until you re-run it with `--allow-large-delete`.

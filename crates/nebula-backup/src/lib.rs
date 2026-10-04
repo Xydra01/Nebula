@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 
 use nebula_config::NebulaConfig;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use time::macros::format_description;
+use time::{Duration, OffsetDateTime};
 
 pub use archive::{Entry, Manifest, Source};
 pub use rclone::{Rclone, RemoteFile};
@@ -235,6 +235,45 @@ pub fn local_backups(cfg: &NebulaConfig) -> Result<Vec<RemoteFile>, BackupError>
     Ok(out)
 }
 
+/// How old a `.partial` file must be before it counts as abandoned. Longer than the scheduled
+/// task's time limit, so a backup or restore still writing one is left alone.
+pub const PARTIAL_MAX_AGE: Duration = Duration::hours(1);
+
+/// Half-written archives in `paths.backups_local` (`<archive name>.partial`) last modified
+/// before `now - PARTIAL_MAX_AGE`, left behind by a run that was cut off.
+///
+/// # Errors
+/// The folder can't be read (a missing folder is empty).
+pub fn stale_partials(
+    cfg: &NebulaConfig,
+    now: OffsetDateTime,
+) -> Result<Vec<RemoteFile>, BackupError> {
+    let dir = &cfg.paths.backups_local;
+    let rd = match std::fs::read_dir(dir) {
+        Ok(rd) => rd,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let cutoff = std::time::SystemTime::from(now - PARTIAL_MAX_AGE);
+    let mut out = Vec::new();
+    for e in rd {
+        let e = e?;
+        let name = e.file_name().to_string_lossy().into_owned();
+        let Some(stem) = name.strip_suffix(".partial") else {
+            continue;
+        };
+        let meta = e.metadata()?;
+        if parse_name(stem).is_some() && meta.is_file() && meta.modified()? < cutoff {
+            out.push(RemoteFile {
+                name,
+                size: meta.len(),
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+
 /// Archives on the remote, oldest first.
 ///
 /// # Errors
@@ -284,7 +323,8 @@ fn run(
     }
 
     let locals = local_backups(cfg)?;
-    let old = prune_local_plan(&locals, now, cfg.backup.local_keep_days);
+    let mut old = prune_local_plan(&locals, now, cfg.backup.local_keep_days);
+    old.extend(stale_partials(cfg, now)?);
     check_limit(
         cfg,
         &dir.display().to_string(),
