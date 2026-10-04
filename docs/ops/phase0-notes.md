@@ -60,6 +60,13 @@ Things on this machine Nebula has to account for:
 - `llvm-mingw` is on PATH. The Rust default host is MSVC, so this is harmless today, but builds of C dependencies should be checked to confirm they pick MSVC.
 - Docker Desktop's WSL distro shares the 6 GB `.wslconfig` cap.
 
+### 1.10 OpenSSH over Tailscale (2026-10-04)
+
+- `scripts/phase0-ssh-setup.ps1` (run elevated): OpenSSH.Server capability, `sshd` automatic, key in `F:\ProgramData\ssh\administrators_authorized_keys` (the account is an administrator, so `~/.ssh/authorized_keys` is ignored), `PasswordAuthentication no` / `KbdInteractiveAuthentication no` at the top of `sshd_config`, and the `OpenSSH-Server-In-TCP` rule limited to `100.64.0.0/10` and `fd7a:115c:a1e0::/48`. The public key is kept in `F:\Nebula\setup\macbook.pub`, outside the repo.
+- Client: the MacBook (`erics-laptop` on the tailnet), reusing its GitHub ed25519 key. `ssh myfri@ej-pc` logs in with the key; a password-only attempt gets `Permission denied (publickey)`; with Tailscale off, `ssh` to the desktop's LAN address times out.
+- Surfshark on the desktop logged Tailscale out (no control-plane connection). Keep Surfshark off, or add `tailscaled.exe` and `tailscale-ipn.exe` to its Bypasser list.
+- Still to do: 7.3, the Nebula CLI and named pipe over SSH, once the CLI exists.
+
 ### 1.12 Recovery USB
 
 Done (user, confirmed 2026-10-02).
