@@ -254,6 +254,38 @@ fn archive_conflicts_are_left_in_place() {
 }
 
 #[test]
+fn archive_cap_deletes_oldest_days_without_approval_but_keeps_newest_and_other_files() {
+    let cold = tempfile::tempdir().unwrap();
+    let days: Vec<_> = (1..=5)
+        .map(|d| time::Date::from_calendar_date(2026, time::Month::January, d).unwrap())
+        .collect();
+    for d in &days {
+        fs::write(cold.path().join(file_name_for(*d)), vec![b'x'; 100]).unwrap();
+    }
+    fs::write(cold.path().join("keep-me.txt"), vec![b'y'; 10_000]).unwrap();
+
+    let pruned = budget::enforce_archive_cap(cold.path(), 250).unwrap();
+    assert_eq!(pruned.files.len(), 3);
+    let left: Vec<_> = budget::daily_logs(cold.path())
+        .unwrap()
+        .into_iter()
+        .map(|(d, _, _)| d)
+        .collect();
+    assert_eq!(left, days[3..]);
+    assert!(cold.path().join("keep-me.txt").exists());
+
+    // Even a cap of zero keeps the newest day.
+    budget::enforce_archive_cap(cold.path(), 0).unwrap();
+    assert_eq!(budget::daily_logs(cold.path()).unwrap().len(), 1);
+    assert!(
+        budget::enforce_archive_cap(cold.path(), 0)
+            .unwrap()
+            .files
+            .is_empty()
+    );
+}
+
+#[test]
 fn prune_plans_oldest_first_and_large_plans_need_approval() {
     let cold = tempfile::tempdir().unwrap();
     for (i, d) in [
