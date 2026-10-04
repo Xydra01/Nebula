@@ -58,7 +58,7 @@ A restore uses the local copy if there is one; otherwise it downloads the backup
    - Set a configuration password (`s`) and **write it down**.
 3. `scripts\store-rclone-pass.ps1`: checks the config password and saves it to Credential Manager.
 4. `nebula backup reauth --record-only`: records the sign-in for doctor.
-5. `scripts\register-backup-tasks.ps1` from an elevated PowerShell: registers the two tasks under `\Nebula\`, using your Windows password so they run while you're logged out.
+5. `scripts\register-backup-tasks.ps1` from an elevated PowerShell: registers the two tasks under `\Nebula\`, using your Windows password so they run while you're logged out. For a Microsoft account this is the **account password, not the PIN**. With `-WhenLoggedOn` no password is needed, but backups only run while you're logged in, and missed ones start at your next logon.
 
 ## Restore on a new machine
 
