@@ -459,11 +459,11 @@ From the laptop over Tailscale: `ssh desktop`, then `nebula daemon status`, `neb
 Phase 0 is done when **every** box is checked:
 
 **Environment**
-- [ ] Page file moved off `C:`; nothing Nebula-related lives on `C:`; the recovery USB is made and tested
+- [x] Page file moved off `C:`; nothing Nebula-related lives on `C:`; the recovery USB is made and tested
 - [ ] SMART health recorded for all three drives; `D:` cleared for cold data (or the plan adjusted if it isn't healthy)
 - [ ] `F:` stays within the revised budget (≤ 60 GB Nebula use, at least 30 GB free)
 - [ ] Every toolchain answers `--version`; `docs/ops/setup.md` reproduces the setup
-- [ ] SSH works from the laptop over Tailscale with key authentication only, and is unreachable from outside the tailnet
+- [x] SSH works from the laptop over Tailscale with key authentication only, and is unreachable from outside the tailnet
 
 **Repo**
 - [ ] `Xydra01/Nebula` is public under MIT; `main` is protected (PR, 1 code-owner approval, required CI)
