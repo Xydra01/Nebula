@@ -364,8 +364,18 @@ async fn disconnect_mid_stream_cancels_the_chat() {
     })
     .await
     .unwrap();
-    let status: DaemonStatus = b.call(Method::DaemonStatus(Empty {})).await.unwrap();
-    assert_eq!(status.model.state, ModelState::Ready);
+    // The request is released just after the chat leaves the registry.
+    tokio::time::timeout(TIMEOUT, async {
+        loop {
+            let s: DaemonStatus = b.call(Method::DaemonStatus(Empty {})).await.unwrap();
+            if s.model.state == ModelState::Ready {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
     h.daemon.shutdown().await;
 }
 
