@@ -1,0 +1,110 @@
+# PHASE0_PLAN 2.7. The required status check on `main` is the "CI ok" job, so jobs can be added or
+# skipped without editing the ruleset. Third-party actions are pinned to commit SHAs.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e"
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP\gitleaks.zip"
+          $url = "https://github.com/gitleaks/gitleaks/releases/download/v$env:GITLEAKS_VERSION/gitleaks_${env:GITLEAKS_VERSION}_windows_x64.zip"
+          Invoke-WebRequest $url -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:GITLEAKS_SHA256) { throw "gitleaks checksum mismatch: $hash" }
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP\gitleaks"
+          "$env:RUNNER_TEMP\gitleaks" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+      - name: Scan full history
+        run: gitleaks git --redact --no-banner --verbose
+
+  bench:
+    name: bench (ruff, pytest)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: bench
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: bench/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  rust:
+    name: rust (fmt, clippy, nextest)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The Cargo workspace arrives with WS4; until then this job passes without doing anything.
+      - name: Detect Cargo workspace
+        id: detect
+        shell: pwsh
+        run: |
+          $present = Test-Path Cargo.toml
+          "present=$($present.ToString().ToLower())" | Out-File -Append -Encoding utf8 $env:GITHUB_OUTPUT
+          if (-not $present) { Write-Output "::notice::No Cargo.toml yet; Rust checks skipped." }
+      - if: steps.detect.outputs.present == 'true'
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - if: steps.detect.outputs.present == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - if: steps.detect.outputs.present == 'true'
+        uses: taiki-e/install-action@861a07ce7084f55488e375df125cdc99bba60eb7 # v2.87.23
+        with:
+          tool: cargo-nextest
+      - if: steps.detect.outputs.present == 'true'
+        run: cargo fmt --all --check
+      - if: steps.detect.outputs.present == 'true'
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Hosted runners have no GPU: GPU tests are #[ignore]d and run locally with
+      # `cargo nextest run --run-ignored all`.
+      - if: steps.detect.outputs.present == 'true'
+        run: cargo nextest run --workspace --locked --no-tests=pass
+
+  ok:
+    name: CI ok
+    if: always()
+    needs: [gitleaks, bench, rust]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done

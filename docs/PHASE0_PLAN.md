@@ -172,7 +172,7 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
-| 2.0 | **Status 2026-10-01:** 2.1 and 2.2 are done: [github.com/Xydra01/Nebula](https://github.com/Xydra01/Nebula), with the `Project Neutron` folder itself as the repo. The GitHub half of 2.5 (secret scanning + push protection) is on. **2026-10-02:** 2.3 done: `Nebula-dev-bot` opened and you merged [PR #1](https://github.com/Xydra01/Nebula/pull/1). 2.4 done, except for the required status check, which comes with 2.7: ruleset `protect-main` (PR required, 1 code-owner approval after the last push, no force-push, no deletion, repository-admin bypass via PR only, verified by a rejected direct push). 2.5, 2.6 and 2.8 are done in the `feat/ws2-repo-hygiene` PR. | — | — |
+| 2.0 | **Status 2026-10-01:** 2.1 and 2.2 are done: [github.com/Xydra01/Nebula](https://github.com/Xydra01/Nebula), with the `Project Neutron` folder itself as the repo. The GitHub half of 2.5 (secret scanning + push protection) is on. **2026-10-02:** 2.3 done: `Nebula-dev-bot` opened and you merged [PR #1](https://github.com/Xydra01/Nebula/pull/1). 2.4 done, except for the required status check, which comes with 2.7: ruleset `protect-main` (PR required, 1 code-owner approval after the last push, no force-push, no deletion, repository-admin bypass via PR only, verified by a rejected direct push). 2.5, 2.6 and 2.8 are done in the `feat/ws2-repo-hygiene` PR. **2026-10-04:** 2.7 CI added (`.github/workflows/ci.yml`): gitleaks on the full history, ruff + pytest for `bench/`, and the Rust checks, which are skipped until a `Cargo.toml` exists. The required check for the ruleset is the aggregate job **CI ok**. | — | — |
 | 2.1 | Create the **public** repo `Xydra01/Nebula` with an MIT `LICENSE`, `README.md` (vision paragraph + status) and a Rust/Python `.gitignore` | Repo exists | 0.3 h |
 | 2.2 | **First commit**: move `docs/NEBULA_DESIGN.md` and `docs/PHASE0_PLAN.md` from the `Project Neutron` folder into the repo | Docs visible on GitHub | 0.2 h |
 | 2.3 | Create the **`Nebula-dev-bot` machine account** (separate email, 2FA). Invite it as a collaborator with write access. Create a **classic token with only the `public_repo` scope**, with a 90-day expiry. Fine-grained tokens can't access repos the account only collaborates on ([github/roadmap#601](https://github.com/github/roadmap/issues/601)). Because the bot is a collaborator only on repos you invite it to, that is still the limit of its write access. Store the token with `scripts/store-bot-token.ps1`, which saves it in Windows Credential Manager as `nebula/github_bot_token`. **Status 2026-10-02:** account created; invited with write access. | The bot can push a test branch and open a PR | 0.5–1 h |
@@ -468,7 +468,7 @@ Phase 0 is done when **every** box is checked:
 
 **Repo**
 - [ ] `Xydra01/Nebula` is public under MIT; `main` is protected (PR, 1 code-owner approval, required CI)
-- [ ] `Nebula-dev-bot` opened at least one PR that you approved and merged
+- [x] `Nebula-dev-bot` opened at least one PR that you approved and merged
 - [ ] A planted fake secret is blocked by both the local hook and GitHub push protection
 - [ ] CI is green on `main`
 
