@@ -530,10 +530,10 @@ Phase 0 is done when **every** box is checked:
 - [ ] Scheduled encrypted backups (6-hourly + nightly) have run for at least 2 days, with local copies on `D:`, and one test restore succeeded
 - [x] SMART JSON exists for all drives and `doctor` shows the trend
 - [x] Every delete path in Phase 0 code (backup retention, model cleanup) asks before deleting more than 1 GB or 500 files. The log archive's 8 GB cap is exempt and prunes automatically.
-- [ ] The crypt passwords are stored offline
+- [x] The crypt passwords are stored offline
 
 **Docs**
-- [ ] `docs/ops/*`, ADR-004–007 and an updated design doc are merged
+- [x] `docs/ops/*`, ADR-004–007 and an updated design doc are merged
 - [ ] The Phase 1 backlog exists as issues; tag `v0.0.1-phase0` pushed
 
 ---

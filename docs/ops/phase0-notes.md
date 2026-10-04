@@ -65,7 +65,7 @@ Things on this machine Nebula has to account for:
 - `scripts/phase0-ssh-setup.ps1` (run elevated): OpenSSH.Server capability, `sshd` automatic, key in `F:\ProgramData\ssh\administrators_authorized_keys` (the account is an administrator, so `~/.ssh/authorized_keys` is ignored), `PasswordAuthentication no` / `KbdInteractiveAuthentication no` at the top of `sshd_config`, and the `OpenSSH-Server-In-TCP` rule limited to `100.64.0.0/10` and `fd7a:115c:a1e0::/48`. The public key is kept in `F:\Nebula\setup\macbook.pub`, outside the repo.
 - Client: the MacBook (`erics-laptop` on the tailnet), reusing its GitHub ed25519 key. `ssh myfri@ej-pc` logs in with the key; a password-only attempt gets `Permission denied (publickey)`; with Tailscale off, `ssh` to the desktop's LAN address times out.
 - Surfshark on the desktop logged Tailscale out (no control-plane connection). Keep Surfshark off, or add `tailscaled.exe` and `tailscale-ipn.exe` to its Bypasser list.
-- Still to do: 7.3, the Nebula CLI and named pipe over SSH, once the CLI exists.
+- 7.3, the Nebula CLI over SSH: done 2026-10-04 (see "7.3 remote access check" below).
 
 ### 1.12 Recovery USB
 
@@ -174,3 +174,15 @@ The release binaries were installed with `scripts/install-nebula.ps1` and run fr
 Two fixes came out of the run, both in PR #22:
 - **Inherited pipes:** `nebula daemon start | tail` hung. Rust's `Command` passes every inheritable handle to the child, so the detached daemon held the caller's stdout pipe open, and an SSH session would have hung the same way. The CLI now clears the inherit flag on its standard handles before spawning.
 - **Early stop:** `daemon stop` returned when the pipe closed, ~1 s before the model servers were stopped. It now also waits for the process to exit.
+
+## 2026-10-04: WS5 backups
+
+- `nebula backup` set up as in `docs/ops/backup.md`: Google Drive through an unpublished (Testing) OAuth app, so the sign-in is renewed weekly with `nebula backup reauth`; `doctor` warns 2 days ahead.
+- First backup `nebula-20261004T171414Z` (5 files). On Drive it appears only under an encrypted name.
+- **Test restore:** with the local copy moved aside, `nebula backup restore` downloaded it from `gdrive-crypt:`. The download was byte-identical, and all 5 files matched the manifest and the live files.
+- **Scheduled tasks** (`scripts/register-backup-tasks.ps1`, run with the account password so they run while logged out). The first attempt failed with "user name or password is incorrect": the account is a Microsoft account and needs its account password, not the PIN (fixed in PR #24). The 6-hourly test run succeeded (nothing had changed, so no upload), and a manual run of the nightly task uploaded `nebula-20261004T175424Z`.
+- The crypt password and salt and the rclone config password are stored offline (user, confirmed 2026-10-04).
+
+## 2026-10-04: 7.3 remote access check
+
+From the MacBook over Tailscale (`ssh myfri@ej-pc`), the user ran `nebula daemon status`, `nebula logs tail`, `nebula chat` and `nebula doctor`. All of them worked: the named pipe is reachable from the SSH session (same account), and chat streaming and live logs render correctly. `F:\Nebula\bin` is on the user PATH, so plain `nebula` works locally and over SSH.
