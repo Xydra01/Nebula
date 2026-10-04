@@ -874,8 +874,10 @@ dependencies = [
  "nebula-telemetry",
  "serde",
  "serde_json",
+ "sysinfo",
  "time",
  "tokio",
+ "windows",
 ]
 
 [[package]]

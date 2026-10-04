@@ -345,6 +345,7 @@ impl Actor {
             return;
         }
         if name != self.profile {
+            tracing::info!(event = "model.profile_switch", from = %self.profile, to = %name);
             let superseded = Err(ModelError::Unavailable(format!("superseded by {name}")));
             self.resolve_waiters(&superseded);
         }

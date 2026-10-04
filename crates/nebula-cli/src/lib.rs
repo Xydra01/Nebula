@@ -6,6 +6,8 @@
 mod chat;
 mod daemon_ctl;
 pub mod format;
+#[cfg(windows)]
+mod win;
 
 use std::io::Write;
 use std::path::PathBuf;

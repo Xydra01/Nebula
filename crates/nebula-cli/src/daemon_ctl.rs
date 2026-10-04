@@ -51,6 +51,7 @@ fn spawn_detached(exe: &PathBuf) -> anyhow::Result<Child> {
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
         const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
         const ERROR_ACCESS_DENIED: i32 = 5;
+        crate::win::stop_inheriting_std_handles();
         let base = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
         cmd.creation_flags(base | CREATE_BREAKAWAY_FROM_JOB);
         match cmd.spawn() {
@@ -151,6 +152,7 @@ pub(crate) async fn stop(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
         }
         r => r?,
     };
+    let status: DaemonStatus = c.call(Method::DaemonStatus(Empty {})).await?;
     let _: Empty = c.call(Method::DaemonShutdown(Empty {})).await?;
     drop(c);
     if !ctx.json {
@@ -158,14 +160,33 @@ pub(crate) async fn stop(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
         out.flush()?;
     }
     let deadline = Instant::now() + STOP_TIMEOUT;
+    let still_running = || {
+        anyhow::anyhow!(
+            "the daemon is still running after {}s",
+            STOP_TIMEOUT.as_secs()
+        )
+    };
     loop {
         match connect(ctx).await {
             Err(ClientError::NotRunning(_)) => break,
-            _ if Instant::now() > deadline => bail!(
-                "the daemon is still running after {}s",
-                STOP_TIMEOUT.as_secs()
-            ),
+            _ if Instant::now() > deadline => return Err(still_running()),
             _ => tokio::time::sleep(Duration::from_millis(200)).await,
+        }
+    }
+    // The pipe closes before the model servers are stopped; wait for the process itself.
+    // An in-process daemon (tests) shares our pid and is stopped by its owner.
+    if status.pid != std::process::id() {
+        let pid = sysinfo::Pid::from_u32(status.pid);
+        let mut sys = sysinfo::System::new();
+        loop {
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+            if sys.process(pid).is_none() {
+                break;
+            }
+            if Instant::now() > deadline {
+                return Err(still_running());
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
     }
     if ctx.json {
