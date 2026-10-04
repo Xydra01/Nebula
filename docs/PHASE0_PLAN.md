@@ -123,7 +123,7 @@ Free space on `F:` after the cleanup: ~105 GB. A **second, larger drive is avail
 | --- | --- |
 | Toolchains (VS Build Tools, Rust, uv, Node, Git, misc.); CUDA toolkit skipped | ~18 GB |
 | Page file moved from `C:` (4–12 GB) | ~8 GB typical |
-| Active models: Bonsai PTQ1_0 + drafter + mmproj + KV bias + chosen fallback + embedding model | ~16 GB |
+| Active models: Bonsai PTQ1_0 + mmproj + KV bias, Bonsai PQ2_0 + MTP head (ADR-006), Gemma 4 fallback, embedding model | ~33 GB |
 | Rust build output (shared target, `sccache` capped at 6 GB) | ~10 GB |
 | Worktrees, package caches, state DB | ~8 GB |
 | Hot logs (last 7 days) | ~2 GB |
@@ -197,7 +197,7 @@ The WSL2 **sandbox** distro (Phase 2) goes on `F:` because builds inside it need
 > - **3.4 done:** stock llama.cpp `b11342` plus six fallback candidates in two rounds (9B dense: Ornith 1.0, Ornith 1.5, DeltaCoder; MoE with experts in RAM: Qwen3.6-35B-A3B, Gemma 4 26B-A4B, GLM-4.7-Flash). **Gemma 4 26B-A4B won** (ADR-005); the others are archived on `D:`.
 > - **3.7 done:** KV bias files generated for PTQ1_0 and PQ2_0; the server loads them with q4_0 KV.
 > - **5.2 harness and B1–B3, B5–B8 run** (overnight, 2026-10-02). See the [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md) and [ADR-005](adr/ADR-005-fallback-model.md) (both Accepted 2026-10-02). 3.5 (embedding model) is still open.
-> - **B4 done (2026-10-03):** MTP speculative decoding with the ProCreations head. See the [B4 report](../bench/results/2026-10-03/report.md) and [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Proposed).
+> - **B4 done (2026-10-03):** MTP speculative decoding with the ProCreations head. See the [B4 report](../bench/results/2026-10-03/report.md) and [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Accepted 2026-10-04).
 
 | # | Task | Done when | Est. |
 | --- | --- | --- | --- |
@@ -237,7 +237,7 @@ bench/
 | B1 | **Throughput** | Prompt processing and generation tokens/s at 8K / 32K / 64K / 128K, for FP16 and q4_0 KV. Use `llama-bench` where it supports the fork's formats, otherwise time server requests (`timings` field). 3 runs each, report the median. | Table: context × KV → pp t/s, tg t/s |
 | B2 | **VRAM** | Peak dedicated GPU memory per configuration (NVML total used minus the idle baseline), plus a check for **shared-memory spill** (Task Manager / Windows performance counters) | Table that replaces design doc Section 2.3 |
 | B3 | **Prompt cache** | Use `--ctx-checkpoints 32 --cache-ram 4096 --cache-idle-slots` with `cache_prompt: true`. Send a 20K-token prefix plus a varying suffix 10 times and compare `timings.prompt_n` / `prompt_ms` against `cache_prompt: false`. Repeat with the tool list reordered to confirm prefix sensitivity. | Cache speedup factor; rules for prompt layout |
-| B4 | **Burst profile.** ~~Blocked (2026-10-02): PrismML has not released a dspark drafter for Bonsai 2 27B.~~ **Done (2026-10-03)** with the community MTP head instead: PQ2_0 + MTP is 1.58x faster; PTQ1_0 + the same head only 1.09x. See the [B4 report](../bench/results/2026-10-03/report.md) and [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Proposed). | dspark drafter, `-np 1`, generating 2K tokens of code. Measure the speedup and the first-token penalty against `standard`. | Speedup and when `burst` is worth using |
+| B4 | **Burst profile.** ~~Blocked (2026-10-02): PrismML has not released a dspark drafter for Bonsai 2 27B.~~ **Done (2026-10-03)** with the community MTP head instead: PQ2_0 + MTP is 1.58x faster; PTQ1_0 + the same head only 1.09x. See the [B4 report](../bench/results/2026-10-03/report.md) and [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Accepted 2026-10-04). | dspark drafter, `-np 1`, generating 2K tokens of code. Measure the speedup and the first-token penalty against `standard`. | Speedup and when `burst` is worth using |
 | B5 | **Quality** | The 20 coding prompts (mix: Python, Rust, TS, C++; algorithms, bug fixes, small refactors; some taken from Smart Archive code) on PTQ1_0, PQ2_0, Ornith Q6_K and DeltaCoder Q6_K. Scored by **executable tests** where possible, otherwise by a rubric you grade blind (model names hidden). | Pass rate per model |
 | B6 | **Tool-call reliability** | 100 tool-call cases (pick the right tool, valid arguments, multi-tool turns) with and without `json_schema` / grammar constraints | % valid, % correct tool, % correct arguments |
 | B7 | **Long-context sanity** | Needle-in-a-repo retrieval at 32K / 64K / 128K (q4_0 + bias versus without bias) | Accuracy per length; whether 128K is usable in practice |

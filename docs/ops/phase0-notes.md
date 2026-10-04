@@ -112,7 +112,7 @@ Unattended run of `uv run python -m nebula_bench.run_all` from 02:06 to ~07:00. 
 
 ## 2026-10-03: B4, MTP speculative decoding
 
-Results in [bench/results/2026-10-03/](../../bench/results/2026-10-03/report.md); decision in ADR-006 (Proposed).
+Results in [bench/results/2026-10-03/](../../bench/results/2026-10-03/report.md); decision in ADR-006 (Accepted 2026-10-04).
 
 - **Drafter:** `ProCreations/Ternary-Bonsai-2-27B-MTP` (PQ2_0 + Q8_0 MTP layer, 7.66 GB) into `F:\Nebula\models\bonsai2-27b-mtp\`. Hugging Face downloads ran at ~8 MB/s.
 - **Graft:** the stock `gguf` Python package rejects PrismML quant types (PTQ1_0 is type 143), so `nebula_bench/gguf_header.py` parses headers directly and `nebula_bench/graft_mtp.py` appends the head to the PTQ1_0 file. The grafted file loads and drafts at the same acceptance as on PQ2_0 but is only 1.09x faster; it was moved to `D:\NebulaCold\models-archive\bonsai2-27b-mtp\` with its hash re-checked.

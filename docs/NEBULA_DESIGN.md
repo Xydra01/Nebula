@@ -105,18 +105,18 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | Max context | 262,144 tokens | Model card |
 | Runtime | PrismML's llama.cpp fork (`prism` branch); prebuilt Windows x64 CUDA 12.4 binaries exist. Stock llama.cpp cannot run it (upstreaming is in progress). | PrismML docs |
 | Tool calling | Native OpenAI-style `tool_calls` through llama-server | PrismML docs |
-| Speculative drafter | Paired "dspark" drafter GGUF ships with the 27B; ~1.8–2x faster decode on CUDA (experimental) | PrismML docs |
+| Speculative drafter | No PrismML drafter for Bonsai 2 27B. A community MTP head (ProCreations, embedded in a PQ2_0 file) gives 1.58x on the RTX 4070 | [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) |
 | License | Apache 2.0 | Model card |
 | Aggregate retention | 98.2% of FP16 | Vendor-reported, not independently reproduced |
 | Agentic retention | **~75%** on SWE-bench Verified (60.8 vs 80.6) and Terminal-Bench 2.1 (52.8 vs 69.7) | Vendor table |
 
 **The consequence:** the model is close to lossless at single-shot coding and math, but noticeably weaker at long-horizon, multi-turn agent work. That is precisely Nebula's workload. **The architecture makes up for it with structure** (Section 5): small bounded steps, state kept outside the model, mandatory verification, and fresh contexts.
 
-**Default format:** PTQ1_0 (5.95 GB). PQ2_0 (7.21 GB) is the alternative if Phase 0 benchmarks show a meaningful quality gain; it costs about 1.3 GB of KV-cache headroom.
+**Formats in use:** the `standard` profile runs **PQ2_0 with an embedded MTP head** (7.66 GB) for speculative decoding ([ADR-006](adr/ADR-006-mtp-speculative-decoding.md)); `long`, `lean` and `vision` run **PTQ1_0** (5.95 GB). On its own PQ2_0 showed no gain over PTQ1_0 (ADR-004); it is used because the MTP head only speeds up PQ2_0 on the current CUDA kernels.
 
 ### 2.3 VRAM Budget (12 GB)
 
-**Measured in Phase 0** (2026-10-02, PTQ1_0; [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md)). PQ2_0 was measured too and dropped: same speed, 1.2 GB more VRAM, no quality gain.
+**Measured in Phase 0** (2026-10-02, PTQ1_0; [report](../bench/results/2026-10-02/report.md), [ADR-004](adr/ADR-004-model-profiles.md)). The `standard` profile was then moved to PQ2_0 + MTP (2026-10-03; [B4 report](../bench/results/2026-10-03/report.md), [ADR-006](adr/ADR-006-mtp-speculative-decoding.md)); its total is the last row. The component rows are for PTQ1_0.
 
 | Consumer | Measured | Notes |
 | --- | --- | --- |
@@ -127,7 +127,8 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | KV cache (full-attention layers only) | 2.0 GB at 32K f16 | Exactly 64 KiB/token at f16 |
 | Vision mmproj (on demand) | 0 / 0.63 GB | Not benchmarked yet |
 | **Total at 32K f16** | **9.4 GB** | **2.9 GB headroom**; prompt 1,055 t/s, generation 41 t/s at depth and 50 t/s short |
-| **Total at 128K q4_0** | **10.2 GB** | 2.1 GB headroom; prompt 673 t/s, generation 22 t/s at depth |
+| **Total at 128K q4_0** | **10.2 GB** | 2.1 GB headroom; prompt 673 t/s, generation 22 t/s at depth (`long`) |
+| **Total at 32K q4_0, PQ2_0 + MTP (`standard`)** | **10.2 GB** | 2.0 GB headroom; prompt 1,055 t/s, generation 60.5 t/s at depth and 84 t/s short |
 
 **KV-cache sizing.** Only the ~25% full-attention layers keep a per-token KV cache. PrismML documents **64 KiB/token at FP16** and **~18 KiB/token with the 4-bit (q4_0) KV cache**. The 4-bit cache needs flash attention and is slightly slower to decode. A one-time, model-specific calibration bias (`llama-kv-mean-center`) recovers most of its quality loss.
 
@@ -140,13 +141,13 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 
 **Planning targets:**
 
-- **Default working context: 32K tokens per sub-agent call, FP16 KV** (best quality, ~2 GiB). This is deliberately small. Short, focused contexts are also the main tool for coping with the model's weak long-horizon behavior.
+- **Default working context: 32K tokens per sub-agent call**, q4_0 KV on PQ2_0 + MTP (ADR-006; f16 KV leaves only 0.66 GB headroom next to the MTP head). This is deliberately small. Short, focused contexts are also the main tool for coping with the model's weak long-horizon behavior.
 - **Extended context: up to 128K with q4_0 KV** for specific jobs (reading a large file set, long research syntheses), requested explicitly by the orchestrator.
 - Never rely on more than that. Long-term knowledge lives in the memory system (Section 5.4).
 
 **Prompt caching on a hybrid model.** Because 75% of the layers carry recurrent state rather than a KV cache, plain prefix reuse needs **context checkpoints**. llama-server is launched with `--ctx-checkpoints N` (e.g. 32), `--cache-ram` (a system-RAM budget for saved prompt state, e.g. 4096 MiB), and `--cache-idle-slots`, and every request sets `cache_prompt: true`. `--cache-reuse` (chunk shifting) is not available for this model. Any change to the leading text or to the order of tools shrinks the reusable prefix, which is why Section 5.5 keeps the system prompt and tool list stable and first.
 
-**Speculative decoding.** The paired dspark drafter gives ~1.8–2x faster decode on CUDA, but in the current fork it **disables cross-request prompt-cache reuse and forces a single slot**. That is a bad trade for the agent loop, which resends a long shared prefix on every call. It is used only by an opt-in `burst` profile for long single-shot generations (for example writing a large new file from a finished spec). Re-test in Phase 0 and on each fork update.
+**Speculative decoding** ([ADR-006](adr/ADR-006-mtp-speculative-decoding.md)). PrismML has not released a drafter for Bonsai 2. `standard` uses a community MTP head embedded in the PQ2_0 file (`--spec-type draft-mtp --spec-draft-n-max 2`): 1.58x faster generation overall, 78% of drafted tokens accepted, prompt processing ~3% slower. Unlike the dspark drafter the design originally assumed, it **keeps prompt-cache reuse** (65x on a 20K prefix) and needs only the single slot Nebula uses anyway. The same head grafted onto PTQ1_0 accepts drafts equally well but gains only 1.09x, because PTQ1_0's small-batch CUDA kernel is slow (PrismML PR #218); re-test when that lands. With MTP above 64K context, `--cache-ram` must be 0 (a 2.7 GB state save crashed the server at 128K).
 
 **Concurrency:** one active sequence at a time by default (a single slot in llama-server). Parallel slots split the KV budget; that is an experiment for Phase 2 (for example, a verifier running alongside an executor).
 
@@ -171,7 +172,7 @@ Tenets are split into **hard rules** (the system enforces them; breaking one is 
 | --- | --- | --- | --- |
 | Toolchains: VS Build Tools (MSVC), Rust, uv, Node, misc. | `F:` | ~18 GB | CUDA toolkit installed only if the fork must be built from source |
 | Page file (moved off `C:`) | `F:` | 4–12 GB | |
-| Active models | `F:` | ~25 GB | Bonsai PTQ1_0 + mmproj + KV bias (6.6 GB), the Gemma 4 fallback (17 GB), embedding model; plus a drafter if one is released. Kept on the NVMe for fast loading (game-mode resume). |
+| Active models | `F:` | ~33 GB | Bonsai PTQ1_0 + mmproj + KV bias (6.6 GB), Bonsai PQ2_0 + MTP head (7.7 GB), the Gemma 4 fallback (17 GB), embedding model. Kept on the NVMe for fast loading (game-mode resume). |
 | Rust build output | `F:` | ~10 GB | Shared `CARGO_TARGET_DIR`, `sccache` capped at 6 GB, weekly `cargo sweep` |
 | Worktrees, package caches, state DB | `F:` | ~8 GB | Finished worktrees pruned automatically |
 | Hot logs (7 days) | `F:` | ~2 GB | |
@@ -225,7 +226,7 @@ When a task needs resources that are not available, the resource manager works d
 
 | Step | Action | Needs approval? |
 | --- | --- | --- |
-| R0 | Unload Nebula's own optional components: vision mmproj, idle browser, idle WSL2, drafter | No |
+| R0 | Unload Nebula's own optional components: vision mmproj, idle browser, idle WSL2 (the MTP head is inside the `standard` weights; to drop it, switch to `lean`) | No |
 | R1 | Shrink the requested context or KV precision (for example FP16 to q4_0 KV); summarize and compact working context | No |
 | R2 | Defer or queue the task until resources free up naturally | No (you are notified) |
 | R3 | Ask you to close or pause specific processes, naming them with measured usage ("Chrome: 1.4 GB VRAM") | **Yes** |
@@ -250,14 +251,13 @@ Rules:
 
 | Profile | Weights | KV | Context | Use |
 | --- | --- | --- | --- | --- |
-| `standard` | PTQ1_0 | FP16 | 32K | Default for every role |
+| `standard` | PQ2_0 + MTP head (speculative decoding, 2 draft tokens) | q4_0 | 32K | Default for every role; ~84 t/s short, ~60 t/s at depth |
 | `long` | PTQ1_0 | q4_0 + bias | 128K | Big reads / synthesis; ~3 min to ingest 120K tokens cold |
 | `vision` | PTQ1_0 + mmproj | FP16 | 24K | Screenshots, UI work |
 | `lean` | PTQ1_0 | q4_0 + bias | 16K | When VRAM is contested |
-| `burst` | PTQ1_0 + dspark drafter | FP16 | 16K | Long single-shot generation; no prompt-cache reuse. **Parked (2026-10-02): no Bonsai 2 drafter has been released yet** (see 5.5.1). |
 | `fallback` | Gemma 4 26B-A4B UD-Q4_K_XL (17.0 GB, MoE; experts in system RAM via `--fit`) on stock llama.cpp | FP16 | 32K | If the fork is broken or unavailable |
 
-Final flags, reasoning effort per role and the prompt-layout rule are in [ADR-004](adr/ADR-004-model-profiles.md) (Accepted 2026-10-02). The `quality` profile was dropped: PQ2_0 showed no gain.
+Final flags, reasoning effort per role and the prompt-layout rule are in [ADR-004](adr/ADR-004-model-profiles.md) (Accepted 2026-10-02). `standard` and the removal of the separate `burst` profile are from [ADR-006](adr/ADR-006-mtp-speculative-decoding.md) (Accepted 2026-10-04): speculation is now part of `standard`. The trade-off: `standard` may score 1–3 of 20 coding tasks lower than PTQ1_0 did, for ~1.6x generation speed.
 
 **Fallback model: Gemma 4 26B-A4B** ([ADR-005](adr/ADR-005-fallback-model.md), Accepted 2026-10-02). It runs on **stock** llama.cpp, which is the point of a fallback. It is a mixture-of-experts model with ~4B active parameters, so `--fit on` keeps attention, the KV cache and some experts on the GPU and the rest in system RAM (~10.5 GB). On Nebula's benchmark it scored 18/20 on the coding tasks with thinking off and 19/20 with thinking on (Bonsai: 19/20 at `medium`), at 27.5 t/s. Tool calls must be schema-constrained (98%; 88% unconstrained). The originally planned 9B models (Ornith 1.0/1.5, DeltaCoder) reached only 12–13/20; Qwen3.6-35B-A3B was a close runner-up and is archived on `D:`.
 
@@ -632,7 +632,7 @@ Bonsai 2 is a **reasoning model**: it thinks before it answers, and the thinking
 | **KV cache types are `f16`, `q8_0` or `q4_0` only** | `q5_0` is several times slower |
 | **Single-user server:** `-np 1` plus a large `--cache-ram` | Several slots split the cache, so long conversations keep re-processing their prompt |
 | **The server is locked down:** a random API key for each launch (passed in the `LLAMA_API_KEY` environment variable, never on the command line), `--cors-origins` set to a dummy origin, and `--no-cors-credentials` | By default llama-server allows **every** CORS origin and has no key, so any web page open in a browser could drive the model on `127.0.0.1`. The supervisor generates the key and is the only client that knows it. |
-| **No speculative decoding for now.** There is no official dspark drafter for Bonsai 2 27B yet; older drafters don't match it, and `--spec-type ngram-*` silently does nothing. | The `burst` profile is parked until PrismML publishes a drafter |
+| **Speculative decoding only through the embedded MTP head** (`standard`, ADR-006). There is no official drafter for Bonsai 2 27B; a separate MTP file is a net loss (duplicate vocabulary), and `--spec-type ngram-*` silently does nothing. If the MTP context fails to load after a fork update, the supervisor restarts `standard` with `--spec-type none`. | Keeps the 1.58x speedup without depending on it to run |
 
 ### 5.6 Reliable Tool Calling on a Small Model
 
@@ -1385,7 +1385,7 @@ A: One of them is a upgraded version of a tool I currently have made called Smar
 | 2 | All Nebula data lives on the `F:` NVMe drive. Space needed: see question 16. | 2.1, 4.4 |
 | 3 | Gaming can overlap with Nebula. A **game mode** pauses tasks and unloads the model when a game is detected, then resumes afterwards. Games are never closed. | 2.6 |
 | 4 | SearXNG runs **natively in WSL2** as a systemd service, with no Docker. | 2.4, 3.3, 8.2 |
-| 5 | Researched. **Prompt caching: yes**, through context checkpoints (`--ctx-checkpoints`, `--cache-ram`, `cache_prompt`). **Speculative decoding: yes on CUDA (~1.8–2x)**, but it currently disables prompt-cache reuse, so it is limited to an opt-in `burst` profile. The 4-bit KV cache (~18 KiB/token) makes 128K context practical. | 2.2, 2.3, 2.6 |
+| 5 | Researched. **Prompt caching: yes**, through context checkpoints (`--ctx-checkpoints`, `--cache-ram`, `cache_prompt`). **Speculative decoding: yes on CUDA.** No PrismML drafter exists for Bonsai 2, but a community MTP head gives 1.58x with prompt-cache reuse intact, so it is part of `standard` (ADR-006). The 4-bit KV cache (~18 KiB/token) makes 128K context practical. | 2.2, 2.3, 2.6 |
 | 6 | Fallback model: **Gemma 4 26B-A4B** (MoE, experts in system RAM) on stock llama.cpp, chosen on Nebula's Phase 0 benchmark (ADR-005). Qwen3.6-35B-A3B is the runner-up. | 2.6 |
 | 7 | LoRA fine-tuning is a planned research track (Phase 5+). Feasibility limits: see question 23. | 14.3 |
 | 8 | Your three examples become the benchmark's three **task families**: multi-file feature + tests, bug diagnosis + regression fix, and refactor with the test suite kept green. Repos chosen in round 2 (question 20). | 11.4 |

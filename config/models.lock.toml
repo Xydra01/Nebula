@@ -9,7 +9,7 @@ runtime = "llama-prism"
 [bonsai2-27b.files."Ternary-Bonsai-2-27B-PTQ1_0.gguf"]
 sha256 = "53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3"
 bytes = 5946648928
-role = "long, lean and vision profiles (ADR-004; standard moves to PQ2_0+MTP if ADR-006 is accepted)"
+role = "long, lean and vision profiles (ADR-004, ADR-006)"
 
 [bonsai2-27b.files."Ternary-Bonsai-2-27B-PQ2_0.gguf"]
 sha256 = "3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1"
@@ -32,7 +32,7 @@ runtime = "llama-prism"
 [bonsai2-27b-mtp.files."Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf"]
 sha256 = "3cb3f0056d2e34ee44245a64396004a21f8492573d6ce1266ec4b7222c131dd4"
 bytes = 7657489728
-role = "standard profile (ADR-006, proposed): unchanged PQ2_0 base + Q8_0 MTP layer"
+role = "standard profile (ADR-006): unchanged PQ2_0 base + Q8_0 MTP layer"
 
 # Built locally by bench/nebula_bench/graft_mtp.py (PTQ1_0 base + the head above). Not on Hugging Face.
 [bonsai2-27b-mtp.files."Ternary-Bonsai-2-27B-PTQ1_0-MTP-Q8_0.gguf"]
