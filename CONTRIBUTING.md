@@ -50,15 +50,14 @@ This lets `git log --grep "Nebula-Task"` and GitHub's co-author display show exa
 
 ## Checks to run locally
 
-These are the checks CI will require once the Rust workspace lands (PHASE0_PLAN task 2.7):
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs these on every PR; the required check is **CI ok**. The Rust checks are skipped until the workspace has a `Cargo.toml`.
 
 ```powershell
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo nextest run --workspace
 gitleaks git --redact
-uv run ruff check bench
-uv run pytest bench
+cd bench; uv run ruff check .; uv run ruff format --check .; uv run pytest -q; cd ..
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo nextest run --workspace --locked
 ```
 
 Tests that need the GPU or the real model are marked `#[ignore]` (tagged `gpu`) and run only locally, with `cargo nextest run --run-ignored all`. CI runners have no GPU, and the project deliberately does not use a self-hosted runner.
