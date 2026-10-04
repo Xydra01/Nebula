@@ -433,7 +433,7 @@ flowchart TD
 - *Requests*: `task.create`, `task.cancel`, `approval.respond`, `config.set`, and so on.
 - *Event stream*: token streaming, step status, tool calls, approval requests, resource snapshots and logs.
 
-Messages are versioned (`proto_version`) so the TUI and daemon can be upgraded independently.
+Messages are versioned (`proto_version`) so the TUI and daemon can be upgraded independently. Framing, error codes and versioning rules: [ADR-007](adr/ADR-007-ipc-framing.md).
 
 **Orchestrator (`nebula-orchestrator`).** Runs the planner/executor/verifier loop (Section 5), owns the task graph, schedules steps, handles retries and escalation, and writes every state transition to the ledger.
 

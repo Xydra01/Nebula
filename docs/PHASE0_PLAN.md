@@ -488,7 +488,7 @@ From the laptop over Tailscale: `ssh desktop`, then `nebula daemon status`, `neb
    - Section 2.6: final profile table from ADR-004
    - Section 5.5: prompt-layout rules from B3
    - Section 2.2: the PTQ1_0 versus PQ2_0 verdict
-2. **ADRs merged:** ADR-004 (model profiles), ADR-005 (fallback model), and **ADR-006 (IPC framing: NDJSON JSON-RPC over the named pipe)**.
+2. **ADRs merged:** ADR-004 (model profiles), ADR-005 (fallback model), and **ADR-007 (IPC framing: NDJSON JSON-RPC over the named pipe)**. It was planned as ADR-006, but that number went to MTP speculative decoding.
 3. `docs/ops/`: `setup.md` (a reproducible machine setup checklist, which future Nebula will read), `backup.md`, `runtime-upgrade.md` (how to move to a new fork release and re-run benchmarks), `retire-c-drive.md` (the step-by-step boot-loader move and disconnect procedure from Section 3.1), and `replace-nvme.md` (moving Windows + Nebula to a new NVMe: clone or reinstall, restore the latest backup, update `config.toml` paths, move the boot loader).
 4. **Phase 1 backlog** as GitHub issues, each with acceptance criteria. Seed list: MCP tool host, built-in fs/git/shell tools, permission tiers and classifier, worktrees, Job Objects for tools, TUI, executor loop, Python/Rust adapters, circuit breakers, game mode, `Nebula-dev-bot` PR flow, ntfy, auto-start.
 5. **Exit review** (Section 9): go through the checklist and tag `v0.0.1-phase0`.
@@ -518,22 +518,22 @@ Phase 0 is done when **every** box is checked:
 - [x] Unused model files deleted (archived to `D:\NebulaCold\models-archive\` instead); `models.lock.toml` and `runtime.lock.toml` match what's on disk
 
 **Core**
-- [ ] `nebula chat` streams through the daemon, and every model call produces a `model.call` log event with a trace ID, timings and blob references
-- [ ] Killing `llama-server` by hand produces an automatic restart within the backoff schedule, logged, and the next chat works
-- [ ] Killing the daemon leaves **no** orphaned `llama-server` (Job Object)
-- [ ] Profile switch `standard` → `long` → `standard` works and is logged
-- [ ] `nebula resources` shows VRAM use by process (via NVML or the PDH fallback)
-- [ ] `nebula doctor` reports all checks in Section 7.2 correctly, including a deliberately triggered warning
-- [ ] Test coverage: proto golden fixtures, telemetry, the model streaming/restart tests against the fake server, and daemon IPC tests, all passing in CI; GPU tests pass locally
+- [x] `nebula chat` streams through the daemon, and every model call produces a `model.call` log event with a trace ID, timings and blob references
+- [x] Killing `llama-server` by hand produces an automatic restart within the backoff schedule, logged, and the next chat works
+- [x] Killing the daemon leaves **no** orphaned `llama-server` (Job Object)
+- [x] Profile switch `standard` → `long` → `standard` works and is logged
+- [x] `nebula resources` shows VRAM use by process (via NVML or the PDH fallback)
+- [x] `nebula doctor` reports all checks in Section 7.2 correctly, including a deliberately triggered warning
+- [x] Test coverage: proto golden fixtures, telemetry, the model streaming/restart tests against the fake server, and daemon IPC tests, all passing in CI; GPU tests pass locally
 
 **Ops**
 - [ ] Scheduled encrypted backups (6-hourly + nightly) have run for at least 2 days, with local copies on `D:`, and one test restore succeeded
-- [ ] SMART JSON exists for all drives and `doctor` shows the trend
-- [ ] Every delete path in Phase 0 code (backup retention, model cleanup) asks before deleting more than 1 GB or 500 files. The log archive's 8 GB cap is exempt and prunes automatically.
+- [x] SMART JSON exists for all drives and `doctor` shows the trend
+- [x] Every delete path in Phase 0 code (backup retention, model cleanup) asks before deleting more than 1 GB or 500 files. The log archive's 8 GB cap is exempt and prunes automatically.
 - [ ] The crypt passwords are stored offline
 
 **Docs**
-- [ ] `docs/ops/*`, ADR-004–006 and an updated design doc are merged
+- [ ] `docs/ops/*`, ADR-004–007 and an updated design doc are merged
 - [ ] The Phase 1 backlog exists as issues; tag `v0.0.1-phase0` pushed
 
 ---
