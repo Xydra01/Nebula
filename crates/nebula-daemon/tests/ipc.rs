@@ -408,6 +408,17 @@ async fn cancel_stops_a_running_chat() {
     h.daemon.shutdown().await;
 }
 
+/// The next response, skipping events (model state changes reach every client).
+async fn next_response(c: &mut Client) -> nebula_proto::Response {
+    loop {
+        match c.read_message().await.unwrap() {
+            Message::Response(r) => return r,
+            Message::Notification(_) => {}
+            Message::Request(r) => panic!("not a response: {r:?}"),
+        }
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bad_lines_get_error_responses() {
     let h = start();
@@ -417,9 +428,7 @@ async fn bad_lines_get_error_responses() {
     )
     .await
     .unwrap();
-    let Message::Response(r) = c.read_message().await.unwrap() else {
-        panic!("not a response")
-    };
+    let r = next_response(&mut c).await;
     assert_eq!(r.id, 7.into());
     let err = r.into_result::<Empty>().unwrap_err();
     assert_eq!(
@@ -428,9 +437,7 @@ async fn bad_lines_get_error_responses() {
     );
 
     c.send_line("not json").await.unwrap();
-    let Message::Response(r) = c.read_message().await.unwrap() else {
-        panic!("not a response")
-    };
+    let r = next_response(&mut c).await;
     assert_eq!(
         ClientError::from(r.into_result::<Empty>().unwrap_err()).rpc_code(),
         Some(error_code::PARSE_ERROR)
@@ -439,9 +446,7 @@ async fn bad_lines_get_error_responses() {
     c.send_line(r#"{"jsonrpc":"2.0","id":"x","proto_version":1,"method":"nope","params":{}}"#)
         .await
         .unwrap();
-    let Message::Response(r) = c.read_message().await.unwrap() else {
-        panic!("not a response")
-    };
+    let r = next_response(&mut c).await;
     assert_eq!(r.id, nebula_proto::RequestId::Str("x".into()));
     assert_eq!(
         ClientError::from(r.into_result::<Empty>().unwrap_err()).rpc_code(),
@@ -485,7 +490,13 @@ async fn shutdown_request_stops_everything() {
         h.launcher.current().unwrap().exited(),
         "model server still running"
     );
-    assert!(matches!(c.read_message().await, Err(ClientError::Closed)));
+    let end = loop {
+        match c.read_message().await {
+            Ok(Message::Notification(_)) => {}
+            other => break other,
+        }
+    };
+    assert!(matches!(end, Err(ClientError::Closed)), "{end:?}");
     let err = Client::connect(&h.pipe, Duration::from_millis(200))
         .await
         .err()
