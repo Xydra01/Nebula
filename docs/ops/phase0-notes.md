@@ -118,3 +118,11 @@ Results in [bench/results/2026-10-03/](../../bench/results/2026-10-03/report.md)
 - **Graft:** the stock `gguf` Python package rejects PrismML quant types (PTQ1_0 is type 143), so `nebula_bench/gguf_header.py` parses headers directly and `nebula_bench/graft_mtp.py` appends the head to the PTQ1_0 file. The grafted file loads and drafts at the same acceptance as on PQ2_0 but is only 1.09x faster; it was moved to `D:\NebulaCold\models-archive\bonsai2-27b-mtp\` with its hash re-checked.
 - **Known issue:** with MTP at 128K, llama-server crashed while saving a 2.7 GB slot state to the host-RAM prompt cache (`--cache-ram 4096`). `--cache-ram 0` avoids it; a 20K-token save works.
 - PrismML's newer `prism-b10754-2459f68` (2026-10-02) was not tested; everything ran on `b10743`.
+
+## 2026-10-04: 3.5, embedding model
+
+Results in [bench/results/2026-10-04/](../../bench/results/2026-10-04/report.md).
+
+- **Model:** `Qwen/Qwen3-Embedding-0.6B-GGUF` Q8_0 (639 MB) into `F:\Nebula\models\embedding\`, hash recorded in `config/models.lock.toml`. Runs on stock llama.cpp `b11342` with `--device none`, so the CUDA build never touches the GPU.
+- **Batch size drives RAM:** the first profile (`-ub 4096`, 8K context, 2 slots) used 3.8–5.0 GB of RAM for the same ~240 tokens/s as `-ub 1024`. The profile now caps inputs at 1024 tokens (1.2–1.8 GB). The design's RAM row was raised from 0.5–1.5 GB to 1.8–2.4 GB, counting the memory-mapped weights.
+- **Phase 2 notes:** code-index chunks must stay under ~1000 tokens; longer inputs get HTTP 400. Queries need the `Instruct: ...\nQuery:` prefix and documents must not have it. The first full index of a large repo takes hours at ~250 tokens/s, so it runs in the background.

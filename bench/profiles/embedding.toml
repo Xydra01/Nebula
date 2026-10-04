@@ -1,0 +1,24 @@
+# Embedding server (PHASE0_PLAN 3.5): CPU only, so it never competes with the chat model for VRAM.
+# Qwen3-Embedding needs last-token pooling; queries (not documents) get an "Instruct: ...\nQuery:" prefix.
+name = "embedding"
+runtime = "llama-stock"
+model = 'F:\Nebula\models\embedding\Qwen3-Embedding-0.6B-Q8_0.gguf'
+# The CPU compute buffer grows ~0.6 MiB per batch token and speed is flat (~240 tok/s) from 1024 to
+# 4096, so inputs are capped at 1024 tokens; callers chunk to fit. Larger inputs get an HTTP error.
+ctx = 1024
+kv_type = "f16"
+reasoning_style = "effort"
+flags = [
+    "--embedding",
+    "--pooling", "last",
+    "--device", "none",
+    "-ngl", "0",
+    "-t", "8",
+    "-np", "1",
+    "-b", "1024",
+    "-ub", "1024",
+    "-fa", "on",
+    "-lv", "4",
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+]

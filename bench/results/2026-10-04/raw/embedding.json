@@ -1,0 +1,207 @@
+{
+  "run_date": "2026-10-04",
+  "model": "F:\\Nebula\\models\\embedding\\Qwen3-Embedding-0.6B-Q8_0.gguf",
+  "flags": [
+    "--embedding",
+    "--pooling",
+    "last",
+    "--device",
+    "none",
+    "-ngl",
+    "0",
+    "-t",
+    "8",
+    "-np",
+    "1",
+    "-b",
+    "1024",
+    "-ub",
+    "1024",
+    "-fa",
+    "on",
+    "-lv",
+    "4",
+    "--cors-origins",
+    "http://nebula.invalid",
+    "--no-cors-credentials"
+  ],
+  "check": {
+    "load_seconds": 1.31,
+    "vram_delta_mib": 136,
+    "ram_private_mib_idle": 1212,
+    "index": {
+      "chunks": 90,
+      "tokens": 16670,
+      "seconds": 67.8,
+      "tokens_per_second": 245.9,
+      "dims": 1024
+    },
+    "ram_private_mib_after_index": 1781,
+    "retrieval": {
+      "queries": 10,
+      "top1": 8,
+      "top5": 10,
+      "ms_per_query": 156.2,
+      "hits": [
+        {
+          "query": "start llama-server as a child process and wait until its health endpoint answers",
+          "want": "Server._wait_healthy",
+          "rank": 2,
+          "top5": [
+            "Server.__enter__",
+            "Server._wait_healthy",
+            "check_chat",
+            "Server.__init__",
+            "chat"
+          ]
+        },
+        {
+          "query": "pick an unused TCP port on localhost",
+          "want": "free_port",
+          "rank": 1,
+          "top5": [
+            "free_port",
+            "hard_needles",
+            "contention",
+            "Profile.args",
+            "Server.__init__"
+          ]
+        },
+        {
+          "query": "read the key-value metadata and tensor table from a GGUF file",
+          "want": "read_header",
+          "rank": 1,
+          "top5": [
+            "read_header",
+            "_read_value",
+            "_tensor_info",
+            "_verify",
+            "throughput"
+          ]
+        },
+        {
+          "query": "copy the MTP head tensors from one model file into another model file",
+          "want": "graft",
+          "rank": 1,
+          "top5": [
+            "graft",
+            "_verify",
+            "model_buffer_mib",
+            "run_config",
+            "throughput"
+          ]
+        },
+        {
+          "query": "ask nvidia-smi how much GPU memory is in use",
+          "want": "vram_used_mib",
+          "rank": 1,
+          "top5": [
+            "vram_used_mib",
+            "shared_gpu_mib",
+            "process_ram_mib",
+            "fits",
+            "throughput"
+          ]
+        },
+        {
+          "query": "count how many tokens a string is",
+          "want": "count_tokens",
+          "rank": 2,
+          "top5": [
+            "token_count",
+            "count_tokens",
+            "build_prompt",
+            "haystack",
+            "_truncate"
+          ]
+        },
+        {
+          "query": "private memory of a process in MiB using PowerShell",
+          "want": "process_ram_mib",
+          "rank": 1,
+          "top5": [
+            "process_ram_mib",
+            "shared_gpu_mib",
+            "vram_used_mib",
+            "model_buffer_mib",
+            "throughput"
+          ]
+        },
+        {
+          "query": "send a chat completion request with a reasoning effort setting",
+          "want": "chat",
+          "rank": 1,
+          "top5": [
+            "chat",
+            "complete_raw",
+            "check_reasoning",
+            "check_chat",
+            "prompt_cache"
+          ]
+        },
+        {
+          "query": "spilled VRAM that went into shared system memory",
+          "want": "shared_gpu_mib",
+          "rank": 1,
+          "top5": [
+            "shared_gpu_mib",
+            "vram_used_mib",
+            "long_no_cache_ram",
+            "process_ram_mib",
+            "throughput"
+          ]
+        },
+        {
+          "query": "load a server profile from a TOML file",
+          "want": "Profile.load",
+          "rank": 1,
+          "top5": [
+            "Profile.load",
+            "Server.__enter__",
+            "bonsai",
+            "Server.__init__",
+            "reload_time"
+          ]
+        }
+      ]
+    },
+    "max_input": {
+      "tokens": 968,
+      "seconds": 4.28
+    },
+    "oversize_input": "rejected: HTTP 400: {\"error\":{\"code\":400,\"message\":\"request (1532 tokens) exceeds the available context size (1024 tokens), try increasing it\",\"type\":\"exceed_context_size_error\",\"n_prompt_tokens\":1532,\"n_ctx\":1",
+    "alive_after_oversize": true,
+    "log_buffers": [
+      "0.00.747.648 I load_tensors:   CPU_Mapped model buffer size =   603.87 MiB",
+      "0.00.751.911 I llama_context:        CPU  output buffer size =     0.58 MiB",
+      "0.00.751.995 I llama_kv_cache:        CPU KV buffer size =   112.00 MiB",
+      "0.00.770.211 I sched_reserve:        CPU compute buffer size =   618.48 MiB"
+    ]
+  },
+  "contention_t8": {
+    "alone_tps": [
+      72.8,
+      70.4,
+      70.7
+    ],
+    "with_embedding_tps": [
+      69.2,
+      69.3,
+      69.4
+    ],
+    "chunks_embedded_meanwhile": 48
+  },
+  "contention_t4": {
+    "alone_tps": [
+      70.0,
+      69.9,
+      69.8
+    ],
+    "with_embedding_tps": [
+      69.2,
+      68.6,
+      69.0
+    ],
+    "chunks_embedded_meanwhile": 32
+  }
+}
