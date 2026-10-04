@@ -4,7 +4,7 @@ Nebula is built by one human owner (@Xydra01) and, increasingly, by Nebula itsel
 
 ## Setup
 
-1. Install the toolchain listed in [PHASE0_PLAN.md](docs/PHASE0_PLAN.md) WS1 (Rust stable/MSVC, uv, gitleaks, Node LTS).
+1. Install the toolchain as in [docs/ops/setup.md](docs/ops/setup.md) Section 2 (Rust stable/MSVC, cargo-nextest, uv, gitleaks). AI agents should also read [AGENTS.md](AGENTS.md).
 2. Install the git hooks once per clone:
 
    ```powershell
@@ -60,7 +60,7 @@ This lets `git log --grep "Nebula-Task"` and GitHub's co-author display show exa
 
 ## Checks to run locally
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs these on every PR; the required check is **CI ok**. The Rust checks are skipped until the workspace has a `Cargo.toml`.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs these on every PR; the required check is **CI ok**.
 
 ```powershell
 gitleaks git --redact
