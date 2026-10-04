@@ -45,7 +45,8 @@ try {
 
 $headers = @{ Authorization = "Bearer $token"; 'X-GitHub-Api-Version' = '2022-11-28' }
 $payload = @{ title = $Title; body = $Body; head = $branch; base = $Base } | ConvertTo-Json
+# Windows PowerShell 5.1 encodes a string -Body as ISO-8859-1, which breaks non-ASCII text.
 $pr = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$Repo/pulls" -Headers $headers `
-    -Body $payload -ContentType 'application/json'
+    -Body ([Text.Encoding]::UTF8.GetBytes($payload)) -ContentType 'application/json; charset=utf-8'
 $token = $null
 Write-Host "PR #$($pr.number) opened by $($pr.user.login): $($pr.html_url)"
