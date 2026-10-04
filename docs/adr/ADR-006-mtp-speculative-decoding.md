@@ -1,6 +1,6 @@
 # ADR-006: MTP speculative decoding for the `standard` profile
 
-**Status:** Proposed
+**Status:** Accepted (2026-10-04)
 
 ## Context
 
@@ -48,4 +48,4 @@ B4 measured it on the RTX 4070 with the same harness and sampling presets as ADR
 - Switching between `standard` and `long`/`lean`/`vision` now changes the weight file. Profile switches already restart llama-server (~5 s), so the cost is the same.
 - `standard` depends on a community artifact pinned by SHA-256 in `config/models.lock.toml`. If a future PrismML release stops loading its MTP layer, the supervisor restarts `standard` with `--spec-type none` (PQ2_0 at ~46 t/s) and `doctor` reports it.
 - Keep `--cache-ram 4096` for `standard` (the 20K-token save works). Any profile that combines MTP with more than 64K context must use `--cache-ram 0` until the crash is understood.
-- Design doc Sections 2.3 and 2.6 and the disk budget change when this ADR is accepted.
+- Design doc Sections 2.2, 2.3, 2.6 and 5.5.1 and the disk budget were updated on acceptance.
