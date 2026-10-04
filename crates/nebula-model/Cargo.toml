@@ -1,0 +1,39 @@
+[package]
+name = "nebula-model"
+description = "Model backends (llama-server) and the supervisor that keeps them running"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+eventsource-stream.workspace = true
+futures-util.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+nebula-proto.workspace = true
+nebula-telemetry.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros", "process", "io-util", "net"] }
+tokio-util.workspace = true
+tracing.workspace = true
+ulid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[dev-dependencies]
+axum.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["full", "test-util"] }
+toml.workspace = true
+
+[lints]
+workspace = true

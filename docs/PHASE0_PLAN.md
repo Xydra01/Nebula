@@ -357,6 +357,14 @@ flags     = ["-ngl", "99", "-fa", "on", "-np", "1",
 - A **fake llama-server** (a small `axum` app in `tests/`) that streams canned SSE, can be told to crash or hang, and records the requests it receives. This covers the streaming parser, tool-call parsing, restart/backoff and profile switching, all CPU-only in CI.
 - GPU-gated integration tests against the real server: chat, `json_schema`, tool call, and the restart-after-kill test.
 
+**As built (WS4):**
+- The supervisor starts servers through a `Launcher` trait. `ProcessLauncher` is the real one (Job Object, `CREATE_NO_WINDOW`, stdout/stderr ring buffer). The tests use a launcher that runs the fake server in-process, so crash, hang and switch tests need no extra binary.
+- `ModelManager::pid()` exposes the server PID for per-process GPU/RAM accounting in `nebula-resources`.
+- The chat model and the CPU embedding server are two `ModelManager`s. `config/default.toml` has the `standard`, `long`, `lean` and `embedding` profiles. `vision` waits until `--mmproj` is benchmarked.
+- `LLAMA_API_KEY` is 32 random bytes per launch, passed by environment.
+- GPU tests: `standard` chat plus restart-after-kill, and the embedding server (`cargo nextest run -p nebula-model --run-ignored only`). The `json_schema` and tool-call GPU tests come with the daemon's chat path.
+- Not yet done: the commit-charge preflight before a load (needs `nebula-resources`), and ADR-006's automatic `--spec-type none` fallback.
+
 ### 6.5 `nebula-resources` (5–6 h)
 
 - **GPU:** `nvml-wrapper` for total/used/free VRAM, utilization, temperature, clocks and power.

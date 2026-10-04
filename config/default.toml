@@ -1,0 +1,146 @@
+# Nebula daemon defaults. Model profiles come from ADR-004 and ADR-006; `standard` matches
+# bench/profiles/pq2mtp.toml. A test in nebula-model checks that this file parses and that the
+# `standard` launch arguments match the benchmarked ones.
+
+[model]
+default_profile = "standard"
+
+[model.runtimes]
+llama-prism = 'F:\Nebula\runtime\llama-prism\b10743-adfffbe\llama-server.exe'
+llama-stock = 'F:\Nebula\runtime\llama-stock\b11342\llama-server.exe'
+
+# PQ2_0 + MTP head, q4_0 KV at 32K (ADR-006).
+[model.profiles.standard]
+runtime = "llama-prism"
+model = 'F:\Nebula\models\bonsai2-27b-mtp\Ternary-Bonsai-2-27B-PQ2_0-MTP-Q8_0.gguf'
+ctx = 32768
+kv_type = "q4_0"
+flags = [
+    "-ngl", "99",
+    "-fa", "on",
+    "-np", "1",
+    "--jinja",
+    "--reasoning", "auto",
+    "--ctx-checkpoints", "32",
+    "--cache-ram", "4096",
+    "--cache-idle-slots",
+    "--spec-type", "draft-mtp",
+    "--spec-draft-n-max", "2",
+    # The default allows every origin, so any web page could drive the local server.
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+    "-lv", "4",
+]
+
+[model.profiles.standard.sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.05
+presence_penalty = 0.0
+repeat_penalty = 1.0
+
+[model.profiles.standard.sampling.instruct]
+temperature = 0.7
+top_p = 0.80
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
+repeat_penalty = 1.0
+
+# PTQ1_0, q4_0 KV + bias at 128K (ADR-004). Expect ~3 min to ingest 120K tokens cold.
+[model.profiles.long]
+runtime = "llama-prism"
+model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
+ctx = 131072
+kv_type = "q4_0"
+kv_bias = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0-kv-bias.gguf'
+flags = [
+    "-ngl", "99",
+    "-fa", "on",
+    "-np", "1",
+    "--jinja",
+    "--reasoning", "auto",
+    "--ctx-checkpoints", "32",
+    "--cache-ram", "4096",
+    "--cache-idle-slots",
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+    "-lv", "4",
+]
+
+[model.profiles.long.sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.05
+presence_penalty = 0.0
+repeat_penalty = 1.0
+
+[model.profiles.long.sampling.instruct]
+temperature = 0.7
+top_p = 0.80
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
+repeat_penalty = 1.0
+
+# PTQ1_0, q4_0 KV + bias at 16K, for contested VRAM (ADR-004).
+[model.profiles.lean]
+runtime = "llama-prism"
+model = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0.gguf'
+ctx = 16384
+kv_type = "q4_0"
+kv_bias = 'F:\Nebula\models\bonsai2-27b\Ternary-Bonsai-2-27B-PTQ1_0-kv-bias.gguf'
+flags = [
+    "-ngl", "99",
+    "-fa", "on",
+    "-np", "1",
+    "--jinja",
+    "--reasoning", "auto",
+    "--ctx-checkpoints", "32",
+    "--cache-ram", "4096",
+    "--cache-idle-slots",
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+    "-lv", "4",
+]
+
+[model.profiles.lean.sampling.thinking]
+temperature = 1.0
+top_p = 0.95
+top_k = 20
+min_p = 0.05
+presence_penalty = 0.0
+repeat_penalty = 1.0
+
+[model.profiles.lean.sampling.instruct]
+temperature = 0.7
+top_p = 0.80
+top_k = 20
+min_p = 0.0
+presence_penalty = 1.5
+repeat_penalty = 1.0
+
+# CPU-only embedding server (PHASE0_PLAN 3.5, bench/profiles/embedding.toml). Runs as its own
+# supervised server next to the chat model; inputs are capped at 1024 tokens.
+[model.profiles.embedding]
+runtime = "llama-stock"
+model = 'F:\Nebula\models\embedding\Qwen3-Embedding-0.6B-Q8_0.gguf'
+ctx = 1024
+kv_type = "f16"
+embedding = true
+flags = [
+    "--embedding",
+    "--pooling", "last",
+    "--device", "none",
+    "-ngl", "0",
+    "-t", "8",
+    "-np", "1",
+    "-b", "1024",
+    "-ub", "1024",
+    "-fa", "on",
+    "-lv", "4",
+    "--cors-origins", "http://nebula.invalid",
+    "--no-cors-credentials",
+]
