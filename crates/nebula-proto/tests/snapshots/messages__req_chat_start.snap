@@ -1,0 +1,34 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 3,
+  "jsonrpc": "2.0",
+  "method": "chat.start",
+  "params": {
+    "max_tokens": 256,
+    "messages": [
+      {
+        "content": "You are Nebula.",
+        "role": "system"
+      },
+      {
+        "content": "What is 17 * 23?",
+        "role": "user"
+      }
+    ],
+    "profile": "standard",
+    "reasoning": "none",
+    "response_schema": {
+      "properties": {
+        "n": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "proto_version": 1,
+  "trace_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EF"
+}

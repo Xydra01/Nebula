@@ -48,6 +48,16 @@ This lets `git log --grep "Nebula-Task"` and GitHub's co-author display show exa
 - **Merging:** use merge or squash. Rebase-merge is disabled.
 - **Self-modification:** PRs that touch the protected set (core crates, policy, permission tiers, the benchmark harness) are always human-reviewed and never auto-merged, whatever the repo's `trust_level`. See the design doc, Section 11.
 
+## Rust conventions
+
+- The workspace is in `crates/`, with shared lints in the root `Cargo.toml` and the toolchain pinned in `rust-toolchain.toml`.
+- Errors: `thiserror` in libraries, `anyhow` only in the binaries (`nebula-daemon`, `nebula-cli`).
+- No `unwrap()`, `expect()` or `panic!` outside tests (clippy `deny`). Integration-test files opt out at the top with `#![allow(clippy::unwrap_used)]`.
+- Every public function that does I/O gets a `tracing` span.
+- Config is read once into typed `serde` structs with `deny_unknown_fields`, so typos fail loudly.
+- Public items have doc comments (`missing_docs` warns).
+- Wire-format changes show up as `insta` snapshot diffs in `crates/nebula-proto/tests/snapshots/`. Review them. If a change is incompatible, bump `PROTO_VERSION`. To accept intended changes locally, run with `INSTA_UPDATE=always`. CI never writes snapshots.
+
 ## Checks to run locally
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs these on every PR; the required check is **CI ok**. The Rust checks are skipped until the workspace has a `Cargo.toml`.

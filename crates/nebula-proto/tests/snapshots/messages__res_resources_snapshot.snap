@@ -1,0 +1,39 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 7,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {
+    "commit_limit_mib": 65400,
+    "commit_used_mib": 44400,
+    "cpu_pct": 12.5,
+    "disks": [
+      {
+        "free_bytes": 69000000000,
+        "mount": "F:\\",
+        "total_bytes": 1000000000000
+      },
+      {
+        "free_bytes": 172000000000,
+        "mount": "D:\\",
+        "total_bytes": 1000000000000
+      }
+    ],
+    "gpu_processes": [
+      {
+        "name": "llama-server.exe",
+        "pid": 4242,
+        "vram_mib": 8700
+      }
+    ],
+    "gpu_util_pct": 97,
+    "ram_total_mib": 32683,
+    "ram_used_mib": 19800,
+    "taken_at": "2026-10-04T07:00:02Z",
+    "vram_total_mib": 12282,
+    "vram_used_mib": 10257
+  }
+}

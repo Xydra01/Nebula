@@ -1,0 +1,15 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "model.state_changed",
+  "params": {
+    "from": "ready",
+    "profile": "standard",
+    "reason": "health check timed out",
+    "to": "restarting"
+  },
+  "proto_version": 1
+}

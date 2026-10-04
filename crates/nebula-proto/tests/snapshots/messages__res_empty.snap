@@ -1,0 +1,10 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 2,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {}
+}

@@ -1,0 +1,16 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 5,
+  "jsonrpc": "2.0",
+  "proto_version": 1,
+  "result": {
+    "last_error": "llama-server exited with code 3221225477",
+    "profile": "standard",
+    "restarts": 5,
+    "since": "2026-10-04T07:00:00Z",
+    "state": "failed"
+  }
+}

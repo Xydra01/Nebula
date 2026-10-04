@@ -1,0 +1,14 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "chat.error",
+  "params": {
+    "chat_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EH",
+    "code": -32003,
+    "message": "cancelled by client"
+  },
+  "proto_version": 1
+}
