@@ -1064,6 +1064,7 @@ dependencies = [
  "nebula-model",
  "nebula-proto",
  "nebula-resources",
+ "nebula-sandbox",
  "nebula-telemetry",
  "nebula-tools",
  "regex",
@@ -1140,6 +1141,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "nebula-sandbox"
+version = "0.0.1"
+dependencies = [
+ "proptest",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "nebula-telemetry"
 version = "0.0.1"
 dependencies = [
@@ -1165,6 +1179,7 @@ dependencies = [
  "async-trait",
  "jsonschema",
  "nebula-proto",
+ "nebula-sandbox",
  "nebula-telemetry",
  "nebula-tools",
  "proptest",

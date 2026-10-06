@@ -139,7 +139,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
     // owned (`register_builtin` takes `&mut self`) and the sampler exists, so the built-in
     // `ResourceProvider` reads the same source as `resources.snapshot` (Requirement 6.4).
     let mut tool_host = deps.tool_host;
-    builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref());
+    builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref())?;
 
     let blobs = deps.telemetry.blobs().cloned();
     let chat = ModelManager::spawn_with(

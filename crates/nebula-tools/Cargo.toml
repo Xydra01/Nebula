@@ -16,6 +16,7 @@ test-support = []
 async-trait.workspace = true
 jsonschema.workspace = true
 nebula-proto.workspace = true
+nebula-sandbox.workspace = true
 nebula-telemetry.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -28,6 +29,9 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", 
 
 [dev-dependencies]
 nebula-tools = { path = ".", features = ["test-support"] }
+# Enable the sandbox `test-util` feature for test builds so the re-exported `Approval::new()`
+# (test-only) is available to the issue #27 `shell.run` tests without touching their code (Req 8.6).
+nebula-sandbox = { workspace = true, features = ["test-util"] }
 proptest.workspace = true
 tempfile.workspace = true
 toml.workspace = true

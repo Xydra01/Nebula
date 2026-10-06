@@ -19,6 +19,7 @@ nebula-config.workspace = true
 nebula-model.workspace = true
 nebula-proto.workspace = true
 nebula-resources.workspace = true
+nebula-sandbox.workspace = true
 nebula-telemetry.workspace = true
 nebula-tools.workspace = true
 regex.workspace = true

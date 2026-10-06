@@ -20,6 +20,7 @@ fn defaults_load_and_validate() {
         cfg.model.profile("standard").unwrap().commit_estimate_mib,
         Some(10700)
     );
+    assert_eq!(cfg.sandbox.rules_table_path, "");
     assert!(cfg.paths_on_retired_drive().is_empty());
 }
 
@@ -49,6 +50,27 @@ fn override_merges_tables_and_replaces_values() {
 fn unknown_keys_are_rejected() {
     let err = NebulaConfig::from_toml(Some("[daemon]\npipe_nmae = 'x'\n")).unwrap_err();
     assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}
+
+#[test]
+fn unknown_sandbox_key_is_rejected() {
+    // `SandboxConfig` is `#[serde(deny_unknown_fields)]`, so an unknown key under `[sandbox]`
+    // trips the parse rather than being silently ignored (Req 1.1, config convention).
+    let err = NebulaConfig::from_toml(Some("[sandbox]\nbogus_key = true\n")).unwrap_err();
+    assert!(matches!(&err, ConfigError::Parse { .. }), "{err}");
+}
+
+#[test]
+fn sandbox_rules_table_path_override_round_trips() {
+    // A non-empty override replaces the embedded-table sentinel verbatim; the resolver (not
+    // this config layer) decides whether the empty string means "use the embedded table".
+    // A TOML single-quoted literal string does not process escapes, so the backslashes in the
+    // path survive verbatim into the parsed value.
+    let cfg = NebulaConfig::from_toml(Some(
+        "[sandbox]\nrules_table_path = 'F:\\Nebula\\rules.toml'\n",
+    ))
+    .unwrap();
+    assert_eq!(cfg.sandbox.rules_table_path, r"F:\Nebula\rules.toml");
 }
 
 #[test]

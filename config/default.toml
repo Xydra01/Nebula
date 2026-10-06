@@ -242,3 +242,11 @@ call_timeout_secs = 30
 # Largest inline output in bytes; output beyond this is truncated (with a marker) and the full
 # output is preserved in a blob.
 output_cap_bytes = 65536
+
+[sandbox]
+# Optional path to an external command-classification rules table (TOML). When empty (the
+# default), the rules table embedded in the binary is used. Editing the embedded table
+# (crates/nebula-sandbox/src/data/rules.toml) requires rebuilding and reinstalling the binaries
+# for the change to take effect — the same lock-file gotcha documented in AGENTS.md. Loading an
+# external table from a non-empty path is not yet wired; the field exists for local experiments.
+rules_table_path = ""

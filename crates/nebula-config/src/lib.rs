@@ -158,6 +158,18 @@ pub struct BackupConfig {
     pub max_delete_mib: u64,
 }
 
+/// The `[sandbox]` section: command-classification rules for the shell tool.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SandboxConfig {
+    /// Optional path to an external command-classification rules table (TOML). Empty (the
+    /// default) resolves to the table embedded in the binary; editing that embedded table
+    /// requires a rebuild and reinstall (the lock-file gotcha in AGENTS.md). Loading an
+    /// external table from a non-empty path is not yet wired.
+    #[serde(default)]
+    pub rules_table_path: String,
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -178,6 +190,9 @@ pub struct NebulaConfig {
     /// MCP tool servers.
     #[serde(default)]
     pub tools: ToolHostConfig,
+    /// Command-classification rules for the shell tool.
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {

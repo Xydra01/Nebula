@@ -1,0 +1,30 @@
+[package]
+name = "nebula-sandbox"
+description = "Permission-tier engine and command classifier: the data-driven policy that assigns a tier and approval requirement to every command (protected set)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+## Exposes the test-only `Approval::new()` constructor to dependent crates' test builds.
+## Enabled by `nebula-tools` as a dev-dependency so the issue #27 `shell.run` tests compile
+## unchanged (Requirement 8.6). It must NOT be enabled in a production build: the constructor it
+## unlocks bypasses the grant path and would otherwise undermine approval unforgeability (Req 5.5).
+test-util = []
+
+[dependencies]
+serde = { workspace = true }
+thiserror.workspace = true
+toml.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tempfile.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true
