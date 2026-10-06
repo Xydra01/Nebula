@@ -50,7 +50,7 @@ async fn real_main() -> anyhow::Result<()> {
     let deps = Deps {
         telemetry,
         launcher: Arc::new(ProcessLauncher::default()),
-        tool_host: Arc::new(tool_host),
+        tool_host,
         sources: Some(Sources::real()),
         preflight: Some(Arc::new(CommitPreflight::new(
             config.resources.commit_margin_mib,

@@ -80,6 +80,9 @@ struct Harness {
     pipe: String,
     config: NebulaConfig,
     instance: String,
+    /// Kept alive for the daemon's lifetime: the built-in file tools are confined to this
+    /// directory (`tools.builtin.worktree_root`). `None` when the harness used the default root.
+    _worktree: Option<tempfile::TempDir>,
 }
 
 fn config(pipe_name: &str) -> NebulaConfig {
@@ -92,15 +95,14 @@ fn config(pipe_name: &str) -> NebulaConfig {
     cfg
 }
 
-async fn tool_host() -> Arc<ToolHost> {
+async fn tool_host() -> ToolHost {
     let launcher = nebula_tools::testing::launcher(vec![FakeTool::echo()]);
-    let host = ToolHost::start_with(&host_config("fs", 1_000), None, launcher.as_ref())
+    ToolHost::start_with(&host_config("fs", 1_000), None, launcher.as_ref())
         .await
-        .unwrap();
-    Arc::new(host)
+        .unwrap()
 }
 
-fn deps(launcher: &Arc<FakeLauncher>, instance: &str, tool_host: Arc<ToolHost>) -> Deps {
+fn deps(launcher: &Arc<FakeLauncher>, instance: &str, tool_host: ToolHost) -> Deps {
     Deps {
         telemetry: telemetry(),
         launcher: Arc::clone(launcher) as _,
@@ -125,6 +127,50 @@ fn deps(launcher: &Arc<FakeLauncher>, instance: &str, tool_host: Arc<ToolHost>) 
 }
 
 async fn start() -> Harness {
+    start_configured(|_| {}).await
+}
+
+/// Starts a daemon whose built-in file tools are confined to a fresh temp directory.
+///
+/// `tools.builtin.worktree_root` is pointed at the tempdir and `resources.retired_drive` is set
+/// to a drive letter the tempdir is *not* on (so the resolver does not reject the temp root as the
+/// retired drive). Returns the harness (holding the tempdir alive) and the worktree root path.
+async fn start_with_worktree() -> (Harness, std::path::PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let retired = retired_drive_off(&root);
+    let h = start_configured(move |cfg| {
+        cfg.tools.builtin.worktree_root = root.clone();
+        cfg.resources.retired_drive = retired.clone();
+        cfg._worktree_dir = Some(dir);
+    })
+    .await;
+    let root = h.config.tools.builtin.worktree_root.clone();
+    (h, root)
+}
+
+/// A retired-drive letter guaranteed to differ from the drive `path` lives on, so a temp worktree
+/// is never mistaken for the retired drive. Picks `Q:` unless `path` is on `Q:`, else `Z:`.
+fn retired_drive_off(path: &std::path::Path) -> String {
+    let on = path
+        .components()
+        .next()
+        .and_then(|c| match c {
+            std::path::Component::Prefix(p) => p.as_os_str().to_str(),
+            _ => None,
+        })
+        .map(str::to_ascii_uppercase)
+        .unwrap_or_default();
+    if on.starts_with('Q') {
+        "Z:".to_owned()
+    } else {
+        "Q:".to_owned()
+    }
+}
+
+/// Shared start path: build the test config, let `tweak` adjust it (worktree root, retired drive,
+/// and a tempdir to keep alive), then start the daemon.
+async fn start_configured(tweak: impl FnOnce(&mut ConfigPatch)) -> Harness {
     let unique = ChatId::new().to_string();
     let pipe_name = format!("nebula-test-{unique}");
     let instance = format!(r"Local\NebulaDaemonTest-{unique}");
@@ -136,7 +182,15 @@ async fn start() -> Harness {
         finish("stop"),
     ]);
     let launcher = FakeLauncher::new(Arc::clone(&state));
-    let config = config(&pipe_name);
+    let mut patch = ConfigPatch {
+        config: config(&pipe_name),
+        _worktree_dir: None,
+    };
+    tweak(&mut patch);
+    let ConfigPatch {
+        config,
+        _worktree_dir,
+    } = patch;
     let daemon = nebula_daemon::start(
         config.clone(),
         deps(&launcher, &instance, tool_host().await),
@@ -149,6 +203,27 @@ async fn start() -> Harness {
         pipe: config.daemon.pipe_path(),
         config,
         instance,
+        _worktree: _worktree_dir,
+    }
+}
+
+/// A mutable config plus the tempdir its worktree root points into, so `start_configured`'s
+/// closure can set both together and hand the tempdir to the [`Harness`] to keep alive.
+struct ConfigPatch {
+    config: NebulaConfig,
+    _worktree_dir: Option<tempfile::TempDir>,
+}
+
+impl std::ops::Deref for ConfigPatch {
+    type Target = NebulaConfig;
+    fn deref(&self) -> &NebulaConfig {
+        &self.config
+    }
+}
+
+impl std::ops::DerefMut for ConfigPatch {
+    fn deref_mut(&mut self) -> &mut NebulaConfig {
+        &mut self.config
     }
 }
 
@@ -336,9 +411,34 @@ async fn tools_list_call_and_log_reach_clients() {
 
     let mut c = h.client().await;
     let list: ToolList = c.call(Method::ToolsList(Empty {})).await.unwrap();
-    assert_eq!(list.tools.len(), 1);
-    assert_eq!(list.tools[0].name, "echo");
-    assert_eq!(list.tools[0].server, "fs");
+    // The daemon now registers the ten in-process built-ins alongside the external `echo` tool
+    // (task 14.1). `tools.list` returns them sorted by name.
+    let echo = list
+        .tools
+        .iter()
+        .find(|t| t.name == "echo")
+        .expect("the external echo tool is listed");
+    assert_eq!(echo.server, "fs");
+    for name in [
+        "fs.read",
+        "fs.write",
+        "fs.list",
+        "fs.search",
+        "git.status",
+        "git.diff",
+        "git.commit",
+        "git.branch",
+        "shell.run",
+        "system.resources",
+    ] {
+        let builtin = list
+            .tools
+            .iter()
+            .find(|t| t.name == name)
+            .unwrap_or_else(|| panic!("built-in {name} is listed"));
+        assert_eq!(builtin.server, "builtin", "built-in {name} server label");
+    }
+    assert_eq!(list.tools.len(), 11, "ten built-ins plus the external echo");
 
     let trace = TraceId::new();
     let out: ToolCallOutcome = c
@@ -358,6 +458,183 @@ async fn tools_list_call_and_log_reach_clients() {
             {
                 assert_eq!(e.fields.get("tool").and_then(|v| v.as_str()), Some("echo"));
                 assert_eq!(e.fields.get("outcome").and_then(|v| v.as_str()), Some("ok"));
+                assert_eq!(
+                    e.trace_id,
+                    Some(trace),
+                    "the tool.call carries the trace id"
+                );
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    h.daemon.shutdown().await;
+}
+
+// Task 14.2 coverage note — Job Object kill-on-close (Requirement 4.6):
+//
+// Proving a Windows Job Object terminates a child process *tree* requires `shell.run` to spawn a
+// real, long-lived process and then observing the whole tree die when the job handle closes. That
+// is a heavyweight, timing-sensitive OS test that does not belong behind the in-process pipe
+// harness (whose launcher is the FakeLauncher and never spawns a real child). It is covered at the
+// unit level in `nebula-tools` by the shell timeout/job test (task 9.5,
+// `crates/nebula-tools/src/builtins/shell.rs`), which starts a sleeping command, lets the per-call
+// timeout elapse, and asserts the child is killed via the job and `Timeout` is returned. The
+// daemon-level tests here instead exercise the wiring that 14.2 can meaningfully assert over the
+// pipe: built-in `tools.list`/`tools.call` round-trips, the `resources.snapshot` agreement, and the
+// `tool.call` telemetry fields.
+
+/// AC 1.4 through the daemon: a built-in round-trips through the real `ToolHost` and the
+/// `ToolCallOutcome` wire type. `fs.write` creates a file inside the confined worktree, then
+/// `fs.read` reads it back — both via `Method::ToolsCall`, with the worktree pinned to a tempdir
+/// so the file tools stay isolated (all paths in tempdirs).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn tools_call_round_trips_a_builtin_through_the_daemon() {
+    let (h, _root) = start_with_worktree().await;
+    let mut c = h.client().await;
+
+    // fs.write: create `note.txt` relative to the worktree root. The outcome's content is the
+    // MCP text block the host wraps a built-in's output in.
+    let write: ToolCallOutcome = c
+        .call(Method::ToolsCall(ToolsCallParams {
+            tool: "fs.write".into(),
+            arguments: serde_json::json!({ "path": "note.txt", "content": "hello builtin" }),
+            trace_id: Some(TraceId::new()),
+        }))
+        .await
+        .unwrap();
+    assert!(!write.is_error, "fs.write should succeed: {write:?}");
+    let wrote = write.content[0]["text"].as_str().unwrap();
+    assert!(wrote.contains("wrote"), "write confirmation: {wrote}");
+
+    // fs.read: read the same path back and confirm the round-tripped content.
+    let read: ToolCallOutcome = c
+        .call(Method::ToolsCall(ToolsCallParams {
+            tool: "fs.read".into(),
+            arguments: serde_json::json!({ "path": "note.txt" }),
+            trace_id: Some(TraceId::new()),
+        }))
+        .await
+        .unwrap();
+    assert!(!read.is_error, "fs.read should succeed: {read:?}");
+    assert_eq!(read.content[0]["text"].as_str(), Some("hello builtin"));
+
+    // A path escaping the worktree is rejected at the boundary (InvalidArguments), never reading
+    // outside the confined root.
+    let err = c
+        .call::<ToolCallOutcome>(Method::ToolsCall(ToolsCallParams {
+            tool: "fs.read".into(),
+            arguments: serde_json::json!({ "path": "../escape.txt" }),
+            trace_id: None,
+        }))
+        .await
+        .unwrap_err();
+    assert_eq!(err.rpc_code(), Some(error_code::INVALID_PARAMS));
+
+    h.daemon.shutdown().await;
+}
+
+/// AC 6.4 through the daemon: `system.resources` (via `tools.call`) returns exactly what
+/// `resources.snapshot` returns for the same sampler state. The harness runs with the sampler
+/// enabled (fake GPU/system sources), so once a snapshot exists both paths agree field-for-field.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn system_resources_matches_resources_snapshot() {
+    let h = start().await;
+    let mut c = h.ready_client().await;
+
+    // Wait for the sampler to publish its first snapshot (same poll the protocol test uses).
+    let snapshot: ResourceSnapshot = tokio::time::timeout(TIMEOUT, async {
+        loop {
+            match c.call(Method::ResourcesSnapshot(Empty {})).await {
+                Ok(s) => return s,
+                Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    // `system.resources` reads the identical watch channel, so its JSON output deserializes back
+    // to a snapshot equal field-for-field. (The sampler publishes a stable snapshot between ticks,
+    // and the fake sources return fixed readings, so the two reads observe the same value.)
+    let out: ToolCallOutcome = c
+        .call(Method::ToolsCall(ToolsCallParams {
+            tool: "system.resources".into(),
+            arguments: serde_json::json!({}),
+            trace_id: None,
+        }))
+        .await
+        .unwrap();
+    assert!(!out.is_error, "system.resources should succeed: {out:?}");
+    let text = out.content[0]["text"].as_str().expect("text content block");
+    let via_tool: ResourceSnapshot =
+        serde_json::from_str(text).expect("system.resources output is a ResourceSnapshot");
+
+    // Fixed fake readings mean the stable fields match the snapshot read moments earlier.
+    assert_eq!(via_tool.vram_total_mib, snapshot.vram_total_mib);
+    assert_eq!(via_tool.vram_total_mib, 12_282);
+    assert_eq!(via_tool.ram_total_mib, snapshot.ram_total_mib);
+    assert_eq!(via_tool.gpu_processes.len(), snapshot.gpu_processes.len());
+    assert_eq!(
+        via_tool.gpu_processes.first().map(|p| p.name.as_str()),
+        Some("llama-server.exe"),
+    );
+
+    h.daemon.shutdown().await;
+}
+
+/// AC 8.1/8.3/8.5 through the daemon: a built-in call emits a `tool.call` telemetry event carrying
+/// the outcome, the elapsed `wall_ms`, and the trace id. Subscribes on the `nebula_tools` prefix,
+/// calls `system.resources`, and asserts the event's fields.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn builtin_call_emits_telemetry_with_outcome_and_wall_ms() {
+    let h = start().await;
+    let mut watcher = h.ready_client().await;
+    let _: Empty = watcher
+        .call(Method::LogsSubscribe(LogsSubscribeParams {
+            target_prefix: Some("nebula_tools".into()),
+            ..LogsSubscribeParams::default()
+        }))
+        .await
+        .unwrap();
+
+    let mut c = h.client().await;
+    let trace = TraceId::new();
+    let out: ToolCallOutcome = c
+        .call(Method::ToolsCall(ToolsCallParams {
+            tool: "system.resources".into(),
+            arguments: serde_json::json!({}),
+            trace_id: Some(trace),
+        }))
+        .await
+        .unwrap();
+    assert!(!out.is_error);
+
+    tokio::time::timeout(TIMEOUT, async {
+        loop {
+            if let Event::LogEvent(e) = watcher.next_event().await.unwrap()
+                && e.event == "tool.call"
+                && e.fields.get("tool").and_then(|v| v.as_str()) == Some("system.resources")
+            {
+                // Outcome is the success/failure classification (Req 8.3). The sampler may or may
+                // not have produced a snapshot yet, so accept either "ok" or the "error"
+                // (Unavailable) outcome — both are valid, and both must still be logged (Req 8.4).
+                let outcome = e.fields.get("outcome").and_then(|v| v.as_str());
+                assert!(
+                    matches!(outcome, Some("ok" | "error")),
+                    "outcome field present and classified: {outcome:?}"
+                );
+                // Elapsed duration is recorded as `wall_ms` (Req 8.3).
+                assert!(
+                    e.fields
+                        .get("wall_ms")
+                        .and_then(serde_json::Value::as_u64)
+                        .is_some(),
+                    "wall_ms field present: {:?}",
+                    e.fields.get("wall_ms")
+                );
+                // The trace id inherited from the boundary (Req 8.2) is carried.
                 assert_eq!(
                     e.trace_id,
                     Some(trace),

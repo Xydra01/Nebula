@@ -16,18 +16,30 @@
 //! operations Phase 1 needs are the three above, and the launcher must use Nebula's own Job
 //! Object so a crashed daemon never leaks tool processes.
 
+pub mod builtins;
+pub mod cap;
 pub mod client;
 pub mod config;
 pub mod host;
 pub mod launcher;
+pub mod path;
+pub mod permit;
 #[cfg(feature = "test-support")]
 pub mod testing;
 pub mod types;
 
+pub use builtins::{
+    BuiltinLimits, BuiltinTool, ResourceProvider, ToolContext, ToolOutput, WorktreeRootProvider,
+    register_all,
+};
+pub use cap::{TRUNCATION_MARKER, enforce_cap};
 pub use client::McpClient;
-pub use config::{ToolHostConfig, ToolServerConfig};
+pub use config::{BuiltinToolsConfig, ToolHostConfig, ToolServerConfig};
 pub use host::ToolHost;
 pub use launcher::{ChildProcess, LaunchSpec, StdioLauncher, ToolLauncher};
+pub use permit::{
+    Approval, CommandClassifier, DefaultClassifier, NO_APPROVAL_THRESHOLD, Tier, effective_tier,
+};
 pub use types::{ToolCallResult, ToolDescriptor};
 
 /// How long a tool server has to answer the `initialize` handshake and `tools/list`.
@@ -80,8 +92,15 @@ pub enum ToolError {
         /// Deadline that elapsed.
         timeout_ms: u64,
     },
-    /// The result exceeded the output-size cap.
-    #[error("tool {tool:?} returned {got} bytes, over the {cap}-byte cap")]
+    /// The result exceeded the output-size cap and the full output could not be preserved.
+    ///
+    /// The cap is normally enforced by truncating the inline output to [`cap`](Self::OutputTooLarge::cap)
+    /// bytes and storing the full output in a blob. This error is returned only when that blob
+    /// write fails: `prefix` carries the UTF-8-safe truncated inline output for diagnostics, and
+    /// no blob reference is recorded.
+    #[error(
+        "tool {tool:?} returned {got} bytes, over the {cap}-byte cap, and the full output could not be stored"
+    )]
     OutputTooLarge {
         /// Tool that produced the output.
         tool: String,
@@ -89,6 +108,15 @@ pub enum ToolError {
         got: usize,
         /// Configured cap.
         cap: usize,
+        /// The UTF-8-safe truncated inline output (prefix), kept for the blob-write-failure
+        /// diagnostic.
+        prefix: String,
+    },
+    /// A tool with that name is already registered, across both the built-in and external maps.
+    #[error("duplicate tool {name:?}: a tool with that name is already registered")]
+    DuplicateTool {
+        /// The conflicting tool name that is already held by a built-in or external tool.
+        name: String,
     },
     /// The server broke the JSON-RPC / MCP contract, or returned an error result.
     #[error("tool server {server:?} protocol error: {detail}")]

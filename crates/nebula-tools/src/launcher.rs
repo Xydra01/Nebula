@@ -152,10 +152,15 @@ impl ChildProcess for Process {
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
-mod job {
+pub(crate) mod job {
     //! A Job Object with `KILL_ON_JOB_CLOSE`: when the last handle closes (including when
     //! Nebula crashes), Windows terminates every process in it. Identical in intent to the
     //! model launcher's job module; kept separate so each crate owns its own Win32 surface.
+    //!
+    //! This is the one audited `unsafe` Win32 surface in `nebula-tools`. External tool-server
+    //! launch (above), `shell.run`, and `git.*` all reuse it rather than duplicating the
+    //! Job-Object FFI, so the kill-on-close guarantee lives in exactly one place. The isolated
+    //! child/job plumbing those built-ins share is [`spawn_in_job`] and [`JobChild`].
 
     use std::io;
     use std::os::windows::io::RawHandle;
@@ -168,7 +173,11 @@ mod job {
     };
     use windows::core::PCWSTR;
 
-    pub(super) struct Job(HANDLE);
+    /// A Windows Job Object configured with `KILL_ON_JOB_CLOSE`.
+    ///
+    /// Dropping the handle (including on a crash) terminates every process still assigned to the
+    /// job, which is how both external servers and built-in children are guaranteed never to leak.
+    pub(crate) struct Job(HANDLE);
 
     // SAFETY: a job handle is a kernel handle usable from any thread.
     unsafe impl Send for Job {}
@@ -178,7 +187,11 @@ mod job {
     }
 
     impl Job {
-        pub(super) fn new() -> io::Result<Self> {
+        /// Create a new kill-on-close Job Object.
+        ///
+        /// # Errors
+        /// Returns the underlying Win32 error if the job cannot be created or configured.
+        pub(crate) fn new() -> io::Result<Self> {
             // SAFETY: no security attributes and no name; the returned handle is owned here.
             let handle =
                 unsafe { CreateJobObjectW(None, PCWSTR::null()) }.map_err(|e| win_err(&e))?;
@@ -201,7 +214,11 @@ mod job {
             Ok(job)
         }
 
-        pub(super) fn assign(&self, process: RawHandle) -> io::Result<()> {
+        /// Assign a process (by its raw OS handle) to this job.
+        ///
+        /// # Errors
+        /// Returns the underlying Win32 error if the assignment fails.
+        pub(crate) fn assign(&self, process: RawHandle) -> io::Result<()> {
             // SAFETY: both handles are valid for the duration of the call; the process handle
             // is borrowed from a live `Child`.
             unsafe { AssignProcessToJobObject(self.0, HANDLE(process)) }.map_err(|e| win_err(&e))
@@ -213,5 +230,97 @@ mod job {
             // SAFETY: the handle was created by `new` and is closed exactly once.
             let _ = unsafe { CloseHandle(self.0) };
         }
+    }
+}
+
+/// The shared child/job API that `shell.run` and `git.*` use to run a confined child process.
+///
+/// On Windows every child is spawned into a kill-on-close [`Job`](job::Job): the job handle is held
+/// by the returned [`JobChild`], so dropping that guard (for example when a built-in's `call`
+/// future is cancelled on timeout) closes the handle and Windows terminates the child and all its
+/// descendants. This is the one audited Win32 surface, reused instead of duplicated.
+#[cfg(windows)]
+pub(crate) mod child {
+    use std::process::Output;
+    use std::time::Duration;
+
+    use tokio::process::{Child, Command};
+
+    use super::job::Job;
+
+    /// A child process kept inside a kill-on-close Job Object.
+    ///
+    /// Holding this guard keeps the job handle open; dropping it closes the handle, which
+    /// terminates the child and every descendant it spawned. Built-ins hold a `JobChild` across
+    /// their `.await` points so a cancelled (timed-out) call cannot leak a running process.
+    pub(crate) struct JobChild {
+        child: Child,
+        // Dropped after `child`: closing the job terminates anything still running in it.
+        _job: Job,
+    }
+
+    impl JobChild {
+        /// The child's OS process id, if it has one.
+        // Part of the crate-internal child/job API surface (task 9.1); no caller yet.
+        #[allow(dead_code)]
+        pub(crate) fn pid(&self) -> Option<u32> {
+            self.child.id()
+        }
+
+        /// Wait for the child to exit, collecting its captured stdout/stderr, but give up after
+        /// `timeout`.
+        ///
+        /// Returns `Ok(Some(output))` if the child exits in time, `Ok(None)` if `timeout` elapses
+        /// first (the caller drops the `JobChild` to kill it via the job), or `Err` if waiting on
+        /// the child fails.
+        pub(crate) async fn wait_with_timeout(
+            &mut self,
+            timeout: Duration,
+        ) -> std::io::Result<Option<Output>> {
+            let stdout = self.child.stdout.take();
+            let stderr = self.child.stderr.take();
+            let wait = async {
+                let status = self.child.wait().await?;
+                let mut out = Vec::new();
+                let mut err = Vec::new();
+                if let Some(mut s) = stdout {
+                    use tokio::io::AsyncReadExt as _;
+                    s.read_to_end(&mut out).await?;
+                }
+                if let Some(mut s) = stderr {
+                    use tokio::io::AsyncReadExt as _;
+                    s.read_to_end(&mut err).await?;
+                }
+                Ok(Output {
+                    status,
+                    stdout: out,
+                    stderr: err,
+                })
+            };
+            match tokio::time::timeout(timeout, wait).await {
+                Ok(result) => result.map(Some),
+                Err(_elapsed) => Ok(None),
+            }
+        }
+    }
+
+    /// Spawn `cmd` as a child process inside a fresh kill-on-close Job Object.
+    ///
+    /// The caller configures `cmd` (program, args, env, stdio, `current_dir`); this function sets
+    /// `kill_on_drop`, hides the console window, spawns the child, and assigns it to the job before
+    /// returning the [`JobChild`] guard. Dropping the guard terminates the child via the job.
+    ///
+    /// # Errors
+    /// Returns the spawn error if the process cannot start, or the Win32 error if the job cannot be
+    /// created or the child cannot be assigned to it.
+    pub(crate) fn spawn_in_job(cmd: &mut Command) -> std::io::Result<JobChild> {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW).kill_on_drop(true);
+        let child = cmd.spawn()?;
+        let job = Job::new()?;
+        if let Some(h) = child.raw_handle() {
+            job.assign(h)?;
+        }
+        Ok(JobChild { child, _job: job })
     }
 }
