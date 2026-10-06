@@ -6,6 +6,7 @@
 //! `daemon.shutdown` or Ctrl-C and shuts down gracefully. `main.rs` only wires the real
 //! dependencies. Windows only (named pipes, Credential Manager).
 
+mod builtin_providers;
 pub mod checks;
 pub mod client;
 mod server;
@@ -58,9 +59,12 @@ pub struct Deps {
     pub telemetry: Telemetry,
     /// Starts model servers.
     pub launcher: Arc<dyn Launcher>,
-    /// The MCP tool host, already started (its servers launched). The caller builds it so
-    /// `start` stays synchronous, matching how the model managers are constructed.
-    pub tool_host: Arc<ToolHost>,
+    /// The MCP tool host, already started (its external servers launched). The caller builds it
+    /// so `start` stays synchronous, matching how the model managers are constructed. `start`
+    /// then registers the in-process built-in tools on it (wired to the live sampler) before
+    /// wrapping it in `Arc` and sharing it, so registration — which needs `&mut ToolHost` — runs
+    /// while the host is still exclusively owned.
+    pub tool_host: ToolHost,
     /// Resource readers; `None` disables the sampler.
     pub sources: Option<Sources>,
     /// Runs before every model launch.
@@ -131,6 +135,12 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         None => None,
     };
 
+    // Register the in-process built-in tools on the host now, while it is still exclusively
+    // owned (`register_builtin` takes `&mut self`) and the sampler exists, so the built-in
+    // `ResourceProvider` reads the same source as `resources.snapshot` (Requirement 6.4).
+    let mut tool_host = deps.tool_host;
+    builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref());
+
     let blobs = deps.telemetry.blobs().cloned();
     let chat = ModelManager::spawn_with(
         config.model.clone(),
@@ -161,7 +171,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         telemetry: deps.telemetry,
         chat,
         embedding,
-        tool_host: deps.tool_host,
+        tool_host: Arc::new(tool_host),
         sampler: Mutex::new(sampler),
         started: Instant::now(),
         chats: Mutex::new(HashMap::new()),

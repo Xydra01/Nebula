@@ -282,6 +282,10 @@ impl NebulaConfig {
             }
         }
         out.extend(self.tools.command_paths());
+        out.push((
+            "tools.builtin.worktree_root".to_owned(),
+            self.tools.builtin.worktree_root.clone(),
+        ));
         out
     }
 

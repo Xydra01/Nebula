@@ -205,5 +205,6 @@ pub fn server_config(call_timeout_ms: u64) -> crate::config::ToolServerConfig {
 pub fn host_config(name: &str, call_timeout_ms: u64) -> crate::config::ToolHostConfig {
     crate::config::ToolHostConfig {
         servers: BTreeMap::from([(name.to_owned(), server_config(call_timeout_ms))]),
+        builtin: crate::config::BuiltinToolsConfig::default(),
     }
 }

@@ -49,6 +49,7 @@ zstd = "0.14.0"
 
 axum = "0.8.9"
 insta = { version = "1.49.0", features = ["json"] }
+proptest = "1.11.0"
 tempfile = "3.27.0"
 
 # Model hashing (GBs) is unbearably slow unoptimized.

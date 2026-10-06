@@ -327,7 +327,7 @@ fn tool_err(e: &ToolError) -> RpcError {
         }
         ToolError::Timeout { .. } => error_code::CANCELLED,
         ToolError::Launch { .. } | ToolError::Unavailable { .. } => error_code::MODEL_UNAVAILABLE,
-        ToolError::Protocol { .. } => error_code::INTERNAL_ERROR,
+        ToolError::Protocol { .. } | ToolError::DuplicateTool { .. } => error_code::INTERNAL_ERROR,
     };
     RpcError::new(code, e.to_string())
 }

@@ -227,3 +227,18 @@ flags = [
 #   max_output_bytes = 1048576
 #   env = [["RUST_LOG", "info"]]
 [tools]
+
+# In-process built-in tools (fs.*, git.*, shell.run, system.resources). These run inside the
+# daemon rather than as external MCP servers, so they are configured here instead of under
+# [tools.servers].
+[tools.builtin]
+# Confinement root for file and shell tools. Every path a built-in touches is canonicalized and
+# must resolve inside this directory; a path escaping it is rejected. Defaults to the current
+# directory; set it to a dedicated worktree root in the local override.
+worktree_root = "."
+# Per-call timeout in seconds. A built-in call running longer than this is cancelled and returns
+# a timeout error. Clamped to 1..=600 seconds.
+call_timeout_secs = 30
+# Largest inline output in bytes; output beyond this is truncated (with a marker) and the full
+# output is preserved in a blob.
+output_cap_bytes = 65536

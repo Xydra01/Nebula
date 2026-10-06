@@ -83,3 +83,15 @@ fn missing_override_file_means_defaults() {
         "debug"
     );
 }
+
+#[test]
+fn all_paths_includes_the_builtin_worktree_root() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    let entry = cfg
+        .all_paths()
+        .into_iter()
+        .find(|(label, _)| label == "tools.builtin.worktree_root")
+        .expect("all_paths should label the built-in worktree root");
+    assert_eq!(entry.1, cfg.tools.builtin.worktree_root);
+    assert_eq!(entry.1, PathBuf::from("."));
+}

@@ -80,7 +80,7 @@ fn start() -> Harness {
     let deps = Deps {
         telemetry: telemetry(),
         launcher: launcher as _,
-        tool_host: Arc::new(ToolHost::empty()),
+        tool_host: ToolHost::empty(),
         sources: Some(Sources {
             gpu: Some(Box::new(FakeGpu)),
             gpu_processes: None,
