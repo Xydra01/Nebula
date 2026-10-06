@@ -29,6 +29,6 @@ expression: value
       "type": "object"
     }
   },
-  "proto_version": 1,
+  "proto_version": 2,
   "trace_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EF"
 }

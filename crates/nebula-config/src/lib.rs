@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use nebula_model::ModelConfig;
 use nebula_telemetry::TelemetryConfig;
+use nebula_tools::ToolHostConfig;
 use serde::Deserialize;
 
 /// The shipped defaults.
@@ -174,6 +175,9 @@ pub struct NebulaConfig {
     pub resources: ResourcesConfig,
     /// Model runtimes and profiles.
     pub model: ModelConfig,
+    /// MCP tool servers.
+    #[serde(default)]
+    pub tools: ToolHostConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {
@@ -277,6 +281,7 @@ impl NebulaConfig {
                 out.push((format!("model.profiles.{name}.kv_bias"), b.clone()));
             }
         }
+        out.extend(self.tools.command_paths());
         out
     }
 

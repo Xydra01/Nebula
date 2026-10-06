@@ -3,12 +3,14 @@ source: crates/nebula-proto/tests/messages.rs
 expression: value
 ---
 {
-  "id": 8,
+  "id": 11,
   "jsonrpc": "2.0",
-  "method": "logs.subscribe",
+  "method": "tools.call",
   "params": {
-    "min_level": "warn",
-    "target_prefix": "nebula_model",
+    "arguments": {
+      "path": "src/main.rs"
+    },
+    "tool": "read_file",
     "trace_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EF"
   },
   "proto_version": 2

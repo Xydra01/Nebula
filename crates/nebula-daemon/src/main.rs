@@ -9,6 +9,7 @@ use nebula_config::NebulaConfig;
 use nebula_daemon::{DaemonError, Deps, INSTANCE_MUTEX};
 use nebula_model::{ProcessLauncher, SupervisorConfig};
 use nebula_resources::{CommitPreflight, Sources};
+use nebula_tools::ToolHost;
 
 /// Exit code when another daemon is already running.
 const EXIT_ALREADY_RUNNING: u8 = 3;
@@ -43,9 +44,13 @@ async fn real_main() -> anyhow::Result<()> {
         configured = config.daemon.secrets.len()
     );
     spawn_log_maintenance(&config);
+    let tool_host = ToolHost::start(&config.tools, telemetry.blobs().cloned())
+        .await
+        .context("starting the tool host")?;
     let deps = Deps {
         telemetry,
         launcher: Arc::new(ProcessLauncher::default()),
+        tool_host: Arc::new(tool_host),
         sources: Some(Sources::real()),
         preflight: Some(Arc::new(CommitPreflight::new(
             config.resources.commit_margin_mib,

@@ -20,6 +20,7 @@ use nebula_model::{Launcher, ModelManager, Preflight, SupervisorConfig};
 use nebula_proto::{ChatId, DoctorReport};
 use nebula_resources::{Sampler, SamplerConfig, Sources};
 use nebula_telemetry::Telemetry;
+use nebula_tools::ToolHost;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
@@ -57,6 +58,9 @@ pub struct Deps {
     pub telemetry: Telemetry,
     /// Starts model servers.
     pub launcher: Arc<dyn Launcher>,
+    /// The MCP tool host, already started (its servers launched). The caller builds it so
+    /// `start` stays synchronous, matching how the model managers are constructed.
+    pub tool_host: Arc<ToolHost>,
     /// Resource readers; `None` disables the sampler.
     pub sources: Option<Sources>,
     /// Runs before every model launch.
@@ -76,6 +80,7 @@ pub(crate) struct Shared {
     pub(crate) telemetry: Telemetry,
     pub(crate) chat: ModelManager,
     pub(crate) embedding: Option<ModelManager>,
+    pub(crate) tool_host: Arc<ToolHost>,
     pub(crate) sampler: Mutex<Option<Sampler>>,
     pub(crate) started: Instant,
     pub(crate) chats: Mutex<HashMap<ChatId, CancellationToken>>,
@@ -156,6 +161,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         telemetry: deps.telemetry,
         chat,
         embedding,
+        tool_host: deps.tool_host,
         sampler: Mutex::new(sampler),
         started: Instant::now(),
         chats: Mutex::new(HashMap::new()),
@@ -242,6 +248,7 @@ impl Daemon {
             }
         };
         let (_, ()) = tokio::join!(chat, emb);
+        self.shared.tool_host.stop().await;
         drop(
             self.shared
                 .sampler

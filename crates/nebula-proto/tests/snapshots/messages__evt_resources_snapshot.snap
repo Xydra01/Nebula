@@ -35,5 +35,5 @@ expression: value
     "vram_total_mib": 12282,
     "vram_used_mib": 10257
   },
-  "proto_version": 1
+  "proto_version": 2
 }

@@ -22,7 +22,7 @@ pub use events::{ChatDone, ChatError, ChatToken, Event, ModelStateChanged};
 pub use ids::{ChatId, SpanId, TraceId};
 pub use methods::{
     ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, LogsSubscribeParams,
-    Method, ModelSetProfileParams,
+    Method, ModelSetProfileParams, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
 };
 pub use types::{
     ChatMessage, CheckStatus, DiskUsage, DoctorCheck, DoctorReport, GpuProcess, LogEvent, LogLevel,

@@ -5,7 +5,7 @@ expression: value
 {
   "id": 7,
   "jsonrpc": "2.0",
-  "proto_version": 1,
+  "proto_version": 2,
   "result": {
     "commit_limit_mib": 65400,
     "commit_used_mib": 44400,

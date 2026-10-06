@@ -44,11 +44,17 @@ pub enum Method {
     /// Result: [`crate::DoctorReport`].
     #[serde(rename = "doctor.run")]
     DoctorRun(Empty),
+    /// List every tool across all configured MCP servers. Result: [`ToolList`].
+    #[serde(rename = "tools.list")]
+    ToolsList(Empty),
+    /// Call a tool by name. Result: [`ToolCallOutcome`].
+    #[serde(rename = "tools.call")]
+    ToolsCall(ToolsCallParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 9] = [
+    pub const NAMES: [&'static str; 11] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -58,6 +64,8 @@ impl Method {
         "resources.snapshot",
         "logs.subscribe",
         "doctor.run",
+        "tools.list",
+        "tools.call",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -73,6 +81,8 @@ impl Method {
             Self::ResourcesSnapshot(_) => "resources.snapshot",
             Self::LogsSubscribe(_) => "logs.subscribe",
             Self::DoctorRun(_) => "doctor.run",
+            Self::ToolsList(_) => "tools.list",
+            Self::ToolsCall(_) => "tools.call",
         }
     }
 }
@@ -152,4 +162,52 @@ pub struct DaemonStatus {
     pub uptime_s: u64,
     /// Model server state.
     pub model: ModelStatus,
+}
+
+/// Parameters of `tools.call`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolsCallParams {
+    /// Tool to call (unique across servers).
+    pub tool: String,
+    /// Arguments object, validated against the tool's input schema before the call.
+    #[serde(default)]
+    pub arguments: Value,
+    /// Trace to attach the tool call to; the daemon starts a new one if absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<TraceId>,
+}
+
+/// Result of `tools.list`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolList {
+    /// Every available tool, sorted by name.
+    pub tools: Vec<ToolInfo>,
+}
+
+/// One advertised tool.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolInfo {
+    /// The MCP server (manifest name) that exposes it.
+    pub server: String,
+    /// Tool name.
+    pub name: String,
+    /// Description, if the server gave one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// JSON Schema for the tool's arguments.
+    pub input_schema: Value,
+}
+
+/// Result of `tools.call`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolCallOutcome {
+    /// Content blocks the tool returned (MCP `content`).
+    pub content: Value,
+    /// Whether the tool reported a tool-level error (MCP `isError`).
+    #[serde(default)]
+    pub is_error: bool,
 }
