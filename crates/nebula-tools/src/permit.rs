@@ -1,104 +1,28 @@
 //! Permission tiers, approvals, and command classification for built-in tools.
 //!
-//! This module defines the injectable boundary between `nebula-tools` and the full permission
-//! engine planned for the `nebula-sandbox` crate (GitHub issue #28). It ships:
+//! **Relocation (issue #28).** The permission vocabulary now lives in the `nebula-sandbox`
+//! crate; this module re-exports it so every issue #27 call site (`nebula_tools::permit::Tier`,
+//! `nebula_tools::permit::Approval`, …) keeps resolving unchanged (Requirement 8):
 //!
 //! - [`Tier`] — the four operation privilege levels (design 7.1).
 //! - [`NO_APPROVAL_THRESHOLD`] — the highest tier that runs without an approval decision.
-//! - [`Approval`] — a minimal grant that authorizes an above-threshold command.
+//! - [`Approval`] — the grant that authorizes an above-threshold command.
 //! - [`CommandClassifier`] — the object-safe trait `shell.run` consults before running any
 //!   child process.
-//! - [`DefaultClassifier`] — a deterministic rules subset sufficient for this feature's
-//!   acceptance tests. It never grants an [`Approval`] on its own, so Tier 2/3 commands are
-//!   refused unless a caller injects an approving classifier.
+//! - [`effective_tier`] — the advisory-tier merge, kept here (re-exported) so #27 Property 6
+//!   is preserved.
 //!
-//! **Relocation note:** `permit` is a candidate for relocation to the `nebula-sandbox` crate
-//! when the full command classifier, permission-tier engine, and approval UX land in issue #28.
-//! It is defined here as an injectable boundary so built-in tools (issue #27) can ship first.
+//! The real data-driven engine now lives in `nebula-sandbox` as
+//! [`RulesClassifier`](nebula_sandbox::engine::RulesClassifier), and the daemon wires it in
+//! `builtin_providers.rs` (via `RulesClassifier::embedded`). [`DefaultClassifier`] stays here as a
+//! self-contained deterministic classifier over the re-exported vocabulary: it is the fixture the
+//! issue #27 `shell.run` tests inject directly, so `nebula_tools::DefaultClassifier` references
+//! keep resolving and those tests keep passing unchanged (Requirement 8.6). It is not what the
+//! daemon runs.
 
-/// Operation privilege level (design 7.1).
-///
-/// Tiers are ordered: a higher tier is strictly more privileged. The ordering is relied on by
-/// the no-approval threshold comparison and by the effective-tier helper, which never lowers an
-/// enforced tier below the classifier's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Tier {
-    /// Tier 0 — read-only operations (e.g. `fs.read`, `git.status`, `system.resources`).
-    Read = 0,
-    /// Tier 1 — sandbox write confined to the worktree (e.g. `fs.write`, `git.commit`). This is
-    /// the [`NO_APPROVAL_THRESHOLD`]: the highest tier that runs without an approval decision.
-    Sandbox = 1,
-    /// Tier 2 — workspace-level operations; require an approval decision.
-    Workspace = 2,
-    /// Tier 3 — system-level operations; always require an approval decision.
-    System = 3,
-}
-
-/// The highest [`Tier`] that runs without an [`Approval`] decision (Tier 1, [`Tier::Sandbox`]).
-///
-/// Any command classified strictly above this threshold ([`Tier::Workspace`] or
-/// [`Tier::System`]) must be refused unless an [`Approval`] is present.
-pub const NO_APPROVAL_THRESHOLD: Tier = Tier::Sandbox;
-
-/// An approval authorizing a command classified above the [`NO_APPROVAL_THRESHOLD`].
-///
-/// This is intentionally minimal for issue #27: the mere presence of an `Approval` authorizes
-/// execution. Issue #28 will define the full grant identity and scope. The type is kept opaque
-/// (no public fields) so the richer definition can be added without a breaking change.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Approval {
-    /// Private marker. Prevents external construction and leaves room for grant id / scope
-    /// fields that issue #28 will add.
-    _private: (),
-}
-
-impl Approval {
-    /// Construct a minimal approval grant.
-    ///
-    /// For issue #27, presence alone authorizes an above-threshold command; there is no scope to
-    /// configure yet. Callers (tests, or an approving classifier) use this to inject a grant.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { _private: () }
-    }
-}
-
-impl Default for Approval {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Classifies a shell command and reports the approval decision for it.
-///
-/// This is the injectable boundary `shell.run` consults before starting any child process
-/// (Requirement 4.2, 4.11). The full engine is issue #28; this feature ships
-/// [`DefaultClassifier`] as a deterministic subset. The trait is object-safe so it can be stored
-/// as `Arc<dyn CommandClassifier>` on the tool context.
-pub trait CommandClassifier: Send + Sync {
-    /// Return the [`Tier`] and any [`Approval`] decision for `command` with `args`.
-    ///
-    /// A returned `Some(Approval)` authorizes execution of a command classified strictly above
-    /// the [`NO_APPROVAL_THRESHOLD`]; `None` means no approval was granted and such a command
-    /// must be refused.
-    fn classify(&self, command: &str, args: &[String]) -> (Tier, Option<Approval>);
-}
-
-/// Combine the [`Command_Classifier`](CommandClassifier) tier with a model second opinion into
-/// the tier `shell.run` enforces (Requirement 4.12, design 7.2).
-///
-/// A model second opinion is **advisory only**: it may raise the enforced tier (ask for more
-/// caution) but may never lower it below what the classifier returned. The enforced tier is
-/// therefore `max(classifier_tier, advisory_tier)`, relying on [`Tier`]'s ordering where a
-/// higher tier is strictly more privileged / more restricted.
-///
-/// This keeps the classifier authoritative for the floor: no advisory input can downgrade a
-/// `git push` out of [`Tier::System`], while an advisory input is still free to escalate an
-/// otherwise innocuous command.
-#[must_use]
-pub fn effective_tier(classifier_tier: Tier, advisory_tier: Tier) -> Tier {
-    classifier_tier.max(advisory_tier)
-}
+pub use nebula_sandbox::{
+    Approval, CommandClassifier, NO_APPROVAL_THRESHOLD, Tier, effective_tier,
+};
 
 /// A deterministic rules subset of the command classifier, sufficient for this feature's
 /// acceptance tests (design 7.2).
@@ -117,9 +41,10 @@ pub fn effective_tier(classifier_tier: Tier, advisory_tier: Tier) -> Tier {
 /// and [`Tier::System`] command is refused unless a caller injects an approving classifier. This
 /// is exactly what "refuses tier-3 without approval" requires.
 ///
-/// **Relocation note:** like the rest of `permit`, this is a candidate for relocation to the
-/// `nebula-sandbox` crate when the full command classifier and permission engine land in issue
-/// #28; it ships here as a deterministic placeholder so built-in tools (issue #27) can run first.
+/// **Scope:** this is the fixture classifier the issue #27 `shell.run` tests inject; it is not
+/// what the daemon runs. The daemon wires the data-driven
+/// [`RulesClassifier`](nebula_sandbox::engine::RulesClassifier) from `nebula-sandbox`. This type
+/// is retained so those #27 tests continue to compile and pass unchanged (Requirement 8.6).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DefaultClassifier;
 
@@ -304,84 +229,9 @@ mod tests {
         items.iter().map(|s| (*s).to_string()).collect()
     }
 
-    #[test]
-    fn tier_ordering_is_strict() {
-        assert!(Tier::Read < Tier::Sandbox);
-        assert!(Tier::Sandbox < Tier::Workspace);
-        assert!(Tier::Workspace < Tier::System);
-        assert_eq!(NO_APPROVAL_THRESHOLD, Tier::Sandbox);
-    }
-
-    #[test]
-    fn effective_tier_never_drops_below_classifier() {
-        // Advisory raises the enforced tier.
-        assert_eq!(
-            effective_tier(Tier::Read, Tier::System),
-            Tier::System,
-            "advisory may escalate"
-        );
-        // Advisory can never lower the classifier's tier.
-        assert_eq!(
-            effective_tier(Tier::System, Tier::Read),
-            Tier::System,
-            "advisory must not downgrade"
-        );
-        // Equal tiers are preserved.
-        assert_eq!(
-            effective_tier(Tier::Workspace, Tier::Workspace),
-            Tier::Workspace
-        );
-        // The result is always at least the classifier tier across every pair.
-        for &classifier in &[Tier::Read, Tier::Sandbox, Tier::Workspace, Tier::System] {
-            for &advisory in &[Tier::Read, Tier::Sandbox, Tier::Workspace, Tier::System] {
-                assert!(effective_tier(classifier, advisory) >= classifier);
-            }
-        }
-    }
-
-    // Feature: builtin-tools, Property 6: a second opinion never lowers the enforced tier
-    //
-    // Property 6: A second opinion never lowers the enforced tier. For any classifier tier and
-    // any advisory (model second-opinion) tier, the tier `shell.run` enforces is at least the
-    // classifier tier: an advisory input may escalate caution but can never downgrade the
-    // classifier's floor. We also check the enforced tier is the maximum of the two, so an
-    // advisory input that is itself higher is honoured. See design.md, Property 6
-    // (Validates: Requirements 4.12).
-    mod property_second_opinion_never_lowers {
-        use super::*;
-        use proptest::prelude::*;
-
-        /// Generate any of the four tiers with uniform coverage.
-        fn any_tier() -> impl Strategy<Value = Tier> {
-            prop_oneof![
-                Just(Tier::Read),
-                Just(Tier::Sandbox),
-                Just(Tier::Workspace),
-                Just(Tier::System),
-            ]
-        }
-
-        proptest! {
-            #![proptest_config(ProptestConfig::with_cases(256))]
-
-            #[test]
-            fn enforced_tier_is_never_below_classifier(
-                classifier in any_tier(),
-                advisory in any_tier(),
-            ) {
-                let enforced = effective_tier(classifier, advisory);
-
-                // The advisory second opinion may raise, but never lower, the classifier floor.
-                prop_assert!(
-                    enforced >= classifier,
-                    "enforced {enforced:?} dropped below classifier {classifier:?} (advisory {advisory:?})",
-                );
-                // The enforced tier is exactly the more restrictive of the two inputs, so a
-                // higher advisory tier is still honoured.
-                prop_assert_eq!(enforced, classifier.max(advisory));
-            }
-        }
-    }
+    // The permission vocabulary (`Tier` ordering, `NO_APPROVAL_THRESHOLD`, `effective_tier`, and
+    // Property 12) is now owned and tested by `nebula-sandbox` (`src/tier.rs`). The tests below
+    // cover only the `DefaultClassifier` that still lives in this crate.
 
     #[test]
     fn destructive_file_ops_are_tier_system() {

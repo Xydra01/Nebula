@@ -17,6 +17,7 @@ nebula-daemon = { path = "crates/nebula-daemon" }
 nebula-model = { path = "crates/nebula-model" }
 nebula-proto = { path = "crates/nebula-proto" }
 nebula-resources = { path = "crates/nebula-resources" }
+nebula-sandbox = { path = "crates/nebula-sandbox" }
 nebula-telemetry = { path = "crates/nebula-telemetry" }
 nebula-tools = { path = "crates/nebula-tools" }
 

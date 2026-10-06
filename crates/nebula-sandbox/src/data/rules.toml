@@ -1,0 +1,221 @@
+# Nebula command-classification rules table (embedded via `include_str!`).
+#
+# Protected-set / safety data (AGENTS.md hard rule 9): every change here is human-reviewed.
+# This file is compiled into the binary; editing it requires a rebuild/reinstall for the change
+# to take effect (the same lock-file gotcha documented in AGENTS.md).
+#
+# Each `[[rule]]` has:
+#   - `id`             a stable, unique, dotted identifier recorded on every matching decision;
+#   - `tier`           the privilege tier it assigns, in `0..=3`
+#                      (0 = Read, 1 = Sandbox, 2 = Workspace, 3 = System);
+#   - `[rule.match]`   the condition it matches on (command base name(s), argument patterns,
+#                      encoded/indirection or network-config markers, and/or a path condition).
+#
+# When several rules match one command the HIGHEST tier wins (Req 1.4); the engine (task 6)
+# owns that combination, the segment-max, the unknown-token escalation, and the path-resolver
+# evaluation of `[rule.match.path]`. This file is data only.
+
+# ---------------------------------------------------------------------------
+# Destructive deletes -> Tier 3 (System)
+# ---------------------------------------------------------------------------
+
+# POSIX recursive + force delete (`rm -r -f`, `rm -rf`): both flags must be present.
+[[rule]]
+id = "fs.delete.rm-recursive-force"
+tier = 3
+[rule.match]
+command = ["rm"]
+args_all = ["-r", "-f"]
+
+# PowerShell recursive remove (`Remove-Item -Recurse ...`, `rm -Recurse`): the recurse switch
+# in any of its accepted spellings marks a destructive recursive delete.
+[[rule]]
+id = "fs.delete.remove-item-recurse"
+tier = 3
+[rule.match]
+command = ["Remove-Item", "ri", "rd", "rmdir"]
+args_any = ["-Recurse", "-r"]
+
+# cmd.exe recursive/quiet directory delete (`del /s`, `del /q`, `erase /s`).
+[[rule]]
+id = "fs.delete.del-recursive"
+tier = 3
+[rule.match]
+command = ["del", "erase"]
+args_any = ["/s", "/S", "/q", "/Q"]
+
+# ---------------------------------------------------------------------------
+# Disk / volume operations -> Tier 3 (System)
+# ---------------------------------------------------------------------------
+
+# Volume format (`format D:`, `format /fs:ntfs`): always destructive at the system level.
+[[rule]]
+id = "disk.format"
+tier = 3
+[rule.match]
+command = ["format"]
+
+# Partition/volume management (`diskpart`): system-level disk reconfiguration.
+[[rule]]
+id = "disk.diskpart"
+tier = 3
+[rule.match]
+command = ["diskpart"]
+
+# ---------------------------------------------------------------------------
+# Registry edits -> Tier 3 (System)
+# ---------------------------------------------------------------------------
+
+# Windows registry edits (`reg add`, `reg delete`, `reg import`): modifies machine/user state.
+[[rule]]
+id = "registry.reg"
+tier = 3
+[rule.match]
+command = ["reg"]
+
+# ---------------------------------------------------------------------------
+# Network-configuration changes -> Tier 3 (System) (Req 2.9)
+# ---------------------------------------------------------------------------
+
+# `netsh` changes network configuration; flagged via `network_config` so the engine assigns
+# Tier 3 regardless of the specific subcommand.
+[[rule]]
+id = "net.netsh"
+tier = 3
+[rule.match]
+command = ["netsh"]
+network_config = true
+
+# ---------------------------------------------------------------------------
+# Git operations on protected refs -> Tier 3 (System)
+# ---------------------------------------------------------------------------
+
+# `git push` (incl. `--force`): mutates a remote; never permitted without approval
+# (AGENTS.md hard rule 1).
+[[rule]]
+id = "git.push"
+tier = 3
+[rule.match]
+command = ["git"]
+args_any = ["push"]
+
+# `git reset --hard`: discards working-tree and index state irreversibly. Both tokens required
+# so a plain `git reset --soft` is not caught by this rule.
+[[rule]]
+id = "git.reset-hard"
+tier = 3
+[rule.match]
+command = ["git"]
+args_all = ["reset", "--hard"]
+
+# ---------------------------------------------------------------------------
+# Encoded / indirection sinks -> Tier 3 (System) (Req 3.4)
+# ---------------------------------------------------------------------------
+
+# PowerShell `-EncodedCommand`/`-enc`: a base64-encoded payload that cannot be evaluated, so it
+# is marked an encoded/indirection sink and forced to Tier 3.
+[[rule]]
+id = "shell.powershell.encoded"
+tier = 3
+[rule.match]
+command = ["powershell", "pwsh"]
+args_any = ["-EncodedCommand", "-enc", "-e", "-ec", "-encodedcommand"]
+encoded_indirection = true
+
+# ---------------------------------------------------------------------------
+# Global installs -> Tier 3 (System)
+# ---------------------------------------------------------------------------
+
+# `npm install -g` / `npm i --global`: installs packages outside the worktree, system-wide.
+[[rule]]
+id = "install.npm-global"
+tier = 3
+[rule.match]
+command = ["npm"]
+args_all = ["install", "-g"]
+
+# `cargo install`: installs a binary into the user/global cargo bin, outside the worktree.
+[[rule]]
+id = "install.cargo"
+tier = 3
+[rule.match]
+command = ["cargo"]
+args_any = ["install"]
+
+# `pip install` / `pip3 install`: a global/user site-packages install (no `--user` confinement
+# is assumed; the engine's unknown-token handling keeps even unrecognized forms strict).
+[[rule]]
+id = "install.pip"
+tier = 3
+[rule.match]
+command = ["pip", "pip3"]
+args_any = ["install"]
+
+# ---------------------------------------------------------------------------
+# Destructive write to a path outside the worktree -> Tier 3 (System) (Req 2.10)
+# ---------------------------------------------------------------------------
+
+# A delete/overwrite/truncate whose resolved target path lies outside the worktree is Tier 3.
+# The engine resolves every non-flag argument through the Path_Resolver and, when the operation
+# is destructive and the path escapes the worktree, assigns Tier 3 (Req 2.10).
+[[rule]]
+id = "fs.write.destructive-outside"
+tier = 3
+[rule.match]
+command = ["del", "erase", "rm", "Remove-Item", "ri"]
+[rule.match.path]
+targets = "all-non-flag"
+destructive = true
+
+# ---------------------------------------------------------------------------
+# Read-only commands -> Tier 0 (Read)
+# ---------------------------------------------------------------------------
+
+# Directory listing and file reads: no mutation, so Tier 0.
+[[rule]]
+id = "fs.read.listing"
+tier = 0
+[rule.match]
+command = ["ls", "dir", "cat", "type", "Get-ChildItem", "gci", "Get-Content", "gc"]
+
+# Path-aware read: the same read commands, but with a NON-destructive path condition so the
+# engine resolves each target through the Path_Resolver and RAISES the tier when the target is on
+# the retired drive (RetiredDrive -> System, Req 2.6, AGENTS.md hard rule 5) or escapes the
+# worktree (WorktreeEscape -> Workspace, Req 2.5). An in-worktree read stays Tier 0 (the engine
+# takes the MAX over matching rules and a non-destructive path condition only ever raises the
+# floor, never lowers it). This closes the retired-drive READ gap: `cat C:\...` / `ls C:\` would
+# otherwise classify as a flat Tier-0 read of the retired drive.
+[[rule]]
+id = "fs.read.path-aware"
+tier = 0
+[rule.match]
+command = ["ls", "dir", "cat", "type", "Get-ChildItem", "gci", "Get-Content", "gc"]
+[rule.match.path]
+targets = "all-non-flag"
+destructive = false
+
+# ---------------------------------------------------------------------------
+# Sandbox writes -> Tier 1 (Sandbox)
+# ---------------------------------------------------------------------------
+
+# Creating a directory or an empty file inside the worktree is a confined sandbox write (Tier 1).
+[[rule]]
+id = "fs.write.create"
+tier = 1
+[rule.match]
+command = ["mkdir", "md", "touch", "New-Item", "ni"]
+
+# Path-aware symlink creation: `New-Item`/`mklink` with a NON-destructive path condition so a
+# symlink whose resolved TARGET lands on the retired drive (RetiredDrive -> System, Req 2.6) or
+# escapes the worktree (WorktreeEscape -> Workspace, Req 2.5) is escalated. An in-worktree symlink
+# stays Tier 1 (the path condition only raises the floor). `mklink` is a distinct command here (it
+# names no other rule), so without this rule a `mklink ... C:\Windows` would be an unknown command;
+# attaching the path condition lets the resolver escalate it on the retired-drive target.
+[[rule]]
+id = "fs.write.symlink-path-aware"
+tier = 1
+[rule.match]
+command = ["New-Item", "ni", "mklink"]
+[rule.match.path]
+targets = "all-non-flag"
+destructive = false
