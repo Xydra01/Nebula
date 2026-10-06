@@ -485,52 +485,144 @@ async fn tools_list_call_and_log_reach_clients() {
 // pipe: built-in `tools.list`/`tools.call` round-trips, the `resources.snapshot` agreement, and the
 // `tool.call` telemetry fields.
 
-/// AC 1.4 through the daemon: a built-in round-trips through the real `ToolHost` and the
-/// `ToolCallOutcome` wire type. `fs.write` creates a file inside the confined worktree, then
-/// `fs.read` reads it back — both via `Method::ToolsCall`, with the worktree pinned to a tempdir
-/// so the file tools stay isolated (all paths in tempdirs).
+/// AC 1.4 / Req 2.2, 2.5 through the daemon: a built-in round-trips through the real `ToolHost`
+/// and the `ToolCallOutcome` wire type, and the confinement provider the daemon installs is the
+/// per-task [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider), not the old static
+/// `ConfigWorktreeRoot` (issue #29, task 8.1).
+///
+/// Each `tools.call` runs on a fresh daemon-side task with no `CURRENT_WORKTREE` scope set — the
+/// executor (issue #32) that would scope a task's root around its tool calls is not built yet. So
+/// the per-task provider resolves the no-task-in-scope sentinel and every file built-in fails
+/// closed at the confinement boundary, exactly as the sentinel seam requires (Req 2.5). The old
+/// static-root behavior (fs.write/fs.read succeeding against `tools.builtin.worktree_root` with no
+/// task in scope) is gone by design: with the per-task provider installed, nothing resolves
+/// through a static root (Req 2.2). The round-trip over the wire type and MCP wrapping is still
+/// exercised; only the resolution now fails closed.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn tools_call_round_trips_a_builtin_through_the_daemon() {
     let (h, _root) = start_with_worktree().await;
     let mut c = h.client().await;
 
-    // fs.write: create `note.txt` relative to the worktree root. The outcome's content is the
-    // MCP text block the host wraps a built-in's output in.
-    let write: ToolCallOutcome = c
-        .call(Method::ToolsCall(ToolsCallParams {
+    // fs.write with no task in scope: the per-task provider yields the sentinel, which the
+    // Path_Resolver rejects, so the built-in fails closed (Req 2.5) rather than writing against a
+    // static root. The call round-trips through the host and surfaces an InvalidArguments error.
+    let err = c
+        .call::<ToolCallOutcome>(Method::ToolsCall(ToolsCallParams {
             tool: "fs.write".into(),
             arguments: serde_json::json!({ "path": "note.txt", "content": "hello builtin" }),
             trace_id: Some(TraceId::new()),
         }))
         .await
-        .unwrap();
-    assert!(!write.is_error, "fs.write should succeed: {write:?}");
-    let wrote = write.content[0]["text"].as_str().unwrap();
-    assert!(wrote.contains("wrote"), "write confirmation: {wrote}");
+        .unwrap_err();
+    assert_eq!(
+        err.rpc_code(),
+        Some(error_code::INVALID_PARAMS),
+        "fs.write with no task in scope must fail closed at the confinement boundary: {err:?}",
+    );
 
-    // fs.read: read the same path back and confirm the round-tripped content.
-    let read: ToolCallOutcome = c
-        .call(Method::ToolsCall(ToolsCallParams {
+    // fs.read likewise fails closed with no task in scope: no built-in resolves through a static
+    // root once the per-task provider is installed.
+    let err = c
+        .call::<ToolCallOutcome>(Method::ToolsCall(ToolsCallParams {
             tool: "fs.read".into(),
             arguments: serde_json::json!({ "path": "note.txt" }),
             trace_id: Some(TraceId::new()),
         }))
         .await
-        .unwrap();
-    assert!(!read.is_error, "fs.read should succeed: {read:?}");
-    assert_eq!(read.content[0]["text"].as_str(), Some("hello builtin"));
+        .unwrap_err();
+    assert_eq!(
+        err.rpc_code(),
+        Some(error_code::INVALID_PARAMS),
+        "fs.read with no task in scope must fail closed at the confinement boundary: {err:?}",
+    );
 
-    // A path escaping the worktree is rejected at the boundary (InvalidArguments), never reading
-    // outside the confined root.
+    h.daemon.shutdown().await;
+}
+
+/// Req 2.2 / 2.5 through the daemon, the `shell.run` seam: a `shell.run` built-in called with no
+/// `CURRENT_WORKTREE` scope does **not** execute against any root — it fails closed at the
+/// permission/confinement boundary. This complements
+/// [`tools_call_round_trips_a_builtin_through_the_daemon`], which covers the `fs.*` resolver seam;
+/// here we exercise the distinct way `shell.run` depends on the per-task provider.
+///
+/// # How `shell.run` reaches (or never reaches) the sentinel cwd
+///
+/// `shell.run` does not run its working directory through `path::resolve` the way `fs.*` do.
+/// Instead it classifies the command first (before any child is spawned), and only on an
+/// execute decision does it read `ctx.worktree.worktree_root()` and pin it as the child's
+/// `current_dir` (see `crates/nebula-tools/src/builtins/shell.rs`). The daemon installs the
+/// per-task [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider), so with no task in scope
+/// that root is the no-task-in-scope sentinel (`C:\nebula\no-task-in-scope`) — a path on the
+/// retired drive that is never created and never touched.
+///
+/// There are therefore two fail-closed shapes, and `shell.run` always lands on one of them with no
+/// task in scope — it never succeeds against a static root:
+///
+/// 1. **Refused at the classification gate (asserted here).** The daemon's real `RulesClassifier`
+///    classifies an unknown command as `Tier::System` and injects no approval, so the gate refuses
+///    it with [`ToolError::InvalidArguments`] (→ `INVALID_PARAMS`) *before* any child is spawned
+///    and *before* the sentinel cwd is ever read. This is deterministic and, crucially, never asks
+///    the OS to resolve the `C:` sentinel directory, honoring AGENTS.md hard rule 5 (never touch
+///    `C:`).
+/// 2. **Spawn-time failure (not exercised, by design).** A command that classified at or below the
+///    no-approval threshold would reach `execute`, read the sentinel as its `current_dir`, and
+///    fail to spawn (→ [`ToolError::Unavailable`] / `MODEL_UNAVAILABLE`) because that directory
+///    does not exist. We deliberately do *not* drive this path: pinning `current_dir` to a `C:`
+///    path would ask the OS to resolve a path on the retired drive, which hard rule 5 forbids. The
+///    gate-refusal path proves "fails closed, never runs against a static root" without touching
+///    `C:` at all.
+///
+/// # Req 2.2 proof (explicit)
+///
+/// The provider the daemon installs is the per-task
+/// [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider), **not** the old static
+/// `ConfigWorktreeRoot` (issue #29, task 8.1). The observable proof is behavioral: with no task in
+/// scope the built-in fails closed. Under the old static-root wiring, `shell.run` would have read
+/// `tools.builtin.worktree_root` (the real tempdir below) as a perfectly valid, existing working
+/// directory and the command would have had a chance to *run* against it. It cannot here — nothing
+/// resolves through a static root once the per-task provider is installed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn no_task_in_scope_fails_closed_through_the_daemon() {
+    // `tools.builtin.worktree_root` is a real, existing tempdir. Under the OLD static-root wiring
+    // this is exactly the directory a built-in would have resolved/run against with no task in
+    // scope. The per-task provider ignores it when no `CURRENT_WORKTREE` scope is active, so its
+    // existence is what makes the fail-closed assertions below meaningful (they are NOT failing
+    // merely because the configured root is missing).
+    let (h, root) = start_with_worktree().await;
+    assert!(
+        root.is_dir(),
+        "the configured static worktree root exists ({root:?}); the old wiring would have run \
+         built-ins against it with no task in scope",
+    );
+    let mut c = h.client().await;
+
+    // `shell.run` with no `CURRENT_WORKTREE` scope. "nebula-no-such-binary" matches no rule in the
+    // embedded rules table, so the daemon's `RulesClassifier` classifies it as `Tier::System` with
+    // no approval. The gate refuses it (`INVALID_PARAMS`) BEFORE any child is spawned and before
+    // the sentinel cwd is read — the command never executes against any root, static or otherwise.
     let err = c
         .call::<ToolCallOutcome>(Method::ToolsCall(ToolsCallParams {
-            tool: "fs.read".into(),
-            arguments: serde_json::json!({ "path": "../escape.txt" }),
-            trace_id: None,
+            tool: "shell.run".into(),
+            arguments: serde_json::json!({ "command": "nebula-no-such-binary" }),
+            trace_id: Some(TraceId::new()),
         }))
         .await
         .unwrap_err();
-    assert_eq!(err.rpc_code(), Some(error_code::INVALID_PARAMS));
+    // Fail closed: the call is an ERROR, never a successful outcome. The code is a confinement/
+    // permission failure. We accept either fail-closed shape documented above so the test is robust
+    // to classifier-table changes, but assert it is specifically NOT a success and NOT an
+    // unrelated error (not-found / internal):
+    //   - INVALID_PARAMS: refused at the classification gate (the path this command takes); or
+    //   - MODEL_UNAVAILABLE: spawn refused because the sentinel cwd does not exist.
+    let code = err.rpc_code();
+    assert!(
+        matches!(
+            code,
+            Some(error_code::INVALID_PARAMS | error_code::MODEL_UNAVAILABLE)
+        ),
+        "shell.run with no task in scope must fail closed at the confinement boundary, never run \
+         against a static root: {err:?}",
+    );
 
     h.daemon.shutdown().await;
 }

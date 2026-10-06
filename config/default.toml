@@ -250,3 +250,14 @@ output_cap_bytes = 65536
 # for the change to take effect — the same lock-file gotcha documented in AGENTS.md. Loading an
 # external table from a non-empty path is not yet wired; the field exists for local experiments.
 rules_table_path = ""
+
+# Per-task git worktrees (issue #29). Each task runs in its own worktree and branch so concurrent
+# tasks are isolated and the owner's main checkout is never modified.
+[worktree]
+# Parent directory for all per-task worktrees. Must be on the hot drive and never on the retired
+# drive. Each task's worktree is created at <worktrees_dir>\<task-id>.
+worktrees_dir = 'F:\Nebula\worktrees'
+# Branch-name format for a task's branch. The `{task_id}` placeholder is replaced with the task
+# id. The `nebula/` prefix keeps task branches clear of the owner's own feat/*/fix/* branches and
+# lets issue #36's bot pull-request flow filter on it.
+branch_name_format = "nebula/{task_id}"

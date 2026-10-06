@@ -18,12 +18,21 @@ test-util = []
 [dependencies]
 serde = { workspace = true }
 thiserror.workspace = true
+# The `worktree` module shells out to the `git` CLI asynchronously, serializes creation behind
+# per-repository async locks, and measures a worktree tree (async `fs`) for the delete-limit gate,
+# so it needs the fs/process/sync/time/macros feature set (the module itself is wired by the
+# git-worktree-per-task feature; see `src/worktree/mod.rs`).
+tokio = { workspace = true, features = ["fs", "process", "sync", "time", "macros"] }
 toml.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
 tempfile.workspace = true
+# Tests drive the async `worktree` helpers via `#[tokio::test]`, which needs a runtime; the library
+# itself only needs process/sync/time/macros (see the `[dependencies]` tokio entry). The runtime
+# feature is scoped to the dev build so production never pulls it in.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber.workspace = true
 
 [lints]

@@ -117,3 +117,17 @@ fn all_paths_includes_the_builtin_worktree_root() {
     assert_eq!(entry.1, cfg.tools.builtin.worktree_root);
     assert_eq!(entry.1, PathBuf::from("."));
 }
+
+#[test]
+fn all_paths_includes_the_worktrees_dir() {
+    // The retired-drive doctor check walks `all_paths()`, so the per-task `worktrees_dir` must be
+    // listed there (git-worktree-per-task task 1.2; Req 8.3).
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    let entry = cfg
+        .all_paths()
+        .into_iter()
+        .find(|(label, _)| label == "worktree.worktrees_dir")
+        .expect("all_paths should label the worktrees dir");
+    assert_eq!(entry.1, cfg.worktree.worktrees_dir);
+    assert_eq!(entry.1, PathBuf::from(r"F:\Nebula\worktrees"));
+}

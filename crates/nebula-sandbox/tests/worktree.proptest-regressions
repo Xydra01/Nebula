@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 39414be402ad350d09f3d2cc6e6c6345c3325b4fb59bdb866b307c5ba4fcacd2 # shrinks to state = ExtraCommit
+cc 2da3585c88c993f103ece52dbbc86af49b9e2c5d3e01d6394ec04200014bac32 # shrinks to state = Clean
+cc 83f119883a7299b8bc4e65da4d2feb64023aaaae3845b117ce3b94c8cae43ac7 # shrinks to state = ExtraCommit
