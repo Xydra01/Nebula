@@ -97,35 +97,46 @@ where
 
     use tokio::process::Command;
 
-    use crate::launcher::child::spawn_in_job;
-
     let worktree_root = ctx.worktree.worktree_root();
     let timeout = ctx.limits.call_timeout;
 
-    let mut cmd = Command::new("git");
-    cmd.args(args)
-        .current_dir(&worktree_root)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // Collect args once so the command can be rebuilt for the fallback spawn path.
+    let args: Vec<std::ffi::OsString> = args.into_iter().map(|a| a.as_ref().to_owned()).collect();
+    let build_cmd = || {
+        let mut cmd = Command::new("git");
+        cmd.args(&args)
+            .current_dir(&worktree_root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd
+    };
 
-    let mut child =
-        spawn_in_job(&mut cmd).map_err(|e| unavailable(format!("could not start git: {e}")))?;
+    // Prefer the current task's Job Object (issue #30): a `git.*` child joins the task's one job
+    // when the executor has scoped it, so cancelling the task or losing the daemon kills it. With
+    // no task in scope (a direct `git.*` call in a unit test, or a non-task caller) fall back to a
+    // fresh per-process kill-on-close job (issue #27). Both are kill-on-close, so a timed-out call
+    // never leaks a git process either way.
+    let outcome = match crate::builtins::spawn_in_task_job(&mut build_cmd()) {
+        Ok(mut child) => child.wait_with_timeout(timeout).await,
+        Err(nebula_sandbox::task_job::JobError::NoTaskInScope) => {
+            let mut child = crate::launcher::child::spawn_in_job(&mut build_cmd())
+                .map_err(|e| unavailable(format!("could not start git: {e}")))?;
+            child.wait_with_timeout(timeout).await
+        }
+        Err(e) => return Err(unavailable(format!("could not start git: {e}"))),
+    };
 
-    match child.wait_with_timeout(timeout).await {
+    match outcome {
         Ok(Some(output)) => Ok(GitResult {
             success: output.status.success(),
             stdout: output.stdout,
             stderr: output.stderr,
         }),
-        Ok(None) => {
-            // Timed out: dropping `child` closes the Job Object handle and terminates git.
-            drop(child);
-            Err(ToolError::Timeout {
-                tool: tool.to_owned(),
-                timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
-            })
-        }
+        Ok(None) => Err(ToolError::Timeout {
+            tool: tool.to_owned(),
+            timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+        }),
         Err(e) => Err(unavailable(format!("waiting on git failed: {e}"))),
     }
 }

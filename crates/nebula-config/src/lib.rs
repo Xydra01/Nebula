@@ -171,6 +171,38 @@ pub struct SandboxConfig {
     pub rules_table_path: String,
 }
 
+/// Which committed-memory cap a task's Job Object enforces (issue #30).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MemoryScopeConfig {
+    /// Cap each member process individually.
+    Process,
+    /// Cap the task's whole process tree together (the default).
+    #[default]
+    Job,
+}
+
+/// The `[tasks]` section: optional per-task resource caps enforced via the Windows Job Object that
+/// supervises a task's processes (issue #30).
+///
+/// Both caps are **off by default** in Phase 1 (`0` = no cap): the machine's VRAM and commit charge
+/// are already tight (AGENTS.md), so a wrong default could kill a legitimate build. The executor
+/// (issue #32) may override these per task; the memory cap is range-checked against installed
+/// physical memory when a task's job is created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TasksConfig {
+    /// Committed-memory cap per task, in mebibytes. `0` (the default) means no cap.
+    #[serde(default)]
+    pub memory_limit_mib: u64,
+    /// Whether `memory_limit_mib` applies per-process or across the whole task (the default).
+    #[serde(default)]
+    pub memory_limit_scope: MemoryScopeConfig,
+    /// Hard CPU-rate cap per task, as a percentage `1..=100`. `0` (the default) means no cap.
+    #[serde(default)]
+    pub cpu_rate_percent: u8,
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -198,6 +230,9 @@ pub struct NebulaConfig {
     /// named.
     #[serde(default)]
     pub worktree: WorktreeConfig,
+    /// Optional per-task resource caps (issue #30), enforced via the task's Job Object.
+    #[serde(default)]
+    pub tasks: TasksConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {
@@ -357,6 +392,12 @@ impl NebulaConfig {
             return Err(ConfigError::Invalid(
                 "daemon.pipe_name must be a bare name".into(),
             ));
+        }
+        if self.tasks.cpu_rate_percent > 100 {
+            return Err(ConfigError::Invalid(format!(
+                "tasks.cpu_rate_percent = {} must be 0 (no cap) or 1..=100",
+                self.tasks.cpu_rate_percent
+            )));
         }
         Ok(())
     }

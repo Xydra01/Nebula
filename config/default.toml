@@ -261,3 +261,15 @@ worktrees_dir = 'F:\Nebula\worktrees'
 # id. The `nebula/` prefix keeps task branches clear of the owner's own feat/*/fix/* branches and
 # lets issue #36's bot pull-request flow filter on it.
 branch_name_format = "nebula/{task_id}"
+
+# Optional per-task resource caps (issue #30), enforced via the Windows Job Object that supervises
+# a task's processes. Both caps are OFF by default in Phase 1 (0 = no cap): VRAM and commit charge
+# are already tight, so a wrong default could kill a legitimate build. The executor may override
+# these per task; the memory cap is range-checked against installed physical memory at task start.
+[tasks]
+# Committed-memory cap per task, in mebibytes. 0 = no cap.
+memory_limit_mib = 0
+# Whether the memory cap applies to each member process ("process") or the whole task ("job").
+memory_limit_scope = "job"
+# Hard CPU-rate cap per task, as a percentage 1..=100. 0 = no cap.
+cpu_rate_percent = 0

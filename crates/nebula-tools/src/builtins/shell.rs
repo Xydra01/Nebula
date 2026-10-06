@@ -269,46 +269,69 @@ async fn execute(
 
     use tokio::process::Command;
 
-    use crate::launcher::child::spawn_in_job;
-
     let unavailable = |detail: String| ToolError::Unavailable {
         server: "builtin".to_owned(),
         detail,
     };
 
-    let mut cmd = Command::new(command);
-    cmd.args(args)
-        .current_dir(worktree_root)
-        .env_clear()
-        .envs(scrub_env(std::env::vars()))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let build_cmd = || {
+        let mut cmd = Command::new(command);
+        cmd.args(args)
+            .current_dir(worktree_root)
+            .env_clear()
+            .envs(scrub_env(std::env::vars()))
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        cmd
+    };
 
-    // Spawning assigns the child to a fresh kill-on-close Job Object (Requirement 4.6). The guard
-    // is held across the wait below so a cancelled/timed-out call drops it and kills the child.
-    let mut job_child = spawn_in_job(&mut cmd)
-        .map_err(|e| unavailable(format!("failed to start {command:?}: {e}")))?;
+    // Prefer the current task's Job Object (issue #30): when the executor has scoped a `TaskJob`
+    // around this task's work, the child — and every descendant it spawns — joins that one job, so
+    // cancelling the task or losing the daemon kills the whole tree. When no task is in scope (for
+    // example a direct `shell.run` call in a unit test, or a non-task caller), fall back to a fresh
+    // per-process kill-on-close job, which is the issue #27 behaviour. Both paths are kill-on-close,
+    // so a timed-out or cancelled call never leaks a running child either way.
+    match crate::builtins::spawn_in_task_job(&mut build_cmd()) {
+        Ok(mut job_child) => run_to_cap(
+            job_child.wait_with_timeout(timeout).await,
+            timeout,
+            output_cap,
+        ),
+        Err(nebula_sandbox::task_job::JobError::NoTaskInScope) => {
+            // No task in scope: use the per-process job (issue #27).
+            let mut job_child = crate::launcher::child::spawn_in_job(&mut build_cmd())
+                .map_err(|e| unavailable(format!("failed to start {command:?}: {e}")))?;
+            run_to_cap(
+                job_child.wait_with_timeout(timeout).await,
+                timeout,
+                output_cap,
+            )
+        }
+        Err(e) => Err(unavailable(format!("failed to start {command:?}: {e}"))),
+    }
+}
 
-    // Enforce the per-call timeout from child start (Requirement 4.8). `wait_with_timeout` returns
-    // `Ok(None)` when the deadline elapses; we then drop `job_child`, which kills the child and all
-    // descendants via the job (Requirement 4.9).
-    match job_child.wait_with_timeout(timeout).await {
-        Ok(Some(output)) => {
-            drop(job_child);
-            Ok(combine_output(&output, output_cap))
-        }
-        Ok(None) => {
-            drop(job_child);
-            Err(ToolError::Timeout {
-                tool: ShellRun::NAME.to_owned(),
-                timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
-            })
-        }
-        Err(e) => {
-            drop(job_child);
-            Err(unavailable(format!("failed waiting on {command:?}: {e}")))
-        }
+/// Map a `wait_with_timeout` outcome to the capped tool output or the right [`ToolError`]
+/// (Requirement 4.8–4.10). Shared by the task-job and per-process spawn paths above. Dropping the
+/// child guard (the caller lets it fall out of scope) closes the job and kills the child and its
+/// descendants on timeout.
+#[cfg(windows)]
+fn run_to_cap(
+    outcome: std::io::Result<Option<std::process::Output>>,
+    timeout: std::time::Duration,
+    output_cap: usize,
+) -> Result<ToolOutput, ToolError> {
+    match outcome {
+        Ok(Some(output)) => Ok(combine_output(&output, output_cap)),
+        Ok(None) => Err(ToolError::Timeout {
+            tool: ShellRun::NAME.to_owned(),
+            timeout_ms: u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX),
+        }),
+        Err(e) => Err(ToolError::Unavailable {
+            server: "builtin".to_owned(),
+            detail: format!("failed waiting on child: {e}"),
+        }),
     }
 }
 
