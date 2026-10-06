@@ -7,5 +7,5 @@ expression: value
   "jsonrpc": "2.0",
   "method": "resources.snapshot",
   "params": {},
-  "proto_version": 1
+  "proto_version": 2
 }

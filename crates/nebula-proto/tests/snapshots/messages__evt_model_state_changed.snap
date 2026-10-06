@@ -11,5 +11,5 @@ expression: value
     "reason": "health check timed out",
     "to": "restarting"
   },
-  "proto_version": 1
+  "proto_version": 2
 }

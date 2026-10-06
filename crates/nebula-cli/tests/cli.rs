@@ -153,7 +153,7 @@ fn model() -> ModelStatus {
 fn snapshot_daemon_status() {
     let s = DaemonStatus {
         version: "0.1.0".into(),
-        proto_version: 1,
+        proto_version: 2,
         pid: 1234,
         uptime_s: 3725,
         model: model(),

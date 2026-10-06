@@ -15,6 +15,7 @@ use nebula_proto::{ChatId, CheckStatus, DoctorCheck, DoctorReport};
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
 use nebula_telemetry::{Telemetry, TelemetryConfig};
+use nebula_tools::ToolHost;
 
 fn telemetry() -> Telemetry {
     static T: OnceLock<Telemetry> = OnceLock::new();
@@ -79,6 +80,7 @@ fn start() -> Harness {
     let deps = Deps {
         telemetry: telemetry(),
         launcher: launcher as _,
+        tool_host: Arc::new(ToolHost::empty()),
         sources: Some(Sources {
             gpu: Some(Box::new(FakeGpu)),
             gpu_processes: None,

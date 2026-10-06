@@ -215,3 +215,15 @@ flags = [
     "--cors-origins", "http://nebula.invalid",
     "--no-cors-credentials",
 ]
+
+# MCP tool servers (ADR-002, Phase 1). Each entry is a stdio MCP server the daemon launches in
+# a Job Object and calls tools on. Empty by default; add servers in the local override
+# (F:\Nebula\config\nebula.toml). Example:
+#
+#   [tools.servers.filesystem]
+#   command = 'F:\Nebula\tools\mcp-filesystem.exe'
+#   args = ["--root", 'F:\Nebula\worktrees']
+#   call_timeout_ms = 30000
+#   max_output_bytes = 1048576
+#   env = [["RUST_LOG", "info"]]
+[tools]

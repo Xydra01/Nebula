@@ -5,6 +5,6 @@ expression: value
 {
   "id": 2,
   "jsonrpc": "2.0",
-  "proto_version": 1,
+  "proto_version": 2,
   "result": {}
 }

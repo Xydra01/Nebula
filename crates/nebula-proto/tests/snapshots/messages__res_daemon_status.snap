@@ -5,7 +5,7 @@ expression: value
 {
   "id": 1,
   "jsonrpc": "2.0",
-  "proto_version": 1,
+  "proto_version": 2,
   "result": {
     "model": {
       "profile": "standard",
@@ -14,7 +14,7 @@ expression: value
       "state": "ready"
     },
     "pid": 1234,
-    "proto_version": 1,
+    "proto_version": 2,
     "uptime_s": 3600,
     "version": "0.0.1"
   }

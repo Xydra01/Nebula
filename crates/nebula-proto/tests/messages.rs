@@ -151,6 +151,18 @@ fn requests() {
             ),
         ),
         ("req_doctor_run", request(9, Method::DoctorRun(Empty {}))),
+        ("req_tools_list", request(10, Method::ToolsList(Empty {}))),
+        (
+            "req_tools_call",
+            request(
+                11,
+                Method::ToolsCall(ToolsCallParams {
+                    tool: "read_file".into(),
+                    arguments: json!({ "path": "src/main.rs" }),
+                    trace_id: Some(trace()),
+                }),
+            ),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -239,6 +251,36 @@ fn responses() {
                 RpcError::new(error_code::MODEL_UNAVAILABLE, "model server is restarting"),
             ),
         ),
+        (
+            "res_tool_list",
+            Response::ok(
+                id(10),
+                &ToolList {
+                    tools: vec![ToolInfo {
+                        server: "filesystem".into(),
+                        name: "read_file".into(),
+                        description: Some("Read a file from the worktree".into()),
+                        input_schema: json!({
+                            "type": "object",
+                            "properties": { "path": { "type": "string" } },
+                            "required": ["path"],
+                        }),
+                    }],
+                },
+            )
+            .unwrap(),
+        ),
+        (
+            "res_tool_call",
+            Response::ok(
+                id(11),
+                &ToolCallOutcome {
+                    content: json!([{ "type": "text", "text": "fn main() {}" }]),
+                    is_error: false,
+                },
+            )
+            .unwrap(),
+        ),
     ];
     for (name, res) in cases {
         check(name, &Message::Response(res));
@@ -317,7 +359,7 @@ fn events() {
 #[test]
 fn missing_params_means_empty() {
     let msg =
-        Message::decode(r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"daemon.status"}"#)
+        Message::decode(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"daemon.status"}"#)
             .unwrap();
     assert_eq!(msg, request(1, Method::DaemonStatus(Empty {})));
 }
@@ -328,33 +370,33 @@ fn decode_errors_map_to_rpc_codes() {
     assert_eq!(code("{not json"), error_code::PARSE_ERROR);
     assert_eq!(code("[1,2]"), error_code::INVALID_REQUEST);
     assert_eq!(
-        code(r#"{"jsonrpc":"1.0","id":1,"proto_version":1,"method":"daemon.status"}"#),
+        code(r#"{"jsonrpc":"1.0","id":1,"proto_version":2,"method":"daemon.status"}"#),
         error_code::INVALID_REQUEST
     );
     assert_eq!(
-        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"daemon.status","params":{}}"#),
+        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"daemon.status","params":{}}"#),
         error_code::VERSION_MISMATCH
     );
     assert_eq!(
-        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"fs.delete","params":{}}"#),
+        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"fs.delete","params":{}}"#),
         error_code::METHOD_NOT_FOUND
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"model.set_profile","params":{}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"model.set_profile","params":{}}"#
         ),
         error_code::INVALID_PARAMS
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"model.set_profile","params":{"profile":"x","typo":1}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"model.set_profile","params":{"profile":"x","typo":1}}"#
         ),
         error_code::INVALID_PARAMS,
         "unknown fields are rejected"
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"result":{},"error":{"code":1,"message":"x"}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"result":{},"error":{"code":1,"message":"x"}}"#
         ),
         error_code::INVALID_REQUEST,
         "result and error together"

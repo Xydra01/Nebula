@@ -5,7 +5,7 @@ expression: value
 {
   "id": 5,
   "jsonrpc": "2.0",
-  "proto_version": 1,
+  "proto_version": 2,
   "result": {
     "last_error": "llama-server exited with code 3221225477",
     "profile": "standard",

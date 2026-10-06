@@ -20,6 +20,7 @@ nebula-model.workspace = true
 nebula-proto.workspace = true
 nebula-resources.workspace = true
 nebula-telemetry.workspace = true
+nebula-tools.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -37,6 +38,8 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", 
 
 [dev-dependencies]
 nebula-model = { workspace = true, features = ["test-support"] }
+nebula-tools = { workspace = true, features = ["test-support"] }
+serde_json.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["full", "test-util"] }
 

@@ -10,5 +10,5 @@ expression: value
     "code": -32003,
     "message": "cancelled by client"
   },
-  "proto_version": 1
+  "proto_version": 2
 }

@@ -9,8 +9,10 @@ use nebula_proto::{
     ChatCancelParams, ChatDone, ChatError, ChatId, ChatStartParams, ChatStarted, ChatToken,
     DaemonStatus, DoctorReport, Empty, Event, LogEvent, LogsSubscribeParams, Message, Method,
     ModelSetProfileParams, ModelState, Notification, PROTO_VERSION, ReasoningEffort, Request,
-    RequestId, Response, RpcError, TraceId, Usage, error_code,
+    RequestId, Response, RpcError, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams, TraceId,
+    Usage, error_code,
 };
+use nebula_tools::ToolError;
 use serde::Serialize;
 use serde_json::Value;
 use tokio::io::AsyncWriteExt;
@@ -279,8 +281,55 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
             to_value(&Empty {})
         }
         Method::DoctorRun(Empty {}) => run_doctor(&shared).await.and_then(|r| to_value(&r)),
+        Method::ToolsList(Empty {}) => {
+            let tools = shared
+                .tool_host
+                .list_tools()
+                .into_iter()
+                .map(|t| ToolInfo {
+                    server: t.server,
+                    name: t.name,
+                    description: t.description,
+                    input_schema: t.input_schema,
+                })
+                .collect();
+            to_value(&ToolList { tools })
+        }
+        Method::ToolsCall(ToolsCallParams {
+            tool,
+            arguments,
+            trace_id,
+        }) => {
+            let trace = trace_id.or(req.trace_id).unwrap_or_default();
+            let span = tracing::info_span!("tools.call", trace_id = %trace, tool = %tool);
+            shared
+                .tool_host
+                .call(&tool, arguments, Some(&trace.to_string()))
+                .instrument(span)
+                .await
+                .map_err(|e| tool_err(&e))
+                .and_then(|r| {
+                    to_value(&ToolCallOutcome {
+                        content: r.content,
+                        is_error: r.is_error,
+                    })
+                })
+        }
     };
     let _ = tx.send(reply(id, result)).await;
+}
+
+fn tool_err(e: &ToolError) -> RpcError {
+    let code = match e {
+        ToolError::UnknownServer(_) | ToolError::UnknownTool(_) => error_code::NOT_FOUND,
+        ToolError::InvalidArguments { .. } | ToolError::OutputTooLarge { .. } => {
+            error_code::INVALID_PARAMS
+        }
+        ToolError::Timeout { .. } => error_code::CANCELLED,
+        ToolError::Launch { .. } | ToolError::Unavailable { .. } => error_code::MODEL_UNAVAILABLE,
+        ToolError::Protocol { .. } => error_code::INTERNAL_ERROR,
+    };
+    RpcError::new(code, e.to_string())
 }
 
 fn check_chat_profile(shared: &Shared, name: &str) -> Result<(), RpcError> {

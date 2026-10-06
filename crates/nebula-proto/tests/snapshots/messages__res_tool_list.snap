@@ -1,0 +1,29 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 10,
+  "jsonrpc": "2.0",
+  "proto_version": 2,
+  "result": {
+    "tools": [
+      {
+        "description": "Read a file from the worktree",
+        "input_schema": {
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "type": "object"
+        },
+        "name": "read_file",
+        "server": "filesystem"
+      }
+    ]
+  }
+}

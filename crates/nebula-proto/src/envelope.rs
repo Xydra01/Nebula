@@ -9,7 +9,9 @@ use crate::ids::TraceId;
 use crate::methods::Method;
 
 /// Version of this protocol. Bump on any incompatible change to a message.
-pub const PROTO_VERSION: u32 = 1;
+///
+/// v2 added `tools.list` and `tools.call` (the MCP tool host).
+pub const PROTO_VERSION: u32 = 2;
 
 /// Error codes. The negative 32xxx range is JSON-RPC's; -32000 to -32099 are Nebula's.
 pub mod error_code {

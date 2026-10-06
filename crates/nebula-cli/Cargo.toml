@@ -33,6 +33,7 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Cons
 [dev-dependencies]
 insta.workspace = true
 nebula-model = { workspace = true, features = ["test-support"] }
+nebula-tools.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 [lints]

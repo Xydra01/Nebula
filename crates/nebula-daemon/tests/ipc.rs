@@ -12,11 +12,14 @@ use nebula_model::testing::{FakeLauncher, FakeState, content, finish, reasoning}
 use nebula_proto::{
     ChatCancelParams, ChatId, ChatMessage, ChatStartParams, ChatStarted, CheckStatus, DaemonStatus,
     DoctorCheck, DoctorReport, Empty, Event, LogsSubscribeParams, Message, Method,
-    ModelSetProfileParams, ModelState, ModelStatus, ResourceSnapshot, Role, error_code,
+    ModelSetProfileParams, ModelState, ModelStatus, ResourceSnapshot, Role, ToolCallOutcome,
+    ToolList, ToolsCallParams, TraceId, error_code,
 };
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
 use nebula_telemetry::{Telemetry, TelemetryConfig};
+use nebula_tools::ToolHost;
+use nebula_tools::testing::{FakeTool, host_config};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -89,10 +92,19 @@ fn config(pipe_name: &str) -> NebulaConfig {
     cfg
 }
 
-fn deps(launcher: &Arc<FakeLauncher>, instance: &str) -> Deps {
+async fn tool_host() -> Arc<ToolHost> {
+    let launcher = nebula_tools::testing::launcher(vec![FakeTool::echo()]);
+    let host = ToolHost::start_with(&host_config("fs", 1_000), None, launcher.as_ref())
+        .await
+        .unwrap();
+    Arc::new(host)
+}
+
+fn deps(launcher: &Arc<FakeLauncher>, instance: &str, tool_host: Arc<ToolHost>) -> Deps {
     Deps {
         telemetry: telemetry(),
         launcher: Arc::clone(launcher) as _,
+        tool_host,
         sources: Some(Sources {
             gpu: Some(Box::new(FakeGpu)),
             gpu_processes: None,
@@ -112,7 +124,7 @@ fn deps(launcher: &Arc<FakeLauncher>, instance: &str) -> Deps {
     }
 }
 
-fn start() -> Harness {
+async fn start() -> Harness {
     let unique = ChatId::new().to_string();
     let pipe_name = format!("nebula-test-{unique}");
     let instance = format!(r"Local\NebulaDaemonTest-{unique}");
@@ -125,7 +137,11 @@ fn start() -> Harness {
     ]);
     let launcher = FakeLauncher::new(Arc::clone(&state));
     let config = config(&pipe_name);
-    let daemon = nebula_daemon::start(config.clone(), deps(&launcher, &instance)).unwrap();
+    let daemon = nebula_daemon::start(
+        config.clone(),
+        deps(&launcher, &instance, tool_host().await),
+    )
+    .unwrap();
     Harness {
         daemon,
         launcher,
@@ -196,7 +212,7 @@ async fn collect_chat(c: &mut Client, chat_id: ChatId) -> (String, String, Event
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn protocol_round_trip() {
-    let h = start();
+    let h = start().await;
     let mut c = h.ready_client().await;
 
     let status: DaemonStatus = c.call(Method::DaemonStatus(Empty {})).await.unwrap();
@@ -268,7 +284,7 @@ async fn protocol_round_trip() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn state_changes_and_logs_reach_clients() {
-    let h = start();
+    let h = start().await;
     let mut watcher = h.ready_client().await;
     let _: Empty = watcher
         .call(Method::LogsSubscribe(LogsSubscribeParams {
@@ -304,9 +320,61 @@ async fn state_changes_and_logs_reach_clients() {
     h.daemon.shutdown().await;
 }
 
+/// AC1 + AC4 over the pipe: list tools, call one, and see the `tool.call` event (with the trace
+/// id) arrive on a `logs.subscribe` connection.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn tools_list_call_and_log_reach_clients() {
+    let h = start().await;
+    let mut watcher = h.ready_client().await;
+    let _: Empty = watcher
+        .call(Method::LogsSubscribe(LogsSubscribeParams {
+            target_prefix: Some("nebula_tools".into()),
+            ..LogsSubscribeParams::default()
+        }))
+        .await
+        .unwrap();
+
+    let mut c = h.client().await;
+    let list: ToolList = c.call(Method::ToolsList(Empty {})).await.unwrap();
+    assert_eq!(list.tools.len(), 1);
+    assert_eq!(list.tools[0].name, "echo");
+    assert_eq!(list.tools[0].server, "fs");
+
+    let trace = TraceId::new();
+    let out: ToolCallOutcome = c
+        .call(Method::ToolsCall(ToolsCallParams {
+            tool: "echo".into(),
+            arguments: serde_json::json!({ "message": "hi" }),
+            trace_id: Some(trace),
+        }))
+        .await
+        .unwrap();
+    assert!(!out.is_error);
+
+    tokio::time::timeout(TIMEOUT, async {
+        loop {
+            if let Event::LogEvent(e) = watcher.next_event().await.unwrap()
+                && e.event == "tool.call"
+            {
+                assert_eq!(e.fields.get("tool").and_then(|v| v.as_str()), Some("echo"));
+                assert_eq!(e.fields.get("outcome").and_then(|v| v.as_str()), Some("ok"));
+                assert_eq!(
+                    e.trace_id,
+                    Some(trace),
+                    "the tool.call carries the trace id"
+                );
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    h.daemon.shutdown().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_clients_chat_concurrently() {
-    let h = start();
+    let h = start().await;
     h.state.set_chunk_delay(Duration::from_millis(20));
     let mut a = h.ready_client().await;
     let mut b = h.client().await;
@@ -328,7 +396,7 @@ async fn two_clients_chat_concurrently() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn disconnect_mid_stream_cancels_the_chat() {
-    let h = start();
+    let h = start().await;
     h.state.set_chunks(
         (0..200)
             .map(|i| content(&format!("t{i} ")))
@@ -381,7 +449,7 @@ async fn disconnect_mid_stream_cancels_the_chat() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn cancel_stops_a_running_chat() {
-    let h = start();
+    let h = start().await;
     h.state.set_chunks(
         (0..200)
             .map(|i| content(&format!("t{i} ")))
@@ -421,7 +489,7 @@ async fn next_response(c: &mut Client) -> nebula_proto::Response {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn bad_lines_get_error_responses() {
-    let h = start();
+    let h = start().await;
     let mut c = h.client().await;
     c.send_line(
         r#"{"jsonrpc":"2.0","id":7,"proto_version":99,"method":"daemon.status","params":{}}"#,
@@ -443,7 +511,7 @@ async fn bad_lines_get_error_responses() {
         Some(error_code::PARSE_ERROR)
     );
 
-    c.send_line(r#"{"jsonrpc":"2.0","id":"x","proto_version":1,"method":"nope","params":{}}"#)
+    c.send_line(r#"{"jsonrpc":"2.0","id":"x","proto_version":2,"method":"nope","params":{}}"#)
         .await
         .unwrap();
     let r = next_response(&mut c).await;
@@ -460,17 +528,20 @@ async fn bad_lines_get_error_responses() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_second_instance_is_refused() {
-    let h = start();
+    let h = start().await;
     let launcher = FakeLauncher::new(FakeState::new());
-    let err = nebula_daemon::start(h.config.clone(), deps(&launcher, &h.instance))
-        .err()
-        .unwrap();
+    let err = nebula_daemon::start(
+        h.config.clone(),
+        deps(&launcher, &h.instance, tool_host().await),
+    )
+    .err()
+    .unwrap();
     assert!(matches!(err, DaemonError::AlreadyRunning), "{err}");
     assert!(launcher.launches().is_empty());
 
     // A different mutex but the same pipe name: the pipe is already owned.
     let other = format!(r"Local\NebulaDaemonTest-{}", ChatId::new());
-    let err = nebula_daemon::start(h.config.clone(), deps(&launcher, &other))
+    let err = nebula_daemon::start(h.config.clone(), deps(&launcher, &other, tool_host().await))
         .err()
         .unwrap();
     assert!(matches!(err, DaemonError::Pipe { .. }), "{err}");
@@ -479,7 +550,7 @@ async fn a_second_instance_is_refused() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn shutdown_request_stops_everything() {
-    let h = start();
+    let h = start().await;
     let mut c = h.ready_client().await;
     let _: Empty = c.call(Method::DaemonShutdown(Empty {})).await.unwrap();
     tokio::time::timeout(TIMEOUT, h.daemon.shutdown_requested())
@@ -505,6 +576,10 @@ async fn shutdown_request_stops_everything() {
 
     // The instance lock is released: a new daemon can start with the same names.
     let launcher = FakeLauncher::new(FakeState::new());
-    let again = nebula_daemon::start(h.config.clone(), deps(&launcher, &h.instance)).unwrap();
+    let again = nebula_daemon::start(
+        h.config.clone(),
+        deps(&launcher, &h.instance, tool_host().await),
+    )
+    .unwrap();
     again.shutdown().await;
 }

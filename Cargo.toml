@@ -18,6 +18,7 @@ nebula-model = { path = "crates/nebula-model" }
 nebula-proto = { path = "crates/nebula-proto" }
 nebula-resources = { path = "crates/nebula-resources" }
 nebula-telemetry = { path = "crates/nebula-telemetry" }
+nebula-tools = { path = "crates/nebula-tools" }
 
 anyhow = "1.0.104"
 async-trait = "0.1.92"
@@ -26,6 +27,7 @@ eventsource-stream = "0.2.3"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 getrandom = "0.4.3"
 hex = "0.4.3"
+jsonschema = { version = "0.33.0", default-features = false }
 nvml-wrapper = "0.13.0"
 sysinfo = { version = "0.39.6", default-features = false, features = ["system", "disk"] }
 regex = "1.13.1"
