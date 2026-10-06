@@ -27,6 +27,11 @@
 //!   `permit.decision` tracing event per classification.
 //! - [`redteam`] — the ≥50-entry `red_team.toml` fixture (every required adversarial category)
 //!   that pins the expected tier of known-dangerous commands for the Red_Team_Test.
+//! - [`worktree`] — the per-task git worktree lifecycle (issue #29): the `WorktreeManager` the
+//!   executor drives, the per-task `WorktreeRootProvider`, and crash recovery. It **reuses** this
+//!   crate's [`Approval`] / [`ApprovalRequest`](approval::ApprovalRequest) /
+//!   [`ApprovalStore`](approval::ApprovalStore) contract to gate over-limit cleanup deletions,
+//!   adding no second approval mechanism.
 //!
 //! # Protected set
 //!
@@ -57,6 +62,7 @@ pub mod engine;
 pub mod redteam;
 pub mod rules;
 pub mod tier;
+pub mod worktree;
 
 // Crate-root re-exports of the permission vocabulary. `nebula-tools` re-exports exactly these
 // names from its `permit` module so every issue #27 import (`nebula_tools::permit::Tier` and

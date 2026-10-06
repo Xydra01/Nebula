@@ -1045,6 +1045,7 @@ name = "nebula-config"
 version = "0.0.1"
 dependencies = [
  "nebula-model",
+ "nebula-sandbox",
  "nebula-telemetry",
  "nebula-tools",
  "serde",
@@ -1148,6 +1149,7 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.21",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",

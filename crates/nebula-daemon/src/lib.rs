@@ -93,6 +93,11 @@ pub(crate) struct Shared {
     pub(crate) switch: tokio::sync::Mutex<()>,
     pub(crate) local_checks: Arc<LocalChecks>,
     pub(crate) artifact_checks: bool,
+    /// Per-task git worktree lifecycle API (issue #29). Held for the future executor (issue #32),
+    /// which drives `create`/`finalize`/`remove_worktree` around each task; nothing consumes it
+    /// yet.
+    #[allow(dead_code)]
+    pub(crate) worktrees: Arc<nebula_sandbox::worktree::manager::WorktreeManager>,
 }
 
 impl Shared {
@@ -141,6 +146,12 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
     let mut tool_host = deps.tool_host;
     builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref())?;
 
+    // Construct the per-task worktree manager once and reconcile any worktrees a crash left behind
+    // (issue #29, Req 6/9.4). Recovery is spawned, not awaited: `start` runs synchronously on the
+    // live Tokio runtime, so blocking on it here would panic. The manager is retained for the
+    // future executor (issue #32), which drives create/finalize/remove around each task.
+    let worktree_manager = builtin_providers::spawn_worktree_recovery(&config);
+
     let blobs = deps.telemetry.blobs().cloned();
     let chat = ModelManager::spawn_with(
         config.model.clone(),
@@ -180,6 +191,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         switch: tokio::sync::Mutex::new(()),
         local_checks: deps.local_checks,
         artifact_checks: deps.artifact_checks,
+        worktrees: worktree_manager,
     });
 
     let listener = server::Listener::bind(&pipe_path).map_err(|source| DaemonError::Pipe {

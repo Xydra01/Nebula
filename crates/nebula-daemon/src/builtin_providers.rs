@@ -5,8 +5,11 @@
 //! directly: the confinement root, the command classifier, and the latest resource snapshot
 //! (design 6.1, built-in tools wiring). The daemon owns these providers:
 //!
-//! - [`ConfigWorktreeRoot`] returns the configured `tools.builtin.worktree_root`. Issue #29 will
-//!   replace it with a per-task worktree without touching any tool.
+//! - [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider) resolves the executing task's
+//!   confinement root from the [`CURRENT_WORKTREE`](nebula_tools::CURRENT_WORKTREE) task-local
+//!   (issue #29): the root the executor scoped around the task's tool calls, or a sentinel the
+//!   `Path_Resolver` rejects when no task is in scope (Requirement 2.2, 2.5). It replaced the
+//!   static `ConfigWorktreeRoot` without touching any tool — the trait signature is unchanged.
 //! - [`SamplerResourceProvider`] reads the latest [`ResourceSnapshot`] from the very same
 //!   [`watch`](tokio::sync::watch) channel the daemon samples into, so `system.resources` returns
 //!   the exact value `resources.snapshot` returns for the same sampler state (Requirement 6.4).
@@ -21,34 +24,21 @@
 //! [`crate::start`], after the sampler is created, so the resource provider is wired to the live
 //! sampler before the host is shared.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use nebula_config::NebulaConfig;
 use nebula_proto::ResourceSnapshot;
 use nebula_resources::Sampler;
+use nebula_sandbox::approval::ApprovalStore;
 use nebula_sandbox::engine::RulesClassifier;
 use nebula_sandbox::rules::LoadError;
+use nebula_sandbox::worktree::manager::WorktreeManager;
 use nebula_tools::{
-    CommandClassifier, ResourceProvider, ToolContext, ToolHost, WorktreeRootProvider,
+    CommandClassifier, ResourceProvider, TaskWorktreeProvider, ToolContext, ToolHost,
 };
 use tokio::sync::watch;
 
 use crate::DaemonError;
-
-/// Supplies the configured confinement root to the file and shell built-ins.
-///
-/// The root is `tools.builtin.worktree_root` from config, captured once at wiring time. Issue
-/// #29 will supply a per-task worktree instead; the tools do not change.
-struct ConfigWorktreeRoot {
-    root: PathBuf,
-}
-
-impl WorktreeRootProvider for ConfigWorktreeRoot {
-    fn worktree_root(&self) -> PathBuf {
-        self.root.clone()
-    }
-}
 
 /// Supplies `system.resources` with the latest snapshot, read from the same source as the
 /// `resources.snapshot` RPC.
@@ -87,9 +77,32 @@ impl ResourceProvider for NoResourceProvider {
 /// The resource provider is wired to `sampler` when one is running (reading its live
 /// [`watch`](tokio::sync::watch) channel) and to a `None`-yielding provider otherwise. The
 /// classifier is the real [`RulesClassifier`] loaded from the embedded rules table via
-/// [`RulesClassifier::embedded`]; the confinement root and retired drive come from config
-/// (`tools.builtin.worktree_root` and `resources.retired_drive`), and the per-call limits are
-/// clamped by [`BuiltinToolsConfig::limits`](nebula_tools::BuiltinToolsConfig::limits).
+/// [`RulesClassifier::embedded`]; the confinement root is the per-task
+/// [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider) (which reads the executor's
+/// [`CURRENT_WORKTREE`](nebula_tools::CURRENT_WORKTREE) task-local), the retired drive and the
+/// classifier's path resolver come from config (`resources.retired_drive` and
+/// `tools.builtin.worktree_root`), and the per-call limits are clamped by
+/// [`BuiltinToolsConfig::limits`](nebula_tools::BuiltinToolsConfig::limits).
+///
+/// Exactly one [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider) is installed as the
+/// `worktree` provider, so no built-in call resolves through a static root (Requirement 2.2).
+/// The future executor (issue #32) drives the per-task lifecycle around this provider; it is
+/// **not built by this feature**, but the shape is:
+///
+/// ```ignore
+/// // After `manager.create(&task_id, &repo, start_point).await?` returns the root:
+/// let branch = nebula_tools::CURRENT_WORKTREE
+///     .scope(Some(root.clone()), async {
+///         // All of the task's tool-calling work runs here, so every built-in resolves
+///         // against `root` via the installed TaskWorktreeProvider.
+///         run_task_tool_calls().await
+///     })
+///     .await;
+///
+/// // At task finalize, outside the scope:
+/// let _branch = manager.finalize(&task_id).await?;   // keeps the task branch for #36
+/// manager.remove_worktree(&task_id).await?;          // removes only this task's worktree dir
+/// ```
 ///
 /// `embedded` uses the built-in lexical resolver (no filesystem I/O); a future task may inject the
 /// FS-accurate `nebula-tools` resolver via
@@ -113,9 +126,7 @@ fn build_tool_context(
         config.resources.retired_drive.clone(),
     )?);
     Ok(ToolContext {
-        worktree: Arc::new(ConfigWorktreeRoot {
-            root: config.tools.builtin.worktree_root.clone(),
-        }),
+        worktree: Arc::new(TaskWorktreeProvider::new()),
         classifier,
         resources,
         retired_drive: config.resources.retired_drive.clone(),
@@ -151,6 +162,47 @@ pub(crate) fn register_builtins(
         tracing::warn!(event = "tool.builtin_register_failed", error = %e);
     }
     Ok(())
+}
+
+/// Constructs the per-task [`WorktreeManager`] once at daemon start and runs crash recovery.
+///
+/// The manager is the issue #29 lifecycle API the future executor (issue #32) will drive:
+/// `create` / `finalize` / `remove_worktree` around each task, with the
+/// [`TaskWorktreeProvider`](nebula_tools::TaskWorktreeProvider) installed in [`build_tool_context`]
+/// resolving the per-task root the executor scopes into
+/// [`CURRENT_WORKTREE`](nebula_tools::CURRENT_WORKTREE).
+///
+/// At start it runs [`WorktreeManager::recover_stale`] to reconcile worktrees left behind by a
+/// crash: with no live task registry at cold start every worktree under `worktree.worktrees_dir`
+/// with no owning task is stale, and recovery removes the clean ones (within the delete limit) and
+/// retains any with uncommitted work for review (Requirement 6, 9.4). Recovery runs on a spawned
+/// task rather than blocking startup: [`crate::start`] is a synchronous fn executing on a running
+/// multi-threaded Tokio runtime (`#[tokio::main]`), where `Handle::block_on` on the current thread
+/// would panic. The spawned task logs the outcome as `event = "worktree.recovery"` with the stale
+/// count once reconciliation finishes.
+///
+/// The manager is returned so the caller can retain it for the executor (issue #32). Nothing
+/// consumes the lifecycle API yet, so a caller that only needs recovery may drop the returned
+/// handle after this call; the spawned recovery task holds its own clone.
+pub(crate) fn spawn_worktree_recovery(config: &NebulaConfig) -> Arc<WorktreeManager> {
+    // #28 wires no shared `ApprovalStore` into the daemon yet (none is reachable here). Construct a
+    // fresh store so the manager honours the #28 delete-limit approval contract; when #28 wires a
+    // shared store into the daemon, replace this with that shared handle — the manager reuses the
+    // same contract either way. Do NOT add a second approval mechanism.
+    let approvals = Arc::new(ApprovalStore::new());
+    let manager = Arc::new(WorktreeManager::new(
+        config.worktree.clone(),
+        config.resources.retired_drive.clone(),
+        approvals,
+    ));
+
+    let recovery_manager = Arc::clone(&manager);
+    tokio::spawn(async move {
+        let report = recovery_manager.recover_stale().await;
+        tracing::info!(event = "worktree.recovery", stale = report.stale.len());
+    });
+
+    manager
 }
 
 #[cfg(test)]

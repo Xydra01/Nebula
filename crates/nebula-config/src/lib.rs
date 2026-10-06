@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use nebula_model::ModelConfig;
+use nebula_sandbox::worktree::config::WorktreeConfig;
 use nebula_telemetry::TelemetryConfig;
 use nebula_tools::ToolHostConfig;
 use serde::Deserialize;
@@ -193,6 +194,10 @@ pub struct NebulaConfig {
     /// Command-classification rules for the shell tool.
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    /// Per-task git worktrees (issue #29): where task worktrees live and how task branches are
+    /// named.
+    #[serde(default)]
+    pub worktree: WorktreeConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {
@@ -300,6 +305,10 @@ impl NebulaConfig {
         out.push((
             "tools.builtin.worktree_root".to_owned(),
             self.tools.builtin.worktree_root.clone(),
+        ));
+        out.push((
+            "worktree.worktrees_dir".to_owned(),
+            self.worktree.worktrees_dir.clone(),
         ));
         out
     }

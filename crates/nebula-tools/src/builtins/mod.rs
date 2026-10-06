@@ -22,11 +22,13 @@ mod fs;
 mod git;
 mod resources;
 mod shell;
+mod worktree_provider;
 
 pub use fs::{FsList, FsRead, FsSearch, FsWrite};
 pub use git::{GitBranch, GitCommit, GitDiff, GitStatus};
 pub use resources::SystemResources;
 pub use shell::{ShellRun, scrub_env};
+pub use worktree_provider::{CURRENT_WORKTREE, TaskWorktreeProvider};
 
 /// Raw output produced by a built-in tool, before the output cap is applied.
 ///
