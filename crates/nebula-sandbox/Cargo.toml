@@ -21,10 +21,28 @@ thiserror.workspace = true
 # The `worktree` module shells out to the `git` CLI asynchronously, serializes creation behind
 # per-repository async locks, and measures a worktree tree (async `fs`) for the delete-limit gate,
 # so it needs the fs/process/sync/time/macros feature set (the module itself is wired by the
-# git-worktree-per-task feature; see `src/worktree/mod.rs`).
-tokio = { workspace = true, features = ["fs", "process", "sync", "time", "macros"] }
+# git-worktree-per-task feature; see `src/worktree/mod.rs`). The issue #30 `task_job` memory-limit
+# pump runs on a blocking task (`rt` for `spawn_blocking`); `rt` is a thin, runtime-agnostic
+# addition the daemon already provides.
+tokio = { workspace = true, features = ["fs", "process", "sync", "time", "macros", "rt"] }
 toml.workspace = true
 tracing.workspace = true
+
+# The one audited `unsafe` Win32 Job Object surface (issue #30) lives in `src/job.rs`. It owns the
+# kill-on-close job FFI, the IO-completion-port notification pump (for memory-limit reasons), and
+# the suspended-spawn plumbing that assigns a child to its task's job before it can run. The
+# `nebula-model` and `nebula-tools` launchers consume this one surface instead of each keeping a
+# duplicate copy. Windows-only; see `src/job.rs`.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_System_IO",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_SystemInformation",
+] }
 
 [dev-dependencies]
 proptest.workspace = true

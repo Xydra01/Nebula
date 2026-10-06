@@ -59,8 +59,12 @@
 pub mod approval;
 pub mod classifier;
 pub mod engine;
+#[cfg(windows)]
+pub mod job;
 pub mod redteam;
 pub mod rules;
+#[cfg(windows)]
+pub mod task_job;
 pub mod tier;
 pub mod worktree;
 
