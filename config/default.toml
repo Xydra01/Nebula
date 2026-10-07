@@ -226,6 +226,20 @@ flags = [
 #   call_timeout_ms = 30000
 #   max_output_bytes = 1048576
 #   env = [["RUST_LOG", "info"]]
+#
+# nebula-devtools (issue #33) is the first Python MCP tool server: build/test/lint adapters
+# (test.run, build.run, lint.run) for Python (uv/pytest/ruff) and Rust (cargo build/nextest/
+# clippy). It is a uv-managed package under tools\nebula-devtools; launch it with uv so the
+# project's own virtualenv and dev deps are used. NEBULA_RETIRED_DRIVE lets the server reject
+# any path that resolves onto the retired drive (default C:); keep it aligned with
+# resources.retired_drive above.
+#
+#   [tools.servers.devtools]
+#   command = "uv"
+#   args = ["run", "--project", 'F:\Nebula\tools\nebula-devtools', "nebula-devtools"]
+#   call_timeout_ms = 600000
+#   max_output_bytes = 1048576
+#   env = [["NEBULA_RETIRED_DRIVE", "C:"]]
 [tools]
 
 # In-process built-in tools (fs.*, git.*, shell.run, system.resources). These run inside the
