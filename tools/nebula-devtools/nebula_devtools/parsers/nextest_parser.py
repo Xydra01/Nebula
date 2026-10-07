@@ -15,10 +15,17 @@ from pathlib import PurePath
 from ..model import Diagnostic, Severity
 
 # "        FAIL [   0.012s] nebula-foo tests::math::adds_wrong"
-_FAIL_LINE = re.compile(r"^\s*FAIL\s+\[[^\]]*\]\s+\S+\s+(?P<test>\S+)\s*$")
+# nextest may also print a progress counter after the time bracket: "FAIL [ 0.0s] (1/1) <bin>
+# <test>". The run line is "FAIL [<time>] [(<n>/<m>)] <binary> <test-path>"; the binary name and
+# the test path are the final two whitespace tokens, so the test path is the last token and the
+# binary the one before it (both may contain "::" / "-" but no spaces).
+_FAIL_LINE = re.compile(r"^\s*FAIL\s+\[[^\]]*\]\s+(?:\(\d+/\d+\)\s+)?\S+\s+(?P<test>\S+)\s*$")
 # "thread 'tests::math::adds_wrong' panicked at crates/foo/src/lib.rs:42:9:"
+# Newer Rust prints the thread id too: "thread 'tests::adds_wrong' (23556) panicked at ...", so the
+# optional "(<id>)" segment between the thread name and "panicked at" is tolerated.
 _PANIC_AT = re.compile(
-    r"thread\s+'(?P<thread>[^']*)'\s+panicked at\s+(?P<file>[^:]+):(?P<line>\d+):(?P<col>\d+)"
+    r"thread\s+'(?P<thread>[^']*)'\s+(?:\(\d+\)\s+)?panicked at\s+"
+    r"(?P<file>[^:]+):(?P<line>\d+):(?P<col>\d+)"
 )
 
 

@@ -23,6 +23,9 @@ packages = ["nebula_devtools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end adapter tests that need a real toolchain (uv / cargo nextest); skip when absent",
+]
 
 [tool.ruff]
 line-length = 100

@@ -33,6 +33,11 @@ def _relative(file: str, worktree_root: str) -> str:
         return file
 
 
+def _norm(file: str) -> str:
+    """Normalize a path for separator-insensitive keying (pytest mixes ``\\`` and ``/``)."""
+    return file.replace("\\", "/")
+
+
 def parse_pytest(output: str, worktree_root: str) -> list[Diagnostic]:
     """Parse pytest output into one diagnostic per failing test.
 
@@ -47,7 +52,7 @@ def parse_pytest(output: str, worktree_root: str) -> list[Diagnostic]:
     for line in lines:
         m = _TB_LOCATION.match(line.strip())
         if m:
-            last_location[m.group("file")] = int(m.group("line"))
+            last_location[_norm(m.group("file"))] = int(m.group("line"))
 
     diagnostics: list[Diagnostic] = []
     for line in lines:
@@ -59,7 +64,8 @@ def parse_pytest(output: str, worktree_root: str) -> list[Diagnostic]:
         node = _NODEID.match(nodeid)
         file = node.group("file") if node else nodeid
         # Prefer a traceback location for this file; default to line 1 if none was captured.
-        line_no = last_location.get(file, 1)
+        # Key on the separator-normalized path so a "/" nodeid matches a "\\" traceback line.
+        line_no = last_location.get(_norm(file), 1)
         diagnostics.append(
             Diagnostic(
                 file=_relative(file, worktree_root),
