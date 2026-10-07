@@ -1,0 +1,19 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.1, pytest-8.3.2, pluggy-1.5.0
+rootdir: C:\work\sample
+collected 2 items
+
+tests\test_math.py .F                                                    [100%]
+
+================================== FAILURES ===================================
+________________________________ test_adds_wrong ______________________________
+
+    def test_adds_wrong():
+>       assert add(1, 2) == 4
+E       assert 3 == 4
+E        +  where 3 = add(1, 2)
+
+tests\test_math.py:12: AssertionError
+=========================== short test summary info ===========================
+FAILED tests\test_math.py::test_adds_wrong - assert 3 == 4
+========================= 1 failed, 1 passed in 0.04s =========================

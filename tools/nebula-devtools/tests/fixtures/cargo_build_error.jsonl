@@ -1,0 +1,4 @@
+{"reason":"compiler-message","message":{"message":"cannot find value `x` in this scope","code":{"code":"E0425"},"level":"error","spans":[{"file_name":"src/lib.rs","line_start":7,"line_end":7,"column_start":5,"column_end":6,"is_primary":true}]}}
+{"reason":"compiler-message","message":{"message":"unused variable: `y`","code":{"code":"unused_variables"},"level":"warning","spans":[{"file_name":"src/lib.rs","line_start":3,"line_end":3,"column_start":9,"column_end":10,"is_primary":true}]}}
+{"reason":"compiler-artifact","target":{"name":"sample"}}
+{"reason":"build-finished","success":false}

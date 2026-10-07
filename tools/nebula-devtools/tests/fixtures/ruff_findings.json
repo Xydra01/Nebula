@@ -1,0 +1,16 @@
+[
+  {
+    "code": "F401",
+    "message": "`os` imported but unused",
+    "filename": "sample/app.py",
+    "location": { "row": 1, "column": 8 },
+    "end_location": { "row": 1, "column": 10 }
+  },
+  {
+    "code": "E701",
+    "message": "Multiple statements on one line (colon)",
+    "filename": "sample/app.py",
+    "location": { "row": 5, "column": 1 },
+    "end_location": { "row": 5, "column": 20 }
+  }
+]

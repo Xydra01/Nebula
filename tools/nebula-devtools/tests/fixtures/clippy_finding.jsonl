@@ -1,0 +1,2 @@
+{"reason":"compiler-message","message":{"message":"this `if` statement can be collapsed","code":{"code":"clippy::collapsible_if"},"level":"warning","spans":[{"file_name":"src/main.rs","line_start":10,"line_end":12,"column_start":5,"column_end":6,"is_primary":true}]}}
+{"reason":"build-finished","success":true}

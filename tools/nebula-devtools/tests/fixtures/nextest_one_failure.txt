@@ -1,0 +1,13 @@
+    Starting 2 tests across 1 binary
+        PASS [   0.004s] sample tests::math::adds_right
+running 1 test
+thread 'tests::math::adds_wrong' (23556) panicked at src\lib.rs:18:9:
+assertion `left == right` failed
+  left: 3
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+        FAIL [   0.006s] (2/2) sample tests::math::adds_wrong
+------------
+     Summary [   0.010s] 2 tests run: 1 passed, 1 failed
+        FAIL [   0.006s] sample tests::math::adds_wrong
+error: test run failed
