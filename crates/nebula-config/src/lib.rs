@@ -203,6 +203,45 @@ pub struct TasksConfig {
     pub cpu_rate_percent: u8,
 }
 
+/// The `[executor]` section: limits and defaults for autonomous executor tasks (issue #32).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExecutorConfig {
+    /// Maximum tool calls per task before stopping cleanly as `limit_reached`.
+    #[serde(default = "default_max_tool_calls")]
+    pub max_tool_calls: u32,
+    /// Maximum cumulative model tokens per task across all turns before stopping as `limit_reached`.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
+    /// Wall-clock timeout in seconds per task before stopping cleanly as `limit_reached`.
+    #[serde(default = "default_wall_time_secs")]
+    pub wall_time_secs: u64,
+    /// Default chat profile for executor tasks; empty uses the active profile.
+    #[serde(default)]
+    pub default_profile: String,
+}
+
+const fn default_max_tool_calls() -> u32 {
+    15
+}
+const fn default_max_tokens() -> u32 {
+    40960
+}
+const fn default_wall_time_secs() -> u64 {
+    600
+}
+
+impl Default for ExecutorConfig {
+    fn default() -> Self {
+        Self {
+            max_tool_calls: default_max_tool_calls(),
+            max_tokens: default_max_tokens(),
+            wall_time_secs: default_wall_time_secs(),
+            default_profile: String::new(),
+        }
+    }
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -233,6 +272,9 @@ pub struct NebulaConfig {
     /// Optional per-task resource caps (issue #30), enforced via the task's Job Object.
     #[serde(default)]
     pub tasks: TasksConfig,
+    /// Autonomous single executor loop bounds and defaults (issue #32).
+    #[serde(default)]
+    pub executor: ExecutorConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {
@@ -397,6 +439,32 @@ impl NebulaConfig {
             return Err(ConfigError::Invalid(format!(
                 "tasks.cpu_rate_percent = {} must be 0 (no cap) or 1..=100",
                 self.tasks.cpu_rate_percent
+            )));
+        }
+        if self.executor.max_tool_calls == 0 {
+            return Err(ConfigError::Invalid(
+                "executor.max_tool_calls must be at least 1".into(),
+            ));
+        }
+        if self.executor.max_tokens == 0 {
+            return Err(ConfigError::Invalid(
+                "executor.max_tokens must be at least 1".into(),
+            ));
+        }
+        if self.executor.wall_time_secs == 0 {
+            return Err(ConfigError::Invalid(
+                "executor.wall_time_secs must be at least 1".into(),
+            ));
+        }
+        if !self.executor.default_profile.is_empty()
+            && !self
+                .model
+                .profiles
+                .contains_key(&self.executor.default_profile)
+        {
+            return Err(ConfigError::Invalid(format!(
+                "executor.default_profile names unknown profile {:?}",
+                self.executor.default_profile
             )));
         }
         Ok(())

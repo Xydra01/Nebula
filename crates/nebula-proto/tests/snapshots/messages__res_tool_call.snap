@@ -5,7 +5,7 @@ expression: value
 {
   "id": 11,
   "jsonrpc": "2.0",
-  "proto_version": 2,
+  "proto_version": 3,
   "result": {
     "content": [
       {

@@ -11,7 +11,8 @@ use crate::methods::Method;
 /// Version of this protocol. Bump on any incompatible change to a message.
 ///
 /// v2 added `tools.list` and `tools.call` (the MCP tool host).
-pub const PROTO_VERSION: u32 = 2;
+/// v3 added `task.create`, `task.cancel`, `task.step`, and `task.done` (the single executor loop).
+pub const PROTO_VERSION: u32 = 3;
 
 /// Error codes. The negative 32xxx range is JSON-RPC's; -32000 to -32099 are Nebula's.
 pub mod error_code {

@@ -7,6 +7,7 @@ mod backup;
 mod chat;
 mod daemon_ctl;
 pub mod format;
+mod task;
 #[cfg(windows)]
 mod win;
 
@@ -21,13 +22,14 @@ use nebula_daemon::client::{Client, ClientError};
 use nebula_proto::{
     CheckStatus, DaemonStatus, DoctorCheck, DoctorReport, Empty, Event, LogLevel,
     LogsSubscribeParams, Method, ModelSetProfileParams, ModelStatus, ReasoningEffort,
-    ResourceSnapshot, TraceId, error_code,
+    ResourceSnapshot, TaskId, TraceId, error_code,
 };
 use serde::Serialize;
 use time::OffsetDateTime;
 use tokio::io::AsyncBufRead;
 
 pub use format::Style;
+pub use task::TaskRunArgs;
 
 /// How long to wait for a busy pipe.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -76,6 +78,24 @@ pub enum Command {
         /// Action.
         #[command(subcommand)]
         action: BackupAction,
+    },
+    /// Run or cancel autonomous tasks.
+    Task {
+        /// Action.
+        #[command(subcommand)]
+        action: TaskAction,
+    },
+}
+
+/// `nebula task ...`.
+#[derive(Debug, Subcommand)]
+pub enum TaskAction {
+    /// Run an autonomous task to completion.
+    Run(task::TaskRunArgs),
+    /// Cancel a running task.
+    Cancel {
+        /// Task ID (ULID).
+        task_id: TaskId,
     },
 }
 
@@ -288,6 +308,10 @@ pub async fn run(
                 }
                 backup::restore(ctx, &id, to, in_place, out)
             }
+        },
+        Command::Task { action } => match action {
+            TaskAction::Run(args) => task::run(ctx, &args, out).await,
+            TaskAction::Cancel { task_id } => task::cancel(ctx, task_id, out).await,
         },
     }
 }

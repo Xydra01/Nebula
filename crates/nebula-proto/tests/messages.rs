@@ -20,6 +20,12 @@ fn span() -> SpanId {
 fn chat_id() -> ChatId {
     ChatId::from_ulid(ulid("01K6P3Z8M4Q7X2V9B5N1C0D3EH"))
 }
+fn task_id() -> TaskId {
+    TaskId::from_ulid(ulid("01K6P3Z8M4Q7X2V9B5N1C0D3EJ"))
+}
+fn step_id() -> StepId {
+    StepId::from_ulid(ulid("01K6P3Z8M4Q7X2V9B5N1C0D3EK"))
+}
 
 fn model_status() -> ModelStatus {
     ModelStatus {
@@ -163,6 +169,28 @@ fn requests() {
                 }),
             ),
         ),
+        (
+            "req_task_create",
+            request(
+                12,
+                Method::TaskCreate(TaskCreateParams {
+                    goal: "fix failing test in test_calc.py".into(),
+                    repo: "F:\\repo".into(),
+                    start_point: Some("main".into()),
+                    profile: Some("standard".into()),
+                    max_tool_calls: Some(15),
+                    max_tokens: Some(40960),
+                    wall_time_secs: Some(600),
+                }),
+            ),
+        ),
+        (
+            "req_task_cancel",
+            request(
+                13,
+                Method::TaskCancel(TaskCancelParams { task_id: task_id() }),
+            ),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -281,6 +309,17 @@ fn responses() {
             )
             .unwrap(),
         ),
+        (
+            "res_task_started",
+            Response::ok(
+                id(12),
+                &TaskStarted {
+                    task_id: task_id(),
+                    trace_id: trace(),
+                },
+            )
+            .unwrap(),
+        ),
     ];
     for (name, res) in cases {
         check(name, &Message::Response(res));
@@ -350,6 +389,23 @@ fn events() {
                 .clone(),
             }),
         ),
+        (
+            "evt_task_step",
+            Event::TaskStep(TaskStep {
+                task_id: task_id(),
+                step_id: step_id(),
+                step_index: 0,
+                tool_calls: vec!["test.run".into()],
+            }),
+        ),
+        (
+            "evt_task_done",
+            Event::TaskDone(TaskDone {
+                task_id: task_id(),
+                status: TaskStatus::Completed,
+                summary: "Fixed test_calc by correcting off-by-one error".into(),
+            }),
+        ),
     ];
     for (name, event) in cases {
         check(name, &Message::Notification(Notification::new(event)));
@@ -359,7 +415,7 @@ fn events() {
 #[test]
 fn missing_params_means_empty() {
     let msg =
-        Message::decode(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"daemon.status"}"#)
+        Message::decode(r#"{"jsonrpc":"2.0","id":1,"proto_version":3,"method":"daemon.status"}"#)
             .unwrap();
     assert_eq!(msg, request(1, Method::DaemonStatus(Empty {})));
 }
@@ -370,33 +426,33 @@ fn decode_errors_map_to_rpc_codes() {
     assert_eq!(code("{not json"), error_code::PARSE_ERROR);
     assert_eq!(code("[1,2]"), error_code::INVALID_REQUEST);
     assert_eq!(
-        code(r#"{"jsonrpc":"1.0","id":1,"proto_version":2,"method":"daemon.status"}"#),
+        code(r#"{"jsonrpc":"1.0","id":1,"proto_version":3,"method":"daemon.status"}"#),
         error_code::INVALID_REQUEST
     );
     assert_eq!(
-        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":1,"method":"daemon.status","params":{}}"#),
+        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"daemon.status","params":{}}"#),
         error_code::VERSION_MISMATCH
     );
     assert_eq!(
-        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"fs.delete","params":{}}"#),
+        code(r#"{"jsonrpc":"2.0","id":1,"proto_version":3,"method":"fs.delete","params":{}}"#),
         error_code::METHOD_NOT_FOUND
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"model.set_profile","params":{}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":3,"method":"model.set_profile","params":{}}"#
         ),
         error_code::INVALID_PARAMS
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"method":"model.set_profile","params":{"profile":"x","typo":1}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":3,"method":"model.set_profile","params":{"profile":"x","typo":1}}"#
         ),
         error_code::INVALID_PARAMS,
         "unknown fields are rejected"
     );
     assert_eq!(
         code(
-            r#"{"jsonrpc":"2.0","id":1,"proto_version":2,"result":{},"error":{"code":1,"message":"x"}}"#
+            r#"{"jsonrpc":"2.0","id":1,"proto_version":3,"result":{},"error":{"code":1,"message":"x"}}"#
         ),
         error_code::INVALID_REQUEST,
         "result and error together"

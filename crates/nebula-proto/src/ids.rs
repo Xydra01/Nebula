@@ -68,3 +68,11 @@ ulid_id!(
     /// Identifies one streaming chat started with `chat.start`.
     ChatId
 );
+ulid_id!(
+    /// Identifies one executor task started with `task.create`.
+    TaskId
+);
+ulid_id!(
+    /// Identifies one step / iteration within an executor task.
+    StepId
+);

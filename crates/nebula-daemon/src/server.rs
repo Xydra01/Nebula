@@ -9,8 +9,8 @@ use nebula_proto::{
     ChatCancelParams, ChatDone, ChatError, ChatId, ChatStartParams, ChatStarted, ChatToken,
     DaemonStatus, DoctorReport, Empty, Event, LogEvent, LogsSubscribeParams, Message, Method,
     ModelSetProfileParams, ModelState, Notification, PROTO_VERSION, ReasoningEffort, Request,
-    RequestId, Response, RpcError, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams, TraceId,
-    Usage, error_code,
+    RequestId, Response, RpcError, TaskCancelParams, TaskCreateParams, TaskId, TaskStarted,
+    ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams, TraceId, Usage, error_code,
 };
 use nebula_tools::ToolError;
 use serde::Serialize;
@@ -22,9 +22,10 @@ use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
-use crate::Shared;
 use crate::checks;
+use crate::executor;
 use crate::win::PipeSecurity;
+use crate::{RunningTaskState, Shared};
 
 /// Longest accepted request line.
 const MAX_LINE: usize = 16 * 1024 * 1024;
@@ -252,6 +253,39 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                 )),
             }
         }
+        Method::TaskCreate(p) => {
+            start_task(&shared, id, p, req.trace_id, tx, &conn).await;
+            return;
+        }
+        Method::TaskCancel(TaskCancelParams { task_id }) => {
+            let token = {
+                let running = shared
+                    .executor_tasks
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                running.get(&task_id).map(|s| s.cancel.clone())
+            };
+            match token {
+                Some(t) => {
+                    t.cancel();
+                    to_value(&Empty {})
+                }
+                None => {
+                    let finished = shared
+                        .finished_tasks
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner);
+                    if finished.contains(&task_id) {
+                        to_value(&Empty {})
+                    } else {
+                        Err(RpcError::new(
+                            error_code::NOT_FOUND,
+                            format!("no task {task_id}"),
+                        ))
+                    }
+                }
+            }
+        }
         Method::ModelStatus(Empty {}) => to_value(&shared.chat.status()),
         Method::ModelSetProfile(ModelSetProfileParams { profile }) => {
             match check_chat_profile(&shared, &profile) {
@@ -397,7 +431,100 @@ async fn start_chat(
     );
 }
 
-async fn ensure_profile(
+async fn start_task(
+    shared: &Arc<Shared>,
+    id: RequestId,
+    params: TaskCreateParams,
+    trace: Option<TraceId>,
+    tx: Outbox,
+    conn: &CancellationToken,
+) {
+    let profile = params.profile.as_deref().or_else(|| {
+        let p = shared.config.executor.default_profile.as_str();
+        if p.is_empty() { None } else { Some(p) }
+    });
+    if let Some(Err(e)) = profile.map(|p| check_chat_profile(shared, p)) {
+        let _ = tx.send(reply::<Empty>(id, Err(e))).await;
+        return;
+    }
+
+    let task_id = TaskId::new();
+    let trace_id = trace.unwrap_or_default();
+    let wt_task_id = nebula_sandbox::worktree::TaskId::new(task_id.to_string());
+
+    // Create the per-task worktree BEFORE TaskStarted (Requirement 1.1, 1.3)
+    let worktree_root = match shared
+        .worktrees
+        .create(&wt_task_id, &params.repo, params.start_point.as_deref())
+        .await
+    {
+        Ok(root) => root,
+        Err(e) => {
+            let _ = tx.send(reply::<Empty>(id, Err(worktree_err(&e)))).await;
+            return;
+        }
+    };
+
+    let token = conn.child_token();
+    shared
+        .executor_tasks
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(
+            task_id,
+            RunningTaskState {
+                cancel: token.clone(),
+            },
+        );
+
+    // Reply with TaskStarted before any task.* event is emitted
+    let _ = tx
+        .send(reply(id, Ok(TaskStarted { task_id, trace_id })))
+        .await;
+
+    let span = tracing::info_span!("task", trace_id = %trace_id, task_id = %task_id);
+    let s = Arc::clone(shared);
+    shared.tasks.spawn(
+        async move {
+            executor::run_task(
+                Arc::clone(&s),
+                task_id,
+                trace_id,
+                params,
+                worktree_root,
+                tx,
+                token,
+            )
+            .await;
+
+            s.executor_tasks
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .remove(&task_id);
+            s.finished_tasks
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .insert(task_id);
+        }
+        .instrument(span),
+    );
+}
+
+fn worktree_err(e: &nebula_sandbox::worktree::WorktreeError) -> RpcError {
+    use nebula_sandbox::worktree::WorktreeError;
+    let code = match e {
+        WorktreeError::NotARepository(_)
+        | WorktreeError::UnresolvableRef(_)
+        | WorktreeError::BranchExists(_)
+        | WorktreeError::RetiredDrive(_)
+        | WorktreeError::TaskAlreadyActive(_) => error_code::INVALID_PARAMS,
+        WorktreeError::UnknownTask(_) => error_code::NOT_FOUND,
+        _ => error_code::INTERNAL_ERROR,
+    };
+    RpcError::new(code, e.to_string())
+}
+
+pub(crate) async fn ensure_profile(
     shared: &Shared,
     want: Option<&str>,
     token: &CancellationToken,

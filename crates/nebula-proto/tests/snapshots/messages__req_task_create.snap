@@ -1,0 +1,19 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 12,
+  "jsonrpc": "2.0",
+  "method": "task.create",
+  "params": {
+    "goal": "fix failing test in test_calc.py",
+    "max_tokens": 40960,
+    "max_tool_calls": 15,
+    "profile": "standard",
+    "repo": "F:\\repo",
+    "start_point": "main",
+    "wall_time_secs": 600
+  },
+  "proto_version": 3
+}

@@ -9,5 +9,5 @@ expression: value
   },
   "id": "abc",
   "jsonrpc": "2.0",
-  "proto_version": 2
+  "proto_version": 3
 }

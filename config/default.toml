@@ -287,3 +287,15 @@ memory_limit_mib = 0
 memory_limit_scope = "job"
 # Hard CPU-rate cap per task, as a percentage 1..=100. 0 = no cap.
 cpu_rate_percent = 0
+
+# Autonomous single executor loop (issue #32).
+[executor]
+# Maximum tool calls per task before stopping cleanly as limit_reached.
+max_tool_calls = 15
+# Maximum cumulative model tokens per task across all turns before stopping as limit_reached.
+max_tokens = 40960
+# Wall-clock timeout in seconds per task before stopping cleanly as limit_reached.
+wall_time_secs = 600
+# Default chat profile for executor tasks; empty uses the active profile.
+default_profile = ""
+

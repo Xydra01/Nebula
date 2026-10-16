@@ -4,12 +4,13 @@ use clap::Parser;
 use nebula_cli::format::{self, Style};
 use nebula_cli::{
     BackupAction, ChatArgs, Cli, Command, DaemonAction, Level, LogsAction, ModelAction, Reasoning,
-    doctor_exit_code,
+    TaskAction, TaskRunArgs, doctor_exit_code,
 };
 use nebula_config::NebulaConfig;
 use nebula_proto::{
     CheckStatus, DaemonStatus, DiskUsage, DoctorCheck, DoctorReport, GpuProcess, ModelState,
-    ModelStatus, ResourceSnapshot, StopReason, Usage,
+    ModelStatus, ResourceSnapshot, StepId, StopReason, TaskDone, TaskId, TaskStatus, TaskStep,
+    Usage,
 };
 use time::macros::datetime;
 
@@ -111,6 +112,55 @@ fn parses_every_command() {
 
     assert!(matches!(parse(&["resources"]).command, Command::Resources));
     assert!(matches!(parse(&["doctor"]).command, Command::Doctor));
+
+    let Command::Task {
+        action:
+            TaskAction::Run(TaskRunArgs {
+                goal,
+                repo,
+                start_point,
+                profile,
+                max_tool_calls,
+                max_tokens,
+                wall_time_secs,
+            }),
+    } = parse(&[
+        "task",
+        "run",
+        "fix failing test",
+        "--repo",
+        "F:\\repo",
+        "--start-point",
+        "main",
+        "--profile",
+        "standard",
+        "--max-tool-calls",
+        "10",
+        "--max-tokens",
+        "5000",
+        "--wall-time-secs",
+        "60",
+    ])
+    .command
+    else {
+        panic!("not task run");
+    };
+    assert_eq!(goal, "fix failing test");
+    assert_eq!(repo.unwrap().to_str(), Some("F:\\repo"));
+    assert_eq!(start_point.as_deref(), Some("main"));
+    assert_eq!(profile.as_deref(), Some("standard"));
+    assert_eq!(max_tool_calls, Some(10));
+    assert_eq!(max_tokens, Some(5000));
+    assert_eq!(wall_time_secs, Some(60));
+
+    let task_id_str = "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E";
+    let Command::Task {
+        action: TaskAction::Cancel { task_id },
+    } = parse(&["task", "cancel", task_id_str]).command
+    else {
+        panic!("not task cancel");
+    };
+    assert_eq!(task_id.to_string(), task_id_str);
 }
 
 #[test]
@@ -121,6 +171,7 @@ fn rejects_bad_arguments() {
         &["nebula", "logs", "tail", "--trace", "nope"],
         &["nebula", "model", "profile"],
         &["nebula", "daemon", "restart"],
+        &["nebula", "task", "cancel", "invalid-id"],
     ] {
         assert!(Cli::try_parse_from(args).is_err(), "{args:?} should fail");
     }
@@ -255,4 +306,26 @@ fn durations() {
     assert_eq!(format::duration(303), "5m 03s");
     assert_eq!(format::duration(7380), "2h 03m");
     assert_eq!(format::duration(273_600), "3d 04h");
+}
+
+#[test]
+fn snapshot_task_formatting() {
+    let task_id = "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E".parse::<TaskId>().unwrap();
+    let step_id = "01J9ZQ3V5W8X0Y2Z4A6B8C0D2F".parse::<StepId>().unwrap();
+    let step = TaskStep {
+        task_id,
+        step_id,
+        step_index: 1,
+        tool_calls: vec!["fs.read".into(), "shell.execute".into()],
+    };
+    let done = TaskDone {
+        task_id,
+        status: TaskStatus::Completed,
+        summary: "Fixed failing test in tests/test_calc.py".into(),
+    };
+    let lines = [
+        format::task_step(&step, Style::PLAIN),
+        format::task_done(&done, Style::PLAIN),
+    ];
+    insta::assert_snapshot!(lines.join("\n"));
 }

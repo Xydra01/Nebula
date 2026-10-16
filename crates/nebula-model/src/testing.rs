@@ -1,7 +1,7 @@
 //! A fake llama-server (axum) and a launcher that starts it in-process, for tests in this
 //! crate and its users (the daemon). Behind the `test-support` feature.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -39,6 +39,8 @@ pub struct FakeState {
     pub chat_status: AtomicU16,
     /// SSE `data:` payloads streamed by chat, ending with `[DONE]`.
     pub chunks: Mutex<Vec<String>>,
+    /// Optional queue of turn responses. If non-empty, the next turn is popped; otherwise `chunks` is used.
+    pub queued_turns: Mutex<VecDeque<Vec<String>>>,
     /// Delay before each chunk.
     pub chunk_delay_ms: AtomicU64,
     /// `(path, body)` of every request.
@@ -60,6 +62,13 @@ impl FakeState {
         let mut data: Vec<String> = chunks.into_iter().map(|c| c.to_string()).collect();
         data.push("[DONE]".into());
         *lock(&self.chunks) = data;
+    }
+
+    /// Enqueues a turn's worth of chunks (a `[DONE]` is appended).
+    pub fn push_turn(&self, chunks: Vec<Value>) {
+        let mut data: Vec<String> = chunks.into_iter().map(|c| c.to_string()).collect();
+        data.push("[DONE]".into());
+        lock(&self.queued_turns).push_back(data);
     }
 
     /// Sets the delay before each chunk.
@@ -142,7 +151,14 @@ async fn chat(
         )
             .into_response();
     }
-    let chunks = lock(&s.chunks).clone();
+    let chunks = {
+        let mut q = lock(&s.queued_turns);
+        if let Some(turn) = q.pop_front() {
+            turn
+        } else {
+            lock(&s.chunks).clone()
+        }
+    };
     let delay = Duration::from_millis(s.chunk_delay_ms.load(Ordering::SeqCst));
     let stream = futures_util::stream::iter(chunks).then(move |c| async move {
         tokio::time::sleep(delay).await;

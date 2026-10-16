@@ -9,16 +9,17 @@
 mod builtin_providers;
 pub mod checks;
 pub mod client;
+pub(crate) mod executor;
 mod server;
 pub mod win;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use nebula_config::NebulaConfig;
 use nebula_model::{Launcher, ModelManager, Preflight, SupervisorConfig};
-use nebula_proto::{ChatId, DoctorReport};
+use nebula_proto::{ChatId, DoctorReport, TaskId};
 use nebula_resources::{Sampler, SamplerConfig, Sources};
 use nebula_telemetry::Telemetry;
 use nebula_tools::ToolHost;
@@ -79,6 +80,10 @@ pub struct Deps {
     pub artifact_checks: bool,
 }
 
+pub(crate) struct RunningTaskState {
+    pub(crate) cancel: CancellationToken,
+}
+
 pub(crate) struct Shared {
     pub(crate) config: NebulaConfig,
     pub(crate) telemetry: Telemetry,
@@ -88,15 +93,13 @@ pub(crate) struct Shared {
     pub(crate) sampler: Mutex<Option<Sampler>>,
     pub(crate) started: Instant,
     pub(crate) chats: Mutex<HashMap<ChatId, CancellationToken>>,
+    pub(crate) executor_tasks: Mutex<HashMap<TaskId, RunningTaskState>>,
+    pub(crate) finished_tasks: Mutex<HashSet<TaskId>>,
     pub(crate) shutdown: CancellationToken,
     pub(crate) tasks: TaskTracker,
     pub(crate) switch: tokio::sync::Mutex<()>,
     pub(crate) local_checks: Arc<LocalChecks>,
     pub(crate) artifact_checks: bool,
-    /// Per-task git worktree lifecycle API (issue #29). Held for the future executor (issue #32),
-    /// which drives `create`/`finalize`/`remove_worktree` around each task; nothing consumes it
-    /// yet.
-    #[allow(dead_code)]
     pub(crate) worktrees: Arc<nebula_sandbox::worktree::manager::WorktreeManager>,
 }
 
@@ -186,6 +189,8 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         sampler: Mutex::new(sampler),
         started: Instant::now(),
         chats: Mutex::new(HashMap::new()),
+        executor_tasks: Mutex::new(HashMap::new()),
+        finished_tasks: Mutex::new(HashSet::new()),
         shutdown: CancellationToken::new(),
         tasks: TaskTracker::new(),
         switch: tokio::sync::Mutex::new(()),
@@ -261,6 +266,17 @@ impl Daemon {
             .map(|(_, t)| t)
             .collect();
         for t in chats {
+            t.cancel();
+        }
+        let tasks: Vec<CancellationToken> = self
+            .shared
+            .executor_tasks
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .drain()
+            .map(|(_, s)| s.cancel)
+            .collect();
+        for t in tasks {
             t.cancel();
         }
         let chat = self.shared.chat.stop();
