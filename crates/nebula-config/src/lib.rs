@@ -331,6 +331,44 @@ pub struct NebulaConfig {
     /// GitHub flow: bot branch push and PR creation (issue #36).
     #[serde(default)]
     pub github: GitHubConfig,
+    /// Circuit breakers: safety stops and runaway detection (issue #34).
+    #[serde(default)]
+    pub circuit_breakers: CircuitBreakersConfig,
+}
+
+/// The `[circuit_breakers]` section: thresholds for halting tasks upon repetitive failures or runaways (issue #34).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CircuitBreakersConfig {
+    /// Maximum consecutive identical tool failures before tripping breaker.
+    #[serde(default = "default_max_repeated_tool_failures")]
+    pub max_repeated_tool_failures: u32,
+    /// Maximum edits to the same file in a single task before tripping breaker.
+    #[serde(default = "default_max_file_edits")]
+    pub max_file_edits: u32,
+    /// Maximum tokens in a single step before tripping runaway token breaker.
+    #[serde(default = "default_runaway_step_tokens")]
+    pub runaway_step_tokens: u32,
+}
+
+const fn default_max_repeated_tool_failures() -> u32 {
+    3
+}
+const fn default_max_file_edits() -> u32 {
+    5
+}
+const fn default_runaway_step_tokens() -> u32 {
+    16384
+}
+
+impl Default for CircuitBreakersConfig {
+    fn default() -> Self {
+        Self {
+            max_repeated_tool_failures: default_max_repeated_tool_failures(),
+            max_file_edits: default_max_file_edits(),
+            runaway_step_tokens: default_runaway_step_tokens(),
+        }
+    }
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {

@@ -10,8 +10,10 @@ use nebula_proto::{
     DaemonStatus, DoctorReport, Empty, Event, LogEvent, LogsSubscribeParams, Message, Method,
     ModelSetProfileParams, ModelState, Notification, PROTO_VERSION, ReasoningEffort, Request,
     RequestId, Response, RpcError, TaskCancelParams, TaskCreateParams, TaskId, TaskStarted,
-    ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams, TraceId, Usage, error_code,
+    TaskStopAllParams, TaskStopAllResponse, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
+    TraceId, Usage, error_code,
 };
+
 use nebula_tools::ToolError;
 use serde::Serialize;
 use serde_json::Value;
@@ -258,16 +260,28 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
             return;
         }
         Method::TaskCancel(TaskCancelParams { task_id }) => {
-            let token = {
-                let running = shared
+            let (token, job) = {
+                let mut running = shared
                     .executor_tasks
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner);
-                running.get(&task_id).map(|s| s.cancel.clone())
+                if let Some(s) = running.remove(&task_id) {
+                    (Some(s.cancel), s.task_job)
+                } else {
+                    (None, None)
+                }
             };
             match token {
                 Some(t) => {
                     t.cancel();
+                    if let Some(j) = job {
+                        let _ = j.terminate();
+                    }
+                    shared
+                        .finished_tasks
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .insert(task_id);
                     to_value(&Empty {})
                 }
                 None => {
@@ -286,6 +300,30 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                 }
             }
         }
+        Method::TaskStopAll(TaskStopAllParams { reason }) => {
+            let stopped = {
+                let mut running = shared
+                    .executor_tasks
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                let count = u32::try_from(running.len()).unwrap_or(u32::MAX);
+                let mut finished = shared
+                    .finished_tasks
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                for (task_id, state) in running.drain() {
+                    state.cancel.cancel();
+                    if let Some(j) = state.task_job {
+                        let _ = j.terminate();
+                    }
+                    finished.insert(task_id);
+                }
+                count
+            };
+            tracing::warn!(event = "task.stop_all", stopped = stopped, reason = ?reason);
+            to_value(&TaskStopAllResponse { stopped })
+        }
+
         Method::ModelStatus(Empty {}) => to_value(&shared.chat.status()),
         Method::ModelSetProfile(ModelSetProfileParams { profile }) => {
             match check_chat_profile(&shared, &profile) {
@@ -474,6 +512,7 @@ async fn start_task(
             task_id,
             RunningTaskState {
                 cancel: token.clone(),
+                task_job: None,
             },
         );
 

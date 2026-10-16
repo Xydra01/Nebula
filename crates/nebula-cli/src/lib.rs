@@ -85,6 +85,12 @@ pub enum Command {
         #[command(subcommand)]
         action: TaskAction,
     },
+    /// Cancel all running tasks immediately (global emergency stop).
+    Stop {
+        /// Optional reason for stopping tasks.
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 /// `nebula task ...`.
@@ -96,6 +102,12 @@ pub enum TaskAction {
     Cancel {
         /// Task ID (ULID).
         task_id: TaskId,
+    },
+    /// Cancel all running tasks immediately (global emergency stop).
+    StopAll {
+        /// Optional reason for stopping tasks.
+        #[arg(long)]
+        reason: Option<String>,
     },
 }
 
@@ -312,7 +324,9 @@ pub async fn run(
         Command::Task { action } => match action {
             TaskAction::Run(args) => task::run(ctx, &args, out).await,
             TaskAction::Cancel { task_id } => task::cancel(ctx, task_id, out).await,
+            TaskAction::StopAll { reason } => task::stop_all(ctx, reason, out).await,
         },
+        Command::Stop { reason } => task::stop_all(ctx, reason, out).await,
     }
 }
 

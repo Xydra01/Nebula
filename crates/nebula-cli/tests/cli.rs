@@ -174,6 +174,24 @@ fn parses_every_command() {
         panic!("not task cancel");
     };
     assert_eq!(task_id.to_string(), task_id_str);
+
+    let Command::Stop { reason } = parse(&["stop"]).command else {
+        panic!("not stop");
+    };
+    assert_eq!(reason, None);
+
+    let Command::Stop { reason } = parse(&["stop", "--reason", "emergency"]).command else {
+        panic!("not stop with reason");
+    };
+    assert_eq!(reason.as_deref(), Some("emergency"));
+
+    let Command::Task {
+        action: TaskAction::StopAll { reason },
+    } = parse(&["task", "stop-all"]).command
+    else {
+        panic!("not task stop-all");
+    };
+    assert_eq!(reason, None);
 }
 
 #[test]

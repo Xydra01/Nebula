@@ -230,3 +230,32 @@ fn unknown_github_key_is_rejected() {
     let err = NebulaConfig::from_toml(Some("[github]\ninvalid_key = true\n")).unwrap_err();
     assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
 }
+
+#[test]
+fn circuit_breakers_defaults_load_and_validate() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    assert_eq!(cfg.circuit_breakers.max_repeated_tool_failures, 3);
+    assert_eq!(cfg.circuit_breakers.max_file_edits, 5);
+    assert_eq!(cfg.circuit_breakers.runaway_step_tokens, 16384);
+}
+
+#[test]
+fn circuit_breakers_overrides_merge_and_validate() {
+    let toml = r#"
+[circuit_breakers]
+max_repeated_tool_failures = 2
+max_file_edits = 10
+runaway_step_tokens = 8192
+"#;
+    let cfg = NebulaConfig::from_toml(Some(toml)).unwrap();
+    assert_eq!(cfg.circuit_breakers.max_repeated_tool_failures, 2);
+    assert_eq!(cfg.circuit_breakers.max_file_edits, 10);
+    assert_eq!(cfg.circuit_breakers.runaway_step_tokens, 8192);
+}
+
+#[test]
+fn unknown_circuit_breakers_key_is_rejected() {
+    let err =
+        NebulaConfig::from_toml(Some("[circuit_breakers]\ninvalid_field = 123\n")).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}

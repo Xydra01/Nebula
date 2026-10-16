@@ -58,11 +58,14 @@ pub enum Method {
     /// Cancel a running executor task. Result: [`Empty`].
     #[serde(rename = "task.cancel")]
     TaskCancel(TaskCancelParams),
+    /// Cancel all running executor tasks immediately. Result: [`TaskStopAllResponse`].
+    #[serde(rename = "task.stop_all")]
+    TaskStopAll(TaskStopAllParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 13] = [
+    pub const NAMES: [&'static str; 14] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -76,6 +79,7 @@ impl Method {
         "tools.call",
         "task.create",
         "task.cancel",
+        "task.stop_all",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -95,6 +99,7 @@ impl Method {
             Self::ToolsCall(_) => "tools.call",
             Self::TaskCreate(_) => "task.create",
             Self::TaskCancel(_) => "task.cancel",
+            Self::TaskStopAll(_) => "task.stop_all",
         }
     }
 }
@@ -268,4 +273,21 @@ pub struct TaskStarted {
 pub struct TaskCancelParams {
     /// The task to cancel.
     pub task_id: TaskId,
+}
+
+/// Parameters of `task.stop_all`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStopAllParams {
+    /// Optional reason or comment for the global stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Result of `task.stop_all`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStopAllResponse {
+    /// Number of tasks stopped.
+    pub stopped: u32,
 }

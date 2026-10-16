@@ -8,6 +8,7 @@
 
 mod builtin_providers;
 pub mod checks;
+pub mod circuit_breaker;
 pub mod client;
 pub(crate) mod executor;
 pub mod github;
@@ -83,6 +84,7 @@ pub struct Deps {
 
 pub(crate) struct RunningTaskState {
     pub(crate) cancel: CancellationToken,
+    pub(crate) task_job: Option<Arc<nebula_sandbox::task_job::TaskJob>>,
 }
 
 pub(crate) struct Shared {

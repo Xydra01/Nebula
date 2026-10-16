@@ -5,7 +5,7 @@
 //! isolated git worktree and Windows Job Object.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use nebula_model::types::ChatRequest;
@@ -14,6 +14,7 @@ use nebula_proto::{
     ChatMessage, Event, Notification, Role, StepId, TaskCreateParams, TaskDone, TaskId, TaskStatus,
     TaskStep, TraceId,
 };
+use nebula_resources::GB;
 use nebula_sandbox::job::MemoryScope;
 use nebula_sandbox::task_job::{CpuRateLimit, JobLimits, MemoryLimit, TaskJob};
 use nebula_tools::{CURRENT_TASK_JOB, CURRENT_WORKTREE};
@@ -22,6 +23,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::Shared;
+use crate::circuit_breaker::CircuitBreakerTracker;
 
 type Outbox = mpsc::Sender<nebula_proto::Message>;
 
@@ -60,6 +62,16 @@ pub(crate) async fn run_task(
             return;
         }
     };
+
+    // Register job handle in executor_tasks for global stop termination
+    if let Some(state) = shared
+        .executor_tasks
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get_mut(&task_id)
+    {
+        state.task_job = Some(Arc::clone(&task_job));
+    }
 
     // 2. Ensure model profile is loaded
     let profile = params.profile.as_deref().or_else(|| {
@@ -209,10 +221,73 @@ struct LoopContext<'a> {
     token: &'a CancellationToken,
 }
 
+fn normalize_mount_path(p: &Path) -> String {
+    let s = p.to_string_lossy().replace('/', "\\");
+    let s = s.strip_prefix(r"\\?\").unwrap_or(&s);
+    s.to_uppercase()
+}
+
+fn mount_matches(path: &Path, mount: &str) -> bool {
+    let p_str = normalize_mount_path(path);
+    let m_str = mount.to_uppercase().replace('/', "\\");
+    let m_trimmed = m_str.trim_end_matches('\\');
+    p_str.starts_with(&m_str) || p_str.starts_with(m_trimmed)
+}
+
+fn check_disk_guard(shared: &Shared, worktree_root: &Path) -> Result<(), String> {
+    let norm_worktree = normalize_mount_path(worktree_root);
+    let drive_prefix = norm_worktree.chars().take(2).collect::<String>();
+
+    let guard = shared.config.resources.volumes.iter().find(|g| {
+        mount_matches(worktree_root, &g.mount) || g.mount.to_uppercase().starts_with(&drive_prefix)
+    });
+
+    let Some(guard) = guard else {
+        return Ok(());
+    };
+
+    let free_bytes = if let Some(snap) = shared.latest_snapshot() {
+        snap.disks
+            .iter()
+            .find(|d| mount_matches(Path::new(&d.mount), &guard.mount))
+            .map(|d| d.free_bytes)
+            .unwrap_or(u64::MAX)
+    } else {
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        disks
+            .iter()
+            .find(|d| mount_matches(d.mount_point(), &guard.mount))
+            .map(sysinfo::Disk::available_space)
+            .unwrap_or(u64::MAX)
+    };
+
+    let warn_bytes = guard.warn_gb * GB;
+    if free_bytes < warn_bytes {
+        let free_gb = free_bytes / GB;
+        tracing::warn!(
+            event = "disk_guard.tripped",
+            mount = %guard.mount,
+            free_gb = free_gb,
+            warn_gb = guard.warn_gb,
+        );
+        return Err(format!(
+            "disk guard tripped: free space on {} is below budget ({} GB free < {} GB budget)",
+            guard.mount, free_gb, guard.warn_gb
+        ));
+    }
+
+    Ok(())
+}
+
 async fn execute_loop(
     ctx: LoopContext<'_>,
     messages: &mut Vec<ChatMessage>,
 ) -> (TaskStatus, String) {
+    if let Err(reason) = check_disk_guard(ctx.shared, ctx.worktree_root) {
+        return (TaskStatus::LimitReached, reason);
+    }
+
+    let mut tracker = CircuitBreakerTracker::new(ctx.shared.config.circuit_breakers);
     let mut step_index: u32 = 0;
     let mut tool_calls_executed: u32 = 0;
     let mut total_tokens_used: u32 = 0;
@@ -275,7 +350,15 @@ async fn execute_loop(
         };
 
         if let Some(usage) = &output.usage {
-            total_tokens_used += usage.prompt_n + usage.predicted_n;
+            let step_tokens = usage.prompt_n + usage.predicted_n;
+            if let Err(trip) = tracker.check_step_tokens(step_tokens) {
+                tracing::warn!(event = "circuit_breaker.tripped", reason = %trip);
+                return (
+                    TaskStatus::LimitReached,
+                    format!("circuit breaker tripped: {trip}"),
+                );
+            }
+            total_tokens_used += step_tokens;
             if total_tokens_used >= ctx.max_tokens {
                 return (
                     TaskStatus::LimitReached,
@@ -359,24 +442,32 @@ async fn execute_loop(
                     CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
                         ctx.shared
                             .tool_host
-                            .call(&call.name, args, Some(&trace_str))
+                            .call(&call.name, args.clone(), Some(&trace_str))
                             .await
                     }),
                 )
                 .await;
 
-            let result_content = match call_res {
+            let (result_content, is_error) = match call_res {
                 Ok(outcome) => {
-                    if outcome.is_error {
+                    let err = outcome.is_error;
+                    let text = if err {
                         format!("[tool error] {}", outcome.content)
                     } else {
                         outcome.content.to_string()
-                    }
+                    };
+                    (text, err)
                 }
-                Err(err) => {
-                    format!("[tool dispatch error: {err}]")
-                }
+                Err(err) => (format!("[tool dispatch error: {err}]"), true),
             };
+
+            if let Err(trip) = tracker.record_tool_call(&call.name, &args, is_error) {
+                tracing::warn!(event = "circuit_breaker.tripped", reason = %trip);
+                return (
+                    TaskStatus::LimitReached,
+                    format!("circuit breaker tripped: {trip}"),
+                );
+            }
 
             messages.push(ChatMessage {
                 role: Role::Tool,

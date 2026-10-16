@@ -314,4 +314,14 @@ token_target = "nebula/github_bot_token"
 # GitHub bot username for user-agent, author attribution, and PR search.
 bot_username = "Nebula-dev-bot"
 
+# Circuit breakers: safety stops and runaway detection (issue #34).
+[circuit_breakers]
+# Maximum consecutive identical tool failures before tripping breaker.
+max_repeated_tool_failures = 3
+# Maximum edits to the same file in a single task before tripping breaker.
+max_file_edits = 5
+# Maximum tokens in a single step before tripping runaway token breaker.
+runaway_step_tokens = 16384
+
+
 

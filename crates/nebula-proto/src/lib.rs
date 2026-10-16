@@ -25,8 +25,9 @@ pub use ids::{ChatId, SpanId, StepId, TaskId, TraceId};
 pub use methods::{
     ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, LogsSubscribeParams,
     Method, ModelSetProfileParams, TaskCancelParams, TaskCreateParams, TaskStarted,
-    ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
+    TaskStopAllParams, TaskStopAllResponse, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
 };
+
 pub use types::{
     ChatMessage, CheckStatus, DiskUsage, DoctorCheck, DoctorReport, GpuProcess, LogEvent, LogLevel,
     ModelState, ModelStatus, ReasoningEffort, ResourceSnapshot, Role, StopReason, Usage,
