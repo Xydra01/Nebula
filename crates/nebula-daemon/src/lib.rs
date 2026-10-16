@@ -111,6 +111,7 @@ pub(crate) struct Shared {
     pub(crate) game_mode: Arc<game_mode::GameModeCoordinator>,
     pub(crate) notifications: Arc<notifications::NotificationService>,
     pub(crate) approvals: Arc<nebula_sandbox::approval::ApprovalStore>,
+    pub(crate) task_events: tokio::sync::broadcast::Sender<nebula_proto::Event>,
 }
 
 impl Shared {
@@ -120,6 +121,10 @@ impl Shared {
             .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
             .and_then(Sampler::latest)
+    }
+
+    pub(crate) fn emit_event(&self, event: nebula_proto::Event) {
+        let _ = self.task_events.send(event);
     }
 }
 
@@ -206,6 +211,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
     ));
 
     let pipe_path = config.daemon.pipe_path();
+    let (task_events, _) = tokio::sync::broadcast::channel(256);
     let shared = Arc::new(Shared {
         config,
         telemetry: deps.telemetry,
@@ -226,6 +232,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         game_mode: Arc::clone(&game_mode),
         notifications: Arc::clone(&notifications),
         approvals: Arc::clone(&approvals),
+        task_events,
     });
 
     // Background monitor for game mode detection and GPU yielding
