@@ -130,6 +130,7 @@ async fn connection(shared: Arc<Shared>, pipe: NamedPipeServer) {
         forward_model_events(e.subscribe(), tx.clone(), conn.clone());
     }
     forward_game_mode_events(shared.game_mode.subscribe(), tx.clone(), conn.clone());
+    forward_task_events(shared.task_events.subscribe(), tx.clone(), conn.clone());
 
     let mut lines = FramedRead::new(rd, LinesCodec::new_with_max_length(MAX_LINE));
     loop {
@@ -208,6 +209,30 @@ fn forward_game_mode_events(
             match ev {
                 Ok(ev) => {
                     if tx.send(note(Event::GameModeChanged(ev))).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+fn forward_task_events(
+    mut rx: broadcast::Receiver<nebula_proto::Event>,
+    tx: Outbox,
+    conn: CancellationToken,
+) {
+    tokio::spawn(async move {
+        loop {
+            let ev = tokio::select! {
+                () = conn.cancelled() => break,
+                ev = rx.recv() => ev,
+            };
+            match ev {
+                Ok(ev) => {
+                    if tx.send(note(ev)).await.is_err() {
                         break;
                     }
                 }
@@ -626,7 +651,6 @@ async fn start_task(
                 trace_id,
                 params,
                 worktree_root,
-                tx,
                 token,
             )
             .await;

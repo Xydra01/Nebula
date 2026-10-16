@@ -8,30 +8,24 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
-use nebula_model::types::ChatRequest;
+use futures_util::StreamExt;
+use nebula_model::types::{ChatOutput, ChatRequest, StreamItem};
 use nebula_model::{ModelBackend, ModelError};
 use nebula_proto::{
-    ChatMessage, Event, Notification, Role, StepId, TaskCreateParams, TaskDone, TaskId, TaskStatus,
-    TaskStep, TraceId,
+    ChatId, ChatMessage, ChatToken, Event, Role, StepId, TaskCreateParams, TaskDone, TaskId,
+    TaskStatus, TaskStep, TraceId,
 };
 use nebula_resources::GB;
 use nebula_sandbox::job::MemoryScope;
 use nebula_sandbox::task_job::{CpuRateLimit, JobLimits, MemoryLimit, TaskJob};
 use nebula_tools::{CURRENT_TASK_JOB, CURRENT_WORKTREE};
 use serde_json::{Value, json};
-use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::Shared;
 use crate::circuit_breaker::CircuitBreakerTracker;
 
-type Outbox = mpsc::Sender<nebula_proto::Message>;
-
 const DEFAULT_STEP_MAX_TOKENS: u32 = 4096;
-
-fn note(event: Event) -> nebula_proto::Message {
-    nebula_proto::Message::Notification(Notification::new(event))
-}
 
 /// Runs one autonomous executor task until completion, limits, or cancellation.
 pub(crate) async fn run_task(
@@ -40,7 +34,6 @@ pub(crate) async fn run_task(
     trace_id: TraceId,
     params: TaskCreateParams,
     worktree_root: PathBuf,
-    tx: Outbox,
     token: CancellationToken,
 ) {
     let wt_task_id = nebula_sandbox::worktree::TaskId::new(task_id.to_string());
@@ -59,13 +52,12 @@ pub(crate) async fn run_task(
                 &summary,
                 &trace_id,
             );
-            let _ = tx
-                .send(note(Event::TaskDone(TaskDone {
-                    task_id,
-                    status: TaskStatus::Failed,
-                    summary,
-                })))
-                .await;
+            let done_ev = Event::TaskDone(TaskDone {
+                task_id,
+                status: TaskStatus::Failed,
+                summary,
+            });
+            shared.emit_event(done_ev);
             return;
         }
     };
@@ -92,13 +84,12 @@ pub(crate) async fn run_task(
         shared
             .notifications
             .notify_task_done(&task_id, &TaskStatus::Failed, &summary, &trace_id);
-        let _ = tx
-            .send(note(Event::TaskDone(TaskDone {
-                task_id,
-                status: TaskStatus::Failed,
-                summary,
-            })))
-            .await;
+        let done_ev = Event::TaskDone(TaskDone {
+            task_id,
+            status: TaskStatus::Failed,
+            summary,
+        });
+        shared.emit_event(done_ev);
         return;
     }
 
@@ -138,7 +129,6 @@ When the task is complete, finish with a clear final summary without requesting 
             task_job: &task_job,
             max_tool_calls,
             max_tokens,
-            tx: &tx,
             token: &token,
         },
         &mut messages,
@@ -196,13 +186,12 @@ When the task is complete, finish with a clear final summary without requesting 
     shared
         .notifications
         .notify_task_done(&task_id, &status, &final_summary, &trace_id);
-    let _ = tx
-        .send(note(Event::TaskDone(TaskDone {
-            task_id,
-            status,
-            summary: final_summary,
-        })))
-        .await;
+    let done_ev = Event::TaskDone(TaskDone {
+        task_id,
+        status,
+        summary: final_summary,
+    });
+    shared.emit_event(done_ev);
 }
 
 fn build_job_limits(shared: &Shared) -> JobLimits {
@@ -231,7 +220,6 @@ struct LoopContext<'a> {
     task_job: &'a Arc<TaskJob>,
     max_tool_calls: u32,
     max_tokens: u32,
-    tx: &'a Outbox,
     token: &'a CancellationToken,
 }
 
@@ -349,7 +337,7 @@ async fn execute_loop(
             Err(e) => return (TaskStatus::Failed, format!("model backend error: {e}")),
         };
 
-        let stream = tokio::select! {
+        let mut stream = tokio::select! {
             () = ctx.token.cancelled() => return (TaskStatus::Cancelled, "task cancelled".into()),
             r = backend.chat(req) => match r {
                 Ok(s) => s,
@@ -358,14 +346,52 @@ async fn execute_loop(
             },
         };
 
-        let output = tokio::select! {
-            () = ctx.token.cancelled() => return (TaskStatus::Cancelled, "task cancelled".into()),
-            r = stream.collect() => match r {
-                Ok(out) => out,
-                Err(ModelError::Timeout) => return (TaskStatus::LimitReached, "model stream timed out".into()),
+        let mut output = ChatOutput::default();
+        let chat_id = ChatId::from_ulid(ctx.task_id.ulid());
+        loop {
+            let next_item = tokio::select! {
+                () = ctx.token.cancelled() => return (TaskStatus::Cancelled, "task cancelled".into()),
+                item = stream.next() => item,
+            };
+
+            let Some(item_res) = next_item else {
+                break;
+            };
+
+            let item = match item_res {
+                Ok(it) => it,
+                Err(ModelError::Timeout) => {
+                    return (TaskStatus::LimitReached, "model stream timed out".into());
+                }
                 Err(e) => return (TaskStatus::Failed, format!("model stream failed: {e}")),
-            },
-        };
+            };
+
+            match item {
+                StreamItem::Token { text, reasoning } => {
+                    if reasoning {
+                        output.reasoning.push_str(&text);
+                    } else {
+                        output.text.push_str(&text);
+                    }
+                    let token_ev = Event::ChatToken(ChatToken {
+                        chat_id,
+                        text: if reasoning {
+                            String::new()
+                        } else {
+                            text.clone()
+                        },
+                        reasoning: if reasoning { text } else { String::new() },
+                    });
+                    ctx.shared.emit_event(token_ev);
+                }
+                StreamItem::ToolCall(c) => output.tool_calls.push(c),
+                StreamItem::Usage(u) => output.usage = Some(u),
+                StreamItem::Done(r) => {
+                    output.stop_reason = Some(r);
+                    break;
+                }
+            }
+        }
 
         if let Some(usage) = &output.usage {
             let step_tokens = usage.prompt_n + usage.predicted_n;
@@ -416,15 +442,13 @@ async fn execute_loop(
         // Emit step event
         let tool_names: Vec<String> = output.tool_calls.iter().map(|c| c.name.clone()).collect();
         let step_id = StepId::new();
-        let _ = ctx
-            .tx
-            .send(note(Event::TaskStep(TaskStep {
-                task_id: ctx.task_id,
-                step_id,
-                step_index,
-                tool_calls: tool_names.clone(),
-            })))
-            .await;
+        let step_ev = Event::TaskStep(TaskStep {
+            task_id: ctx.task_id,
+            step_id,
+            step_index,
+            tool_calls: tool_names.clone(),
+        });
+        ctx.shared.emit_event(step_ev);
 
         tracing::info!(
             event = "task.step",
@@ -489,16 +513,14 @@ async fn execute_loop(
                 ctx.shared
                     .notifications
                     .notify_approval_needed(&call.name, "System", None, &trace_str);
-                let _ = ctx
-                    .tx
-                    .send(note(Event::ApprovalNeeded(nebula_proto::ApprovalNeeded {
-                        command: call.name.clone(),
-                        tier: "System".into(),
-                        rule_id: None,
-                        trace_id: trace_str.clone(),
-                        summary: result_content.clone(),
-                    })))
-                    .await;
+                let app_needed = nebula_proto::ApprovalNeeded {
+                    command: call.name.clone(),
+                    tier: "System".into(),
+                    rule_id: None,
+                    trace_id: trace_str.clone(),
+                    summary: result_content.clone(),
+                };
+                ctx.shared.emit_event(Event::ApprovalNeeded(app_needed));
             }
 
             if let Err(trip) = tracker.record_tool_call(&call.name, &args, is_error) {

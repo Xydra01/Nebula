@@ -953,3 +953,50 @@ async fn test_refuse_writes_to_retired_drive() {
     assert_eq!(steps.len(), 1);
     assert_eq!(done.status, TaskStatus::LimitReached);
 }
+
+#[tokio::test]
+async fn test_executor_events_broadcast_to_observer_client() {
+    let h = start_harness().await;
+    h.state
+        .set_chunks(tool_call_turn("call_1", "fs.list", r#"{"path":"."}"#));
+
+    let repo = seed_repo();
+    let mut c1 = h.ready_client().await;
+    let mut c2_observer = h.ready_client().await;
+
+    let started: TaskStarted = c1
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run tool and broadcast".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(1),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let mut observer_received_step = false;
+    let mut observer_received_done = false;
+
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !(observer_received_step && observer_received_done) {
+            match c2_observer.next_event().await.unwrap() {
+                Event::TaskStep(step) if step.task_id == started.task_id => {
+                    observer_received_step = true;
+                }
+                Event::TaskDone(done) if done.task_id == started.task_id => {
+                    observer_received_done = true;
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("observer received broadcast task events within timeout");
+
+    assert!(observer_received_step);
+    assert!(observer_received_done);
+}
