@@ -148,6 +148,11 @@ Only provide a final plain-text response without tool calls when the entire task
 
     // 5. Cleanup and finalization
     drop(task_job);
+
+    if status == TaskStatus::Completed {
+        commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
+    }
+
     let finalized_branch = shared.worktrees.finalize(&wt_task_id).await;
 
     let should_create_pr = params.create_pr.unwrap_or(shared.config.github.enabled);
@@ -418,33 +423,54 @@ async fn execute_loop(
             }
         }
 
-        // If the model finished without calling any tools, check if it was conversational planning or completion.
+        // If the model finished without calling any tools, check if it was conversational planning, pseudo-tool text, or completion.
         if output.tool_calls.is_empty() {
             let lower = output.text.to_lowercase();
+            let is_calling_tools = lower.starts_with("calling tools")
+                || lower.starts_with("calling tool")
+                || lower.starts_with("invoking tool")
+                || lower.starts_with("executing tool");
             let is_still_planning = lower.contains("let me ")
                 || lower.contains("i will ")
                 || lower.contains("i'll ")
                 || lower.contains("i need to ")
                 || lower.starts_with("let's ")
                 || lower.contains("next, ");
+            let is_empty = output.text.trim().is_empty();
 
-            if is_still_planning && step_index < 5 && nudge_count < 2 {
+            if (is_still_planning || is_calling_tools || is_empty)
+                && step_index < 10
+                && nudge_count < 3
+            {
                 nudge_count += 1;
-                tracing::info!(event = "task.nudge", text = %output.text);
+                tracing::info!(
+                    event = "task.nudge",
+                    text = %output.text,
+                    is_calling_tools = is_calling_tools,
+                    is_still_planning = is_still_planning,
+                    is_empty = is_empty
+                );
                 messages.push(ChatMessage {
                     role: Role::Assistant,
                     content: output.text,
                 });
+                let prompt = if is_calling_tools {
+                    "To invoke a tool, you must emit a structured tool call. If all necessary actions are complete, provide a final plain-text response detailing what was created and verified."
+                } else if is_empty {
+                    "Please provide a final summary of what was accomplished, or invoke the appropriate tools to continue the task."
+                } else {
+                    "Please proceed with executing the task using the available tools now."
+                };
                 messages.push(ChatMessage {
                     role: Role::User,
-                    content:
-                        "Please proceed with executing the task using the available tools now."
-                            .into(),
+                    content: prompt.into(),
                 });
                 continue;
             }
 
-            let summary = if output.text.is_empty() {
+            let summary = if is_calling_tools {
+                format!("Task completed after executing {tool_calls_executed} tool call(s).")
+            } else if output.text.trim().is_empty() {
                 "Task completed".into()
             } else {
                 output.text
@@ -485,15 +511,10 @@ async fn execute_loop(
         );
         step_index += 1;
 
-        // Add assistant turn to conversation
-        let assistant_turn = if output.text.is_empty() {
-            format!("Calling tools: {}", tool_names.join(", "))
-        } else {
-            output.text
-        };
+        // Add assistant turn to conversation without synthetic text poisoning
         messages.push(ChatMessage {
             role: Role::Assistant,
-            content: assistant_turn,
+            content: output.text,
         });
 
         // Dispatch each tool call within worktree and job scopes
@@ -640,10 +661,87 @@ async fn execute_loop(
                 );
             }
 
+            let tool_output = format!("[tool result: {}]\n{}", call.name, result_content);
             messages.push(ChatMessage {
                 role: Role::Tool,
-                content: result_content,
+                content: tool_output,
             });
+        }
+    }
+}
+
+async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &TaskId) {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    // 1. Check if git status has uncommitted or untracked changes
+    let mut status_cmd = Command::new("git");
+    status_cmd
+        .args(["status", "--porcelain"])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let is_dirty = match status_cmd.output().await {
+        Ok(out) => !out.stdout.is_empty(),
+        Err(e) => {
+            tracing::warn!(event = "task.git_status_failed", error = %e);
+            false
+        }
+    };
+
+    if !is_dirty {
+        return;
+    }
+
+    // 2. Stage all changes
+    let mut add_cmd = Command::new("git");
+    add_cmd
+        .args(["add", "-A"])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    if let Err(e) = add_cmd.output().await {
+        tracing::warn!(event = "task.git_add_failed", error = %e);
+        return;
+    }
+
+    // 3. Commit staged changes with conventional commit format
+    let commit_msg = format!(
+        "feat: {goal}\n\nAutomated commit for task {task_id}.\n\nCo-authored-by: Nebula <nebula@local>"
+    );
+    let mut commit_cmd = Command::new("git");
+    commit_cmd
+        .args([
+            "-c",
+            "user.name=Nebula",
+            "-c",
+            "user.email=nebula@local",
+            "commit",
+            "-m",
+            &commit_msg,
+        ])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    match commit_cmd.output().await {
+        Ok(out) if out.status.success() => {
+            tracing::info!(event = "task.worktree_committed", task_id = %task_id);
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::warn!(event = "task.git_commit_failed", stderr = %stderr);
+        }
+        Err(e) => {
+            tracing::warn!(event = "task.git_commit_spawn_failed", error = %e);
         }
     }
 }

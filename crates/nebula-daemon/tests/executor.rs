@@ -1036,22 +1036,19 @@ async fn test_executor_approval_pause_and_resume() {
     // c2_observer listens for ApprovalNeeded, then responds to approve
     let observer_task = tokio::spawn(async move {
         loop {
-            match c2_observer.next_event().await.unwrap() {
-                Event::ApprovalNeeded(req) => {
-                    let resp: ApprovalRespondResponse = c2_observer
-                        .call(Method::ApprovalRespond(ApprovalRespondParams {
-                            trace_id: req.trace_id,
-                            approved: true,
-                            command: req.command,
-                            tier: req.tier,
-                            reason: Some("Test approval".into()),
-                        }))
-                        .await
-                        .unwrap();
-                    assert!(resp.success);
-                    break;
-                }
-                _ => {}
+            if let Event::ApprovalNeeded(req) = c2_observer.next_event().await.unwrap() {
+                let resp: ApprovalRespondResponse = c2_observer
+                    .call(Method::ApprovalRespond(ApprovalRespondParams {
+                        trace_id: req.trace_id,
+                        approved: true,
+                        command: req.command,
+                        tier: req.tier,
+                        reason: Some("Test approval".into()),
+                    }))
+                    .await
+                    .unwrap();
+                assert!(resp.success);
+                break;
             }
         }
     });
