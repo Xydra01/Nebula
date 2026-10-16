@@ -18,11 +18,14 @@ pub use envelope::{
     JsonRpcVersion, Message, Notification, Outcome, PROTO_VERSION, ProtoError, Request, RequestId,
     Response, RpcError, error_code,
 };
-pub use events::{ChatDone, ChatError, ChatToken, Event, ModelStateChanged};
-pub use ids::{ChatId, SpanId, TraceId};
+pub use events::{
+    ChatDone, ChatError, ChatToken, Event, ModelStateChanged, TaskDone, TaskStatus, TaskStep,
+};
+pub use ids::{ChatId, SpanId, StepId, TaskId, TraceId};
 pub use methods::{
     ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, LogsSubscribeParams,
-    Method, ModelSetProfileParams, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
+    Method, ModelSetProfileParams, TaskCancelParams, TaskCreateParams, TaskStarted,
+    ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
 };
 pub use types::{
     ChatMessage, CheckStatus, DiskUsage, DoctorCheck, DoctorReport, GpuProcess, LogEvent, LogLevel,

@@ -2,10 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::ChatId;
+use crate::ids::{ChatId, StepId, TaskId};
 use crate::types::{LogEvent, ModelState, ResourceSnapshot, StopReason, Usage};
 
-/// Every Phase 0 event.
+/// Every Phase 0 and Phase 1 event.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params")]
 pub enum Event {
@@ -27,6 +27,12 @@ pub enum Event {
     /// A log event, for connections that called `logs.subscribe`.
     #[serde(rename = "log.event")]
     LogEvent(LogEvent),
+    /// An executor step completed.
+    #[serde(rename = "task.step")]
+    TaskStep(TaskStep),
+    /// An executor task finished.
+    #[serde(rename = "task.done")]
+    TaskDone(TaskDone),
 }
 
 impl Event {
@@ -40,6 +46,8 @@ impl Event {
             Self::ModelStateChanged(_) => "model.state_changed",
             Self::ResourcesSnapshot(_) => "resources.snapshot",
             Self::LogEvent(_) => "log.event",
+            Self::TaskStep(_) => "task.step",
+            Self::TaskDone(_) => "task.done",
         }
     }
 }
@@ -95,4 +103,45 @@ pub struct ModelStateChanged {
     /// Why, for failures and restarts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// Final outcome of an executor task.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    /// The model completed the goal without requesting further tools.
+    Completed,
+    /// A configured budget or limit was reached.
+    LimitReached,
+    /// The task was cancelled by client request or daemon shutdown.
+    Cancelled,
+    /// The task encountered an unrecoverable failure.
+    Failed,
+}
+
+/// A progress step emitted during an executor task.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStep {
+    /// Task this step belongs to.
+    pub task_id: TaskId,
+    /// Unique identifier for this step.
+    pub step_id: StepId,
+    /// 0-indexed step iteration.
+    pub step_index: u32,
+    /// Names of tools called during this step, if any.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<String>,
+}
+
+/// End of an executor task.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskDone {
+    /// Finished task.
+    pub task_id: TaskId,
+    /// Terminal status.
+    pub status: TaskStatus,
+    /// Human-readable summary of the outcome or reason for stopping.
+    pub summary: String,
 }

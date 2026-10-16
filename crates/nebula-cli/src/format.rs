@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use nebula_config::VolumeGuard;
 use nebula_proto::{
     CheckStatus, DaemonStatus, DoctorReport, ModelState, ModelStatus, ResourceSnapshot, StopReason,
-    Usage,
+    TaskDone, TaskStatus, TaskStep, Usage,
 };
 use nebula_resources::{GB, GuardLevel, guard_disks};
 use serde::Serialize;
@@ -234,4 +234,27 @@ pub fn usage_line(u: &Usage, stop: StopReason, style: Style) -> String {
     }
     line.push(']');
     style.dim(&line)
+}
+
+/// The line printed for a task step.
+#[must_use]
+pub fn task_step(step: &TaskStep, style: Style) -> String {
+    let tools = if step.tool_calls.is_empty() {
+        "thinking...".to_owned()
+    } else {
+        step.tool_calls.join(", ")
+    };
+    format!("step {:>2}  {}", step.step_index, style.dim(&tools))
+}
+
+/// The lines printed for a task done event.
+#[must_use]
+pub fn task_done(done: &TaskDone, style: Style) -> String {
+    let status_str = match done.status {
+        TaskStatus::Completed => style.good("completed"),
+        TaskStatus::LimitReached => style.warn("limit reached"),
+        TaskStatus::Cancelled => style.warn("cancelled"),
+        TaskStatus::Failed => style.bad("failed"),
+    };
+    format!("task {} {}\n{}", done.task_id, status_str, done.summary)
 }

@@ -131,3 +131,67 @@ fn all_paths_includes_the_worktrees_dir() {
     assert_eq!(entry.1, cfg.worktree.worktrees_dir);
     assert_eq!(entry.1, PathBuf::from(r"F:\Nebula\worktrees"));
 }
+
+#[test]
+fn executor_defaults_load_and_validate() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    assert_eq!(cfg.executor.max_tool_calls, 15);
+    assert_eq!(cfg.executor.max_tokens, 40960);
+    assert_eq!(cfg.executor.wall_time_secs, 600);
+    assert_eq!(cfg.executor.default_profile, "");
+}
+
+#[test]
+fn executor_overrides_merge_and_validate() {
+    let cfg = NebulaConfig::from_toml(Some(
+        r#"
+        [executor]
+        max_tool_calls = 25
+        max_tokens = 20000
+        wall_time_secs = 300
+        default_profile = "standard"
+        "#,
+    ))
+    .unwrap();
+    assert_eq!(cfg.executor.max_tool_calls, 25);
+    assert_eq!(cfg.executor.max_tokens, 20000);
+    assert_eq!(cfg.executor.wall_time_secs, 300);
+    assert_eq!(cfg.executor.default_profile, "standard");
+}
+
+#[test]
+fn unknown_executor_key_is_rejected() {
+    let err = NebulaConfig::from_toml(Some("[executor]\nbogus_limit = 10\n")).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}
+
+#[test]
+fn zero_executor_limits_are_rejected() {
+    let err = NebulaConfig::from_toml(Some("[executor]\nmax_tool_calls = 0\n")).unwrap_err();
+    assert!(
+        matches!(&err, ConfigError::Invalid(m) if m.contains("executor.max_tool_calls")),
+        "{err}"
+    );
+
+    let err = NebulaConfig::from_toml(Some("[executor]\nmax_tokens = 0\n")).unwrap_err();
+    assert!(
+        matches!(&err, ConfigError::Invalid(m) if m.contains("executor.max_tokens")),
+        "{err}"
+    );
+
+    let err = NebulaConfig::from_toml(Some("[executor]\nwall_time_secs = 0\n")).unwrap_err();
+    assert!(
+        matches!(&err, ConfigError::Invalid(m) if m.contains("executor.wall_time_secs")),
+        "{err}"
+    );
+}
+
+#[test]
+fn unknown_executor_default_profile_is_rejected() {
+    let err =
+        NebulaConfig::from_toml(Some("[executor]\ndefault_profile = 'nonexistent'\n")).unwrap_err();
+    assert!(
+        matches!(&err, ConfigError::Invalid(m) if m.contains("executor.default_profile")),
+        "{err}"
+    );
+}

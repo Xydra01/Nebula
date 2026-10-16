@@ -456,7 +456,9 @@ async fn tools_list_call_and_log_reach_clients() {
             if let Event::LogEvent(e) = watcher.next_event().await.unwrap()
                 && e.event == "tool.call"
             {
-                assert_eq!(e.fields.get("tool").and_then(|v| v.as_str()), Some("echo"));
+                if e.fields.get("tool").and_then(|v| v.as_str()) != Some("echo") {
+                    continue;
+                }
                 assert_eq!(e.fields.get("outcome").and_then(|v| v.as_str()), Some("ok"));
                 assert_eq!(
                     e.trace_id,
@@ -709,6 +711,9 @@ async fn builtin_call_emits_telemetry_with_outcome_and_wall_ms() {
                 && e.event == "tool.call"
                 && e.fields.get("tool").and_then(|v| v.as_str()) == Some("system.resources")
             {
+                if e.trace_id != Some(trace) {
+                    continue;
+                }
                 // Outcome is the success/failure classification (Req 8.3). The sampler may or may
                 // not have produced a snapshot yet, so accept either "ok" or the "error"
                 // (Unavailable) outcome — both are valid, and both must still be logged (Req 8.4).
@@ -880,7 +885,7 @@ async fn bad_lines_get_error_responses() {
         Some(error_code::PARSE_ERROR)
     );
 
-    c.send_line(r#"{"jsonrpc":"2.0","id":"x","proto_version":2,"method":"nope","params":{}}"#)
+    c.send_line(r#"{"jsonrpc":"2.0","id":"x","proto_version":3,"method":"nope","params":{}}"#)
         .await
         .unwrap();
     let r = next_response(&mut c).await;

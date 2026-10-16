@@ -1,0 +1,14 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "task.done",
+  "params": {
+    "status": "completed",
+    "summary": "Fixed test_calc by correcting off-by-one error",
+    "task_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EJ"
+  },
+  "proto_version": 3
+}

@@ -1,9 +1,11 @@
 //! Client-to-daemon methods (the `method` and `params` of a [`crate::Request`]).
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ids::{ChatId, TraceId};
+use crate::ids::{ChatId, TaskId, TraceId};
 use crate::types::{ChatMessage, LogLevel, ModelStatus, ReasoningEffort};
 
 /// Parameters for methods that take none. Serialized as `{}`; JSON-RPC callers must still send
@@ -50,11 +52,17 @@ pub enum Method {
     /// Call a tool by name. Result: [`ToolCallOutcome`].
     #[serde(rename = "tools.call")]
     ToolsCall(ToolsCallParams),
+    /// Start an autonomous executor task. Result: [`TaskStarted`]; progress follows as `task.*` events.
+    #[serde(rename = "task.create")]
+    TaskCreate(TaskCreateParams),
+    /// Cancel a running executor task. Result: [`Empty`].
+    #[serde(rename = "task.cancel")]
+    TaskCancel(TaskCancelParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 11] = [
+    pub const NAMES: [&'static str; 13] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -66,6 +74,8 @@ impl Method {
         "doctor.run",
         "tools.list",
         "tools.call",
+        "task.create",
+        "task.cancel",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -83,6 +93,8 @@ impl Method {
             Self::DoctorRun(_) => "doctor.run",
             Self::ToolsList(_) => "tools.list",
             Self::ToolsCall(_) => "tools.call",
+            Self::TaskCreate(_) => "task.create",
+            Self::TaskCancel(_) => "task.cancel",
         }
     }
 }
@@ -210,4 +222,47 @@ pub struct ToolCallOutcome {
     /// Whether the tool reported a tool-level error (MCP `isError`).
     #[serde(default)]
     pub is_error: bool,
+}
+
+/// Parameters of `task.create`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCreateParams {
+    /// What the executor should accomplish.
+    pub goal: String,
+    /// Repository the task worktree will be cut from.
+    pub repo: PathBuf,
+    /// Starting commit, branch, or ref; defaults to repo HEAD if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_point: Option<String>,
+    /// Chat profile to use; defaults to active profile if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Maximum tool calls allowed for this task; defaults to config if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls: Option<u32>,
+    /// Maximum total model tokens allowed across all turns; defaults to config if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    /// Wall-clock timeout in seconds; defaults to config if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wall_time_secs: Option<u64>,
+}
+
+/// Initial response to `task.create`, returned before any `task.*` events stream.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskStarted {
+    /// The newly created task.
+    pub task_id: TaskId,
+    /// Trace ID for all events produced by this task.
+    pub trace_id: TraceId,
+}
+
+/// Parameters of `task.cancel`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCancelParams {
+    /// The task to cancel.
+    pub task_id: TaskId,
 }

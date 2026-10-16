@@ -1,0 +1,17 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "task.step",
+  "params": {
+    "step_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EK",
+    "step_index": 0,
+    "task_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EJ",
+    "tool_calls": [
+      "test.run"
+    ]
+  },
+  "proto_version": 3
+}

@@ -9,5 +9,5 @@ expression: value
   "params": {
     "profile": "long"
   },
-  "proto_version": 2
+  "proto_version": 3
 }

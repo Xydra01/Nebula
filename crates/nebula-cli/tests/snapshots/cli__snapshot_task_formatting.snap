@@ -1,0 +1,7 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "lines.join(\"\\n\")"
+---
+step  1  fs.read, shell.execute
+task 01J9ZQ3V5W8X0Y2Z4A6B8C0D2E completed
+Fixed failing test in tests/test_calc.py

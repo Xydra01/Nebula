@@ -29,8 +29,8 @@ pub mod testing;
 pub mod types;
 
 pub use builtins::{
-    BuiltinLimits, BuiltinTool, CURRENT_WORKTREE, ResourceProvider, TaskWorktreeProvider,
-    ToolContext, ToolOutput, WorktreeRootProvider, register_all,
+    BuiltinLimits, BuiltinTool, CURRENT_TASK_JOB, CURRENT_WORKTREE, ResourceProvider,
+    TaskWorktreeProvider, ToolContext, ToolOutput, WorktreeRootProvider, register_all,
 };
 pub use cap::{TRUNCATION_MARKER, enforce_cap};
 pub use client::McpClient;
