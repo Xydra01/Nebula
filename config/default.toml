@@ -357,6 +357,7 @@ desktop_allowlist = [
     "powershell.exe",
     "cmd.exe",
     "taskmgr.exe",
+    "llama-server.exe",
 ]
 
 

@@ -224,6 +224,17 @@ impl GameModeCoordinator {
     }
 
     fn is_allowlisted(&self, name: &str) -> bool {
+        // Nebula's own processes are never games
+        if name.eq_ignore_ascii_case("llama-server.exe")
+            || name.eq_ignore_ascii_case("llama-server")
+            || name.eq_ignore_ascii_case("nebula-daemon.exe")
+            || name.eq_ignore_ascii_case("nebula-daemon")
+            || name.eq_ignore_ascii_case("nebula.exe")
+            || name.eq_ignore_ascii_case("nebula")
+        {
+            return true;
+        }
+
         self.config
             .desktop_allowlist
             .iter()
