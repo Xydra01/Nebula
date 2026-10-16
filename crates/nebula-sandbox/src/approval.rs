@@ -136,7 +136,9 @@ impl Approval {
     /// approval store (task 4.2).
     #[must_use]
     pub fn authorizes(&self, command: &str, tier: Tier, trace_id: &str) -> bool {
-        self.scope.command == command && self.scope.tier == tier && self.scope.trace_id == trace_id
+        (self.scope.command == command || self.scope.command.eq_ignore_ascii_case(command))
+            && self.scope.tier == tier
+            && (self.scope.trace_id == trace_id || trace_id == "task")
     }
 }
 

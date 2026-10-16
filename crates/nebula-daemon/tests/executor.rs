@@ -13,8 +13,9 @@ use nebula_daemon::{Daemon, Deps};
 use nebula_model::SupervisorConfig;
 use nebula_model::testing::{FakeLauncher, FakeState, content, finish};
 use nebula_proto::{
-    ChatId, CheckStatus, DoctorCheck, DoctorReport, Empty, Event, Method, ModelState, ModelStatus,
-    TaskCancelParams, TaskCreateParams, TaskDone, TaskId, TaskStarted, TaskStatus, TaskStep,
+    ApprovalRespondParams, ApprovalRespondResponse, ChatId, CheckStatus, DoctorCheck, DoctorReport,
+    Empty, Event, Method, ModelState, ModelStatus, TaskCancelParams, TaskCreateParams, TaskDone,
+    TaskId, TaskStarted, TaskStatus, TaskStep,
 };
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
@@ -999,4 +1000,79 @@ async fn test_executor_events_broadcast_to_observer_client() {
 
     assert!(observer_received_step);
     assert!(observer_received_done);
+}
+
+#[tokio::test]
+async fn test_executor_approval_pause_and_resume() {
+    let h = start_harness().await;
+    // Turn 1: call shell.run with "python3 --version" (unapproved system tier)
+    // Turn 2: final completion turn
+    h.state.push_turn(tool_call_turn(
+        "call_1",
+        "shell.run",
+        r#"{"command":"python3","args":["--version"]}"#,
+    ));
+    h.state
+        .push_turn(completion_turn("All done after approval"));
+
+    let repo = seed_repo();
+    let mut c1 = h.ready_client().await;
+    let mut c2_observer = h.ready_client().await;
+
+    let started: TaskStarted = c1
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run python with approval".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(2),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    // c2_observer listens for ApprovalNeeded, then responds to approve
+    let observer_task = tokio::spawn(async move {
+        loop {
+            match c2_observer.next_event().await.unwrap() {
+                Event::ApprovalNeeded(req) => {
+                    let resp: ApprovalRespondResponse = c2_observer
+                        .call(Method::ApprovalRespond(ApprovalRespondParams {
+                            trace_id: req.trace_id,
+                            approved: true,
+                            command: req.command,
+                            tier: req.tier,
+                            reason: Some("Test approval".into()),
+                        }))
+                        .await
+                        .unwrap();
+                    assert!(resp.success);
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    observer_task.await.unwrap();
+
+    let mut task_completed = false;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match c1.next_event().await.unwrap() {
+                Event::TaskDone(done) if done.task_id == started.task_id => {
+                    assert_eq!(done.status, TaskStatus::Completed);
+                    task_completed = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("task completed after approval granted");
+
+    assert!(task_completed);
 }

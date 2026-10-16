@@ -112,6 +112,8 @@ pub(crate) struct Shared {
     pub(crate) notifications: Arc<notifications::NotificationService>,
     pub(crate) approvals: Arc<nebula_sandbox::approval::ApprovalStore>,
     pub(crate) task_events: tokio::sync::broadcast::Sender<nebula_proto::Event>,
+    pub(crate) approval_responses:
+        tokio::sync::broadcast::Sender<nebula_proto::ApprovalRespondParams>,
 }
 
 impl Shared {
@@ -158,13 +160,18 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         None => None,
     };
 
+    let approvals = Arc::new(nebula_sandbox::approval::ApprovalStore::new());
+
     // Register the in-process built-in tools on the host now, while it is still exclusively
     // owned (`register_builtin` takes `&mut self`) and the sampler exists, so the built-in
     // `ResourceProvider` reads the same source as `resources.snapshot` (Requirement 6.4).
     let mut tool_host = deps.tool_host;
-    builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref())?;
-
-    let approvals = Arc::new(nebula_sandbox::approval::ApprovalStore::new());
+    builtin_providers::register_builtins(
+        &mut tool_host,
+        &config,
+        sampler.as_ref(),
+        Arc::clone(&approvals),
+    )?;
 
     // Construct the per-task worktree manager once and reconcile any worktrees a crash left behind
     // (issue #29, Req 6/9.4). Recovery is spawned, not awaited: `start` runs synchronously on the
@@ -212,6 +219,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
 
     let pipe_path = config.daemon.pipe_path();
     let (task_events, _) = tokio::sync::broadcast::channel(256);
+    let (approval_responses, _) = tokio::sync::broadcast::channel(32);
     let shared = Arc::new(Shared {
         config,
         telemetry: deps.telemetry,
@@ -233,6 +241,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         notifications: Arc::clone(&notifications),
         approvals: Arc::clone(&approvals),
         task_events,
+        approval_responses,
     });
 
     // Background monitor for game mode detection and GPU yielding

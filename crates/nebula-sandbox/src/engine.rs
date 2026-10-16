@@ -266,11 +266,24 @@ impl RulesClassifier {
     ///
     /// Returns a [`LoadError`] if the embedded rules table fails to parse or validate.
     pub fn embedded(worktree_root: PathBuf, retired_drive: String) -> Result<Self, LoadError> {
+        Self::embedded_with_approvals(worktree_root, retired_drive, Arc::new(ApprovalStore::new()))
+    }
+
+    /// Build a classifier from the embedded `rules.toml` with caller-supplied [`ApprovalStore`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LoadError`] if the embedded rules table fails to parse or validate.
+    pub fn embedded_with_approvals(
+        worktree_root: PathBuf,
+        retired_drive: String,
+        approvals: Arc<ApprovalStore>,
+    ) -> Result<Self, LoadError> {
         let resolver = Arc::new(LexicalResolver::new(
             worktree_root.clone(),
             retired_drive.clone(),
         ));
-        Self::with_resolver(worktree_root, retired_drive, resolver)
+        Self::with_resolver_and_approvals(worktree_root, retired_drive, resolver, approvals)
     }
 
     /// Build a classifier from the embedded `rules.toml` with a caller-supplied [`PathResolver`].
@@ -286,12 +299,32 @@ impl RulesClassifier {
         retired_drive: String,
         path_resolver: Arc<dyn PathResolver>,
     ) -> Result<Self, LoadError> {
+        Self::with_resolver_and_approvals(
+            worktree_root,
+            retired_drive,
+            path_resolver,
+            Arc::new(ApprovalStore::new()),
+        )
+    }
+
+    /// Build a classifier from the embedded `rules.toml` with a caller-supplied [`PathResolver`]
+    /// and [`ApprovalStore`].
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`LoadError`] if the embedded rules table fails to parse or validate.
+    pub fn with_resolver_and_approvals(
+        worktree_root: PathBuf,
+        retired_drive: String,
+        path_resolver: Arc<dyn PathResolver>,
+        approvals: Arc<ApprovalStore>,
+    ) -> Result<Self, LoadError> {
         let table = RulesTable::load(include_str!("data/rules.toml"))?;
         Ok(Self {
             table,
             worktree_root,
             retired_drive,
-            approvals: Arc::new(ApprovalStore::new()),
+            approvals,
             path_resolver,
         })
     }
