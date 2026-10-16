@@ -25,7 +25,7 @@ use tokio_util::sync::CancellationToken;
 use crate::Shared;
 use crate::circuit_breaker::CircuitBreakerTracker;
 
-const DEFAULT_STEP_MAX_TOKENS: u32 = 4096;
+const DEFAULT_STEP_MAX_TOKENS: u32 = 16384;
 
 /// Runs one autonomous executor task until completion, limits, or cancellation.
 pub(crate) async fn run_task(
@@ -535,32 +535,50 @@ async fn execute_loop(
             }
 
             tool_calls_executed += 1;
-            let args: Value = serde_json::from_str(&call.arguments).unwrap_or_else(|_| json!({}));
+            let (args, parse_error) = match serde_json::from_str::<Value>(&call.arguments) {
+                Ok(v) => (v, None),
+                Err(e) => {
+                    let is_truncated = output.stop_reason == Some(nebula_proto::StopReason::Length);
+                    let detail = if is_truncated {
+                        "tool arguments were truncated (exceeded step token limit). Please break work into smaller writes or shorter files"
+                    } else {
+                        "tool arguments were not valid JSON"
+                    };
+                    (
+                        json!({ "raw": call.arguments }),
+                        Some(format!("{detail}: {e}")),
+                    )
+                }
+            };
             let trace_str = ctx.trace_id.to_string();
 
-            let call_res = CURRENT_WORKTREE
-                .scope(
-                    Some(ctx.worktree_root.to_path_buf()),
-                    CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
-                        ctx.shared
-                            .tool_host
-                            .call(&call.name, args.clone(), Some(&trace_str))
-                            .await
-                    }),
-                )
-                .await;
+            let (mut result_content, mut is_error) = if let Some(err_msg) = parse_error {
+                (format!("[tool error] {err_msg}"), true)
+            } else {
+                let call_res = CURRENT_WORKTREE
+                    .scope(
+                        Some(ctx.worktree_root.to_path_buf()),
+                        CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
+                            ctx.shared
+                                .tool_host
+                                .call(&call.name, args.clone(), Some(&trace_str))
+                                .await
+                        }),
+                    )
+                    .await;
 
-            let (mut result_content, mut is_error) = match call_res {
-                Ok(outcome) => {
-                    let err = outcome.is_error;
-                    let text = if err {
-                        format!("[tool error] {}", outcome.content)
-                    } else {
-                        outcome.content.to_string()
-                    };
-                    (text, err)
+                match call_res {
+                    Ok(outcome) => {
+                        let err = outcome.is_error;
+                        let text = if err {
+                            format!("[tool error] {}", outcome.content)
+                        } else {
+                            outcome.content.to_string()
+                        };
+                        (text, err)
+                    }
+                    Err(err) => (format!("[tool dispatch error: {err}]"), true),
                 }
-                Err(err) => (format!("[tool dispatch error: {err}]"), true),
             };
 
             if is_error
@@ -671,6 +689,23 @@ async fn execute_loop(
                     format!("circuit breaker tripped: {trip}"),
                 );
             }
+
+            let outcome_summary = if is_error {
+                let first_line = result_content.lines().next().unwrap_or(&result_content);
+                format!("  └─> [ERROR] {first_line}\n")
+            } else {
+                let first_line = result_content.lines().next().unwrap_or("");
+                if first_line.is_empty() {
+                    "  └─> [OK]\n".to_string()
+                } else {
+                    format!("  └─> [OK] {first_line}\n")
+                }
+            };
+            ctx.shared.emit_event(Event::ChatToken(ChatToken {
+                chat_id,
+                text: outcome_summary,
+                reasoning: String::new(),
+            }));
 
             let tool_output = format!("[tool result: {}]\n{}", call.name, result_content);
             messages.push(ChatMessage {
