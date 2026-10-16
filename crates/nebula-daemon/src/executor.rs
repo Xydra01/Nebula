@@ -149,7 +149,7 @@ Only provide a final plain-text response without tool calls when the entire task
     // 5. Cleanup and finalization
     drop(task_job);
 
-    if status == TaskStatus::Completed {
+    if status == TaskStatus::Completed || status == TaskStatus::LimitReached {
         commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
     }
 
@@ -440,7 +440,7 @@ async fn execute_loop(
 
             if (is_still_planning || is_calling_tools || is_empty)
                 && step_index < 10
-                && nudge_count < 3
+                && nudge_count < 5
             {
                 nudge_count += 1;
                 tracing::info!(
@@ -466,6 +466,17 @@ async fn execute_loop(
                     content: prompt.into(),
                 });
                 continue;
+            }
+
+            if (is_still_planning || is_calling_tools) && nudge_count >= 5 {
+                tracing::warn!(event = "task.nudge_limit_exhausted", text = %output.text);
+                return (
+                    TaskStatus::LimitReached,
+                    format!(
+                        "task execution stopped during unfinished planning: {}",
+                        output.text.trim()
+                    ),
+                );
             }
 
             let summary = if is_calling_tools {

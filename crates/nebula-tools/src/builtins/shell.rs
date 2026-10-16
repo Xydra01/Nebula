@@ -96,6 +96,48 @@ impl ShellRun {
     pub const NAME: &'static str = "shell.run";
 }
 
+/// Split a command line string into a command and its argument vector, respecting quotes.
+fn split_command_line(input: &str) -> (String, Vec<String>) {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_quote: Option<char> = None;
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' | '\'' if in_quote.is_none() => {
+                in_quote = Some(ch);
+            }
+            quote if Some(quote) == in_quote => {
+                in_quote = None;
+            }
+            '\\' if chars.peek() == Some(&'"') || chars.peek() == Some(&'\'') => {
+                if let Some(next_quote) = chars.next() {
+                    current.push(next_quote);
+                }
+            }
+            c if c.is_whitespace() && in_quote.is_none() => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            c => {
+                current.push(c);
+            }
+        }
+    }
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    if parts.is_empty() {
+        (input.trim().to_owned(), Vec::new())
+    } else {
+        let cmd = parts.remove(0);
+        (cmd, parts)
+    }
+}
+
 /// Parse and validate the `{ command, args? }` arguments.
 ///
 /// Schema validation at the boundary has already guaranteed the shape; this extracts the typed
@@ -106,16 +148,16 @@ fn parse_args(arguments: &serde_json::Value) -> Result<(String, Vec<String>), To
         detail,
     };
 
-    let command = arguments
+    let raw_command = arguments
         .get("command")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| invalid("`command` must be a string".to_owned()))?
-        .to_owned();
-    if command.trim().is_empty() {
+        .trim();
+    if raw_command.is_empty() {
         return Err(invalid("`command` must not be empty".to_owned()));
     }
 
-    let args = match arguments.get("args") {
+    let mut args = match arguments.get("args") {
         None | Some(serde_json::Value::Null) => Vec::new(),
         Some(serde_json::Value::Array(items)) => {
             let mut out = Vec::with_capacity(items.len());
@@ -128,6 +170,18 @@ fn parse_args(arguments: &serde_json::Value) -> Result<(String, Vec<String>), To
             out
         }
         Some(_) => return Err(invalid("`args` must be an array of strings".to_owned())),
+    };
+
+    let command = if args.is_empty() && raw_command.chars().any(char::is_whitespace) {
+        if std::path::Path::new(raw_command).exists() {
+            raw_command.to_owned()
+        } else {
+            let (cmd, parsed_args) = split_command_line(raw_command);
+            args = parsed_args;
+            cmd
+        }
+    } else {
+        raw_command.to_owned()
     };
 
     Ok((command, args))
@@ -1066,6 +1120,33 @@ mod tests {
             );
             // The gate consulted the classifier exactly once.
             assert_eq!(classifier.calls.load(Ordering::SeqCst), 1);
+        }
+
+        #[test]
+        fn test_split_command_line_and_parse_args() {
+            let (cmd, args) = split_command_line("python3 --version");
+            assert_eq!(cmd, "python3");
+            assert_eq!(args, vec!["--version"]);
+
+            let (cmd, args) =
+                split_command_line("python script.py \"arg with spaces\" 'single quoted'");
+            assert_eq!(cmd, "python");
+            assert_eq!(args, vec!["script.py", "arg with spaces", "single quoted"]);
+
+            let json_with_split = serde_json::json!({
+                "command": "python3 -c \"print('hello')\""
+            });
+            let (cmd, args) = parse_args(&json_with_split).expect("parse args successfully");
+            assert_eq!(cmd, "python3");
+            assert_eq!(args, vec!["-c", "print('hello')"]);
+
+            let json_explicit_args = serde_json::json!({
+                "command": "git",
+                "args": ["status", "--short"]
+            });
+            let (cmd, args) = parse_args(&json_explicit_args).expect("parse args successfully");
+            assert_eq!(cmd, "git");
+            assert_eq!(args, vec!["status", "--short"]);
         }
     }
 }

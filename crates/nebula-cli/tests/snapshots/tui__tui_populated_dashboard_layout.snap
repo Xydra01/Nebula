@@ -8,7 +8,7 @@ expression: terminal.backend()
 "╭ Resources ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮"
 "│VRAM: 9.1/12.0 GB (76%)  |  Commit: 36.1/63.8 GB (57%)  |  GPU: 87%  |  CPU: 12.4%                                    │"
 "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
-"┏ Tasks (Tab: 1) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭ Streaming Model Output (Tab: 2) [Line: 0] ───────────────────────────╮"
+"┏ Tasks (Tab: 1) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓╭ Streaming Model Output (Tab: 2) [Auto-Scroll] ───────────────────────╮"
 "┃> [RUNNING] 01J9ZQ3V5W8X0Y2Z4A6B8C0D2E.. (step┃│Analyzing schema definitions in crates/nebula-db/src/migrations.rs... │"
 "┃                                              ┃│Found 4 migrations requiring transactional boundaries.                │"
 "┃                                              ┃│                                                                      │"
