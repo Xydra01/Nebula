@@ -110,6 +110,25 @@ pub(crate) async fn run(ctx: &Ctx, args: &TaskRunArgs, out: &mut dyn Write) -> a
                     out.flush()?;
                 }
             }
+            Event::ChatToken(t) if t.text.starts_with("  └─>") => {
+                if !ctx.json {
+                    write!(out, "{}", t.text)?;
+                    out.flush()?;
+                }
+            }
+            Event::ApprovalNeeded(req) => {
+                if !ctx.json {
+                    writeln!(
+                        out,
+                        "{}",
+                        ctx.style.warn(&format!(
+                            "approval needed for '{}' ({}) - approve in TUI or via ntfy",
+                            req.command, req.tier
+                        ))
+                    )?;
+                    out.flush()?;
+                }
+            }
             Event::TaskDone(done) if done.task_id == task_id => {
                 if ctx.json {
                     emit_json(out, &done)?;
