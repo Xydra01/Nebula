@@ -209,6 +209,19 @@ fn requests() {
             "req_game_mode_status",
             request(16, Method::GameModeStatus(Empty {})),
         ),
+        (
+            "req_notify_status",
+            request(17, Method::NotifyStatus(Empty {})),
+        ),
+        (
+            "req_notify_test",
+            request(
+                18,
+                Method::NotifyTest(NotifyTestParams {
+                    message: Some("test notification".into()),
+                }),
+            ),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -355,6 +368,30 @@ fn responses() {
             )
             .unwrap(),
         ),
+        (
+            "res_notify_status",
+            Response::ok(
+                id(17),
+                &NotifyStatusResponse {
+                    enabled: true,
+                    server_url: "http://100.64.1.2:8080".into(),
+                    topic: "nebula-alerts".into(),
+                    tailscale_only: true,
+                },
+            )
+            .unwrap(),
+        ),
+        (
+            "res_notify_test",
+            Response::ok(
+                id(18),
+                &NotifyTestResponse {
+                    success: true,
+                    message: "Notification sent to topic nebula-alerts".into(),
+                },
+            )
+            .unwrap(),
+        ),
     ];
     for (name, res) in cases {
         check(name, &Message::Response(res));
@@ -446,6 +483,16 @@ fn events() {
             Event::GameModeChanged(GameModeChanged {
                 active: true,
                 reason: Some("fullscreen window (game.exe)".into()),
+            }),
+        ),
+        (
+            "evt_approval_needed",
+            Event::ApprovalNeeded(ApprovalNeeded {
+                command: "git".into(),
+                tier: "System".into(),
+                rule_id: Some("git.system".into()),
+                trace_id: trace().to_string(),
+                summary: "Command 'git' requires approval under rule 'git.system'".into(),
             }),
         ),
     ];

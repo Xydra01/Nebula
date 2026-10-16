@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use nebula_config::VolumeGuard;
 use nebula_proto::{
     CheckStatus, DaemonStatus, DoctorReport, GameModeStatusResponse, ModelState, ModelStatus,
-    ResourceSnapshot, StopReason, TaskDone, TaskStatus, TaskStep, Usage,
+    NotifyStatusResponse, ResourceSnapshot, StopReason, TaskDone, TaskStatus, TaskStep, Usage,
 };
 use nebula_resources::{GB, GuardLevel, guard_disks};
 use serde::Serialize;
@@ -280,6 +280,31 @@ pub fn game_mode_status(s: &GameModeStatusResponse, style: Style) -> String {
     }
     if let Some(proc) = &s.process_name {
         let _ = writeln!(out, "process:   {proc}");
+    }
+    out
+}
+
+/// The lines printed for notification status.
+#[must_use]
+pub fn notify_status(s: &NotifyStatusResponse, style: Style) -> String {
+    let state_str = if s.enabled {
+        style.good("enabled")
+    } else {
+        style.dim("disabled")
+    };
+    let mut out = format!("notifications: {state_str}\n");
+    if s.enabled {
+        let _ = writeln!(out, "server:        {}", s.server_url);
+        let _ = writeln!(out, "topic:         {}", s.topic);
+        let _ = writeln!(
+            out,
+            "tailscale:     {}",
+            if s.tailscale_only {
+                "enforced"
+            } else {
+                "any network"
+            }
+        );
     }
     out
 }

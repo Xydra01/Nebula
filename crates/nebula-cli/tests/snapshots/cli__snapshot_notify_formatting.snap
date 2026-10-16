@@ -1,0 +1,10 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "lines.join(\"---\\n\")"
+---
+notifications: disabled
+---
+notifications: enabled
+server:        http://100.64.0.1:8080
+topic:         alerts
+tailscale:     enforced

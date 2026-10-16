@@ -1,0 +1,6 @@
+{
+  "spec_version": "1.0",
+  "title": "ntfy push notifications over Tailscale",
+  "issue": 37,
+  "status": "planned"
+}

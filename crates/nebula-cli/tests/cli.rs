@@ -4,13 +4,13 @@ use clap::Parser;
 use nebula_cli::format::{self, Style};
 use nebula_cli::{
     BackupAction, ChatArgs, Cli, Command, DaemonAction, GameModeAction, Level, LogsAction,
-    ModelAction, Reasoning, TaskAction, TaskRunArgs, doctor_exit_code,
+    ModelAction, NotifyAction, Reasoning, TaskAction, TaskRunArgs, doctor_exit_code,
 };
 use nebula_config::NebulaConfig;
 use nebula_proto::{
     CheckStatus, DaemonStatus, DiskUsage, DoctorCheck, DoctorReport, GameModeStatusResponse,
-    GpuProcess, ModelState, ModelStatus, ResourceSnapshot, StepId, StopReason, TaskDone, TaskId,
-    TaskStatus, TaskStep, Usage,
+    GpuProcess, ModelState, ModelStatus, NotifyStatusResponse, ResourceSnapshot, StepId,
+    StopReason, TaskDone, TaskId, TaskStatus, TaskStep, Usage,
 };
 use time::macros::datetime;
 
@@ -216,6 +216,30 @@ fn parses_every_command() {
         }
     ));
     assert!(matches!(parse(&["resume"]).command, Command::Resume));
+    assert!(matches!(
+        parse(&["notify"]).command,
+        Command::Notify { action: None }
+    ));
+    assert!(matches!(
+        parse(&["notify", "status"]).command,
+        Command::Notify {
+            action: Some(NotifyAction::Status)
+        }
+    ));
+    let Command::Notify {
+        action: Some(NotifyAction::Test { message }),
+    } = parse(&["notify", "test", "--message", "hello world"]).command
+    else {
+        panic!("not notify test");
+    };
+    assert_eq!(message.as_deref(), Some("hello world"));
+    let Command::Notify {
+        action: Some(NotifyAction::Test { message }),
+    } = parse(&["notify", "test"]).command
+    else {
+        panic!("not notify test");
+    };
+    assert!(message.is_none());
 }
 
 #[test]
@@ -402,6 +426,27 @@ fn snapshot_game_mode_formatting() {
     let lines = [
         format::game_mode_status(&inactive, Style::PLAIN),
         format::game_mode_status(&active, Style::PLAIN),
+    ];
+    insta::assert_snapshot!(lines.join("---\n"));
+}
+
+#[test]
+fn snapshot_notify_formatting() {
+    let disabled = NotifyStatusResponse {
+        enabled: false,
+        server_url: String::new(),
+        topic: String::new(),
+        tailscale_only: true,
+    };
+    let enabled = NotifyStatusResponse {
+        enabled: true,
+        server_url: "http://100.64.0.1:8080".into(),
+        topic: "alerts".into(),
+        tailscale_only: true,
+    };
+    let lines = [
+        format::notify_status(&disabled, Style::PLAIN),
+        format::notify_status(&enabled, Style::PLAIN),
     ];
     insta::assert_snapshot!(lines.join("---\n"));
 }

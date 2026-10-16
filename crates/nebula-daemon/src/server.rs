@@ -357,6 +357,31 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
         }
         Method::GameModeStatus(Empty {}) => to_value(&shared.game_mode.status()),
 
+        Method::NotifyStatus(Empty {}) => {
+            let cfg = shared.notifications.config();
+            to_value(&nebula_proto::NotifyStatusResponse {
+                enabled: cfg.enabled,
+                server_url: cfg.server_url.clone(),
+                topic: cfg.topic.clone(),
+                tailscale_only: cfg.tailscale_only,
+            })
+        }
+        Method::NotifyTest(nebula_proto::NotifyTestParams { message }) => {
+            match shared.notifications.notify_test(message.as_deref()).await {
+                Ok(()) => to_value(&nebula_proto::NotifyTestResponse {
+                    success: true,
+                    message: format!(
+                        "Notification sent to topic '{}'",
+                        shared.notifications.config().topic
+                    ),
+                }),
+                Err(e) => to_value(&nebula_proto::NotifyTestResponse {
+                    success: false,
+                    message: e.to_string(),
+                }),
+            }
+        }
+
         Method::ModelStatus(Empty {}) => to_value(&shared.chat.status()),
         Method::ModelSetProfile(ModelSetProfileParams { profile }) => {
             match check_chat_profile(&shared, &profile) {
@@ -712,11 +737,12 @@ fn subscribe_logs(shared: &Shared, p: LogsSubscribeParams, tx: Outbox, conn: Can
     });
 }
 
-async fn run_doctor(shared: &Arc<Shared>) -> Result<DoctorReport, RpcError> {
+pub(crate) async fn run_doctor(shared: &Arc<Shared>) -> Result<DoctorReport, RpcError> {
     let mut all = vec![checks::model_check("model.chat", &shared.chat.status())];
     if let Some(e) = &shared.embedding {
         all.push(checks::model_check("model.embedding", &e.status()));
     }
+    all.push(shared.notifications.check_health().await);
     let s = Arc::clone(shared);
     let rest = tokio::task::spawn_blocking(move || {
         let mut out = (s.local_checks)(&s.config).checks;

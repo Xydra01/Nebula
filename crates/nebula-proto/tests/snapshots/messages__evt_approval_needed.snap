@@ -1,0 +1,16 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "approval.needed",
+  "params": {
+    "command": "git",
+    "rule_id": "git.system",
+    "summary": "Command 'git' requires approval under rule 'git.system'",
+    "tier": "System",
+    "trace_id": "01K6P3Z8M4Q7X2V9B5N1C0D3EF"
+  },
+  "proto_version": 3
+}

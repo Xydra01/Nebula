@@ -67,11 +67,17 @@ pub enum Method {
     /// Query current game mode state. Result: [`GameModeStatusResponse`].
     #[serde(rename = "game_mode.status")]
     GameModeStatus(Empty),
+    /// Query push notification status. Result: [`NotifyStatusResponse`].
+    #[serde(rename = "notify.status")]
+    NotifyStatus(Empty),
+    /// Send a test notification. Result: [`NotifyTestResponse`].
+    #[serde(rename = "notify.test")]
+    NotifyTest(NotifyTestParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 16] = [
+    pub const NAMES: [&'static str; 18] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -88,6 +94,8 @@ impl Method {
         "task.stop_all",
         "game_mode.set",
         "game_mode.status",
+        "notify.status",
+        "notify.test",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -110,6 +118,8 @@ impl Method {
             Self::TaskStopAll(_) => "task.stop_all",
             Self::GameModeSet(_) => "game_mode.set",
             Self::GameModeStatus(_) => "game_mode.status",
+            Self::NotifyStatus(_) => "notify.status",
+            Self::NotifyTest(_) => "notify.test",
         }
     }
 }
@@ -325,4 +335,37 @@ pub struct GameModeStatusResponse {
     /// Process name that triggered game mode, if applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub process_name: Option<String>,
+}
+
+/// Parameters of `notify.test`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NotifyTestParams {
+    /// Optional test message override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Result of `notify.status`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NotifyStatusResponse {
+    /// Whether push notifications are enabled.
+    pub enabled: bool,
+    /// Configured ntfy server URL.
+    pub server_url: String,
+    /// Configured ntfy topic.
+    pub topic: String,
+    /// Whether destination is confined to Tailscale only.
+    pub tailscale_only: bool,
+}
+
+/// Result of `notify.test`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NotifyTestResponse {
+    /// Whether the test notification was sent successfully.
+    pub success: bool,
+    /// Detail message.
+    pub message: String,
 }

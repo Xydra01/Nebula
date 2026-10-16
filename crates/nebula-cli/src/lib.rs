@@ -99,6 +99,25 @@ pub enum Command {
     },
     /// Resume tasks and clear manual game mode override.
     Resume,
+    /// Push notifications over Tailscale via ntfy.
+    Notify {
+        /// Action. Defaults to status if omitted.
+        #[command(subcommand)]
+        action: Option<NotifyAction>,
+    },
+}
+
+/// `nebula notify ...`.
+#[derive(Debug, Subcommand)]
+pub enum NotifyAction {
+    /// Show notification configuration and status.
+    Status,
+    /// Send a test notification.
+    Test {
+        /// Optional test message.
+        #[arg(long, short)]
+        message: Option<String>,
+    },
 }
 
 /// `nebula game-mode ...`.
@@ -352,7 +371,43 @@ pub async fn run(
             GameModeAction::Status => game_mode_status(ctx, out).await,
         },
         Command::Resume => game_mode_set(ctx, false, out).await,
+        Command::Notify { action } => match action.unwrap_or(NotifyAction::Status) {
+            NotifyAction::Status => notify_status(ctx, out).await,
+            NotifyAction::Test { message } => notify_test(ctx, message, out).await,
+        },
     }
+}
+
+async fn notify_status(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let s: nebula_proto::NotifyStatusResponse = c.call(Method::NotifyStatus(Empty {})).await?;
+    if ctx.json {
+        emit_json(out, &s)?;
+    } else {
+        write!(out, "{}", format::notify_status(&s, ctx.style))?;
+    }
+    Ok(0)
+}
+
+async fn notify_test(
+    ctx: &Ctx,
+    message: Option<String>,
+    out: &mut dyn Write,
+) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let res: nebula_proto::NotifyTestResponse = c
+        .call(Method::NotifyTest(nebula_proto::NotifyTestParams {
+            message,
+        }))
+        .await?;
+    if ctx.json {
+        emit_json(out, &res)?;
+    } else if res.success {
+        writeln!(out, "{}", ctx.style.good(&res.message))?;
+    } else {
+        writeln!(out, "{}", ctx.style.bad(&res.message))?;
+    }
+    if res.success { Ok(0) } else { Ok(1) }
 }
 
 async fn game_mode_status(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {

@@ -52,11 +52,18 @@ pub(crate) async fn run_task(
         Err(e) => {
             tracing::error!(event = "task.job_create_failed", error = %e);
             let _ = shared.worktrees.finalize(&wt_task_id).await;
+            let summary = format!("could not create task job: {e}");
+            shared.notifications.notify_task_done(
+                &task_id,
+                &TaskStatus::Failed,
+                &summary,
+                &trace_id,
+            );
             let _ = tx
                 .send(note(Event::TaskDone(TaskDone {
                     task_id,
                     status: TaskStatus::Failed,
-                    summary: format!("could not create task job: {e}"),
+                    summary,
                 })))
                 .await;
             return;
@@ -81,11 +88,15 @@ pub(crate) async fn run_task(
     if let Err(e) = crate::server::ensure_profile(&shared, profile, &token).await {
         tracing::error!(event = "task.model_profile_failed", error = %e.message);
         let _ = shared.worktrees.finalize(&wt_task_id).await;
+        let summary = format!("model unavailable: {}", e.message);
+        shared
+            .notifications
+            .notify_task_done(&task_id, &TaskStatus::Failed, &summary, &trace_id);
         let _ = tx
             .send(note(Event::TaskDone(TaskDone {
                 task_id,
                 status: TaskStatus::Failed,
-                summary: format!("model unavailable: {}", e.message),
+                summary,
             })))
             .await;
         return;
@@ -182,6 +193,9 @@ When the task is complete, finish with a clear final summary without requesting 
     }
 
     tracing::info!(event = "task.done", status = ?status, summary = %final_summary);
+    shared
+        .notifications
+        .notify_task_done(&task_id, &status, &final_summary, &trace_id);
     let _ = tx
         .send(note(Event::TaskDone(TaskDone {
             task_id,
@@ -357,6 +371,9 @@ async fn execute_loop(
             let step_tokens = usage.prompt_n + usage.predicted_n;
             if let Err(trip) = tracker.check_step_tokens(step_tokens) {
                 tracing::warn!(event = "circuit_breaker.tripped", reason = %trip);
+                ctx.shared
+                    .notifications
+                    .notify_breaker_tripped(&trip.to_string(), Some(&ctx.trace_id));
                 return (
                     TaskStatus::LimitReached,
                     format!("circuit breaker tripped: {trip}"),
@@ -465,8 +482,30 @@ async fn execute_loop(
                 Err(err) => (format!("[tool dispatch error: {err}]"), true),
             };
 
+            if is_error
+                && (result_content.contains("requires an approval")
+                    || result_content.contains("lacking an approval"))
+            {
+                ctx.shared
+                    .notifications
+                    .notify_approval_needed(&call.name, "System", None, &trace_str);
+                let _ = ctx
+                    .tx
+                    .send(note(Event::ApprovalNeeded(nebula_proto::ApprovalNeeded {
+                        command: call.name.clone(),
+                        tier: "System".into(),
+                        rule_id: None,
+                        trace_id: trace_str.clone(),
+                        summary: result_content.clone(),
+                    })))
+                    .await;
+            }
+
             if let Err(trip) = tracker.record_tool_call(&call.name, &args, is_error) {
                 tracing::warn!(event = "circuit_breaker.tripped", reason = %trip);
+                ctx.shared
+                    .notifications
+                    .notify_breaker_tripped(&trip.to_string(), Some(&ctx.trace_id));
                 return (
                     TaskStatus::LimitReached,
                     format!("circuit breaker tripped: {trip}"),
