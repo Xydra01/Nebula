@@ -318,10 +318,17 @@ fn render_tools_pane(app: &TuiApp, frame: &mut Frame, area: Rect) {
                     Style::default()
                 };
 
+                let status_color = match tc.status.as_str() {
+                    "ok" | "done" => Color::Green,
+                    "error" => Color::Red,
+                    "running" => Color::Yellow,
+                    _ => Color::White,
+                };
+
                 Row::new(vec![
                     Cell::from(format!("#{}", tc.step_index)),
                     Cell::from(tc.summary.clone()),
-                    Cell::from(Span::styled(&tc.status, Style::default().fg(Color::Green))),
+                    Cell::from(Span::styled(&tc.status, Style::default().fg(status_color))),
                 ])
                 .style(row_style)
             })
