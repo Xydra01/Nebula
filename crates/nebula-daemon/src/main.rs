@@ -59,7 +59,7 @@ async fn real_main() -> anyhow::Result<()> {
         instance_name: INSTANCE_MUTEX.to_owned(),
         local_checks: Arc::new(nebula_resources::doctor::local_checks),
         artifact_checks: true,
-        foreground_detector: None,
+        foreground_detector: Some(Arc::new(win::Win32ForegroundDetector)),
     };
     nebula_daemon::run(config, deps).await?;
     Ok(())

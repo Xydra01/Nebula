@@ -188,7 +188,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
 
     let detector: Arc<dyn win::ForegroundDetector> = deps
         .foreground_detector
-        .unwrap_or_else(|| Arc::new(win::Win32ForegroundDetector));
+        .unwrap_or_else(|| Arc::new(win::NullForegroundDetector));
     let game_mode = Arc::new(game_mode::GameModeCoordinator::new(
         config.game_mode.clone(),
         detector,

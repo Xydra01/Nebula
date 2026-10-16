@@ -217,6 +217,16 @@ impl ForegroundDetector for Win32ForegroundDetector {
     }
 }
 
+/// A foreground detector that detects nothing (for test harnesses and headless mode).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NullForegroundDetector;
+
+impl ForegroundDetector for NullForegroundDetector {
+    fn detect(&self) -> Option<ForegroundWindowInfo> {
+        None
+    }
+}
+
 /// Queries Win32 for the current foreground window, its owner PID, and whether it is fullscreen.
 #[must_use]
 pub fn current_foreground_window() -> Option<ForegroundWindowInfo> {
