@@ -8,6 +8,7 @@ mod chat;
 mod daemon_ctl;
 pub mod format;
 mod task;
+pub mod tui;
 #[cfg(windows)]
 mod win;
 
@@ -105,6 +106,8 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<NotifyAction>,
     },
+    /// Interactive terminal UI for live monitoring and approvals.
+    Tui,
 }
 
 /// `nebula notify ...`.
@@ -375,6 +378,10 @@ pub async fn run(
             NotifyAction::Status => notify_status(ctx, out).await,
             NotifyAction::Test { message } => notify_test(ctx, message, out).await,
         },
+        Command::Tui => {
+            tui::run_tui(&ctx.pipe).await?;
+            Ok(0)
+        }
     }
 }
 

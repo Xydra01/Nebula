@@ -110,6 +110,7 @@ pub(crate) struct Shared {
     pub(crate) worktrees: Arc<nebula_sandbox::worktree::manager::WorktreeManager>,
     pub(crate) game_mode: Arc<game_mode::GameModeCoordinator>,
     pub(crate) notifications: Arc<notifications::NotificationService>,
+    pub(crate) approvals: Arc<nebula_sandbox::approval::ApprovalStore>,
 }
 
 impl Shared {
@@ -158,11 +159,14 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
     let mut tool_host = deps.tool_host;
     builtin_providers::register_builtins(&mut tool_host, &config, sampler.as_ref())?;
 
+    let approvals = Arc::new(nebula_sandbox::approval::ApprovalStore::new());
+
     // Construct the per-task worktree manager once and reconcile any worktrees a crash left behind
     // (issue #29, Req 6/9.4). Recovery is spawned, not awaited: `start` runs synchronously on the
     // live Tokio runtime, so blocking on it here would panic. The manager is retained for the
     // future executor (issue #32), which drives create/finalize/remove around each task.
-    let worktree_manager = builtin_providers::spawn_worktree_recovery(&config);
+    let worktree_manager =
+        builtin_providers::spawn_worktree_recovery(&config, Arc::clone(&approvals));
 
     let blobs = deps.telemetry.blobs().cloned();
     let chat = ModelManager::spawn_with(
@@ -221,6 +225,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         worktrees: worktree_manager,
         game_mode: Arc::clone(&game_mode),
         notifications: Arc::clone(&notifications),
+        approvals: Arc::clone(&approvals),
     });
 
     // Background monitor for game mode detection and GPU yielding

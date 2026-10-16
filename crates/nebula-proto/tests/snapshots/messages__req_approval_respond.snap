@@ -1,0 +1,17 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 19,
+  "jsonrpc": "2.0",
+  "method": "approval.respond",
+  "params": {
+    "approved": true,
+    "command": "git push origin main",
+    "reason": "User approved via TUI",
+    "tier": "System",
+    "trace_id": "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E"
+  },
+  "proto_version": 3
+}

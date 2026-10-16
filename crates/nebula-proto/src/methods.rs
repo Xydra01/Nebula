@@ -73,11 +73,14 @@ pub enum Method {
     /// Send a test notification. Result: [`NotifyTestResponse`].
     #[serde(rename = "notify.test")]
     NotifyTest(NotifyTestParams),
+    /// Respond to an approval request (approve or deny). Result: [`ApprovalRespondResponse`].
+    #[serde(rename = "approval.respond")]
+    ApprovalRespond(ApprovalRespondParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 18] = [
+    pub const NAMES: [&'static str; 19] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -96,6 +99,7 @@ impl Method {
         "game_mode.status",
         "notify.status",
         "notify.test",
+        "approval.respond",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -120,6 +124,7 @@ impl Method {
             Self::GameModeStatus(_) => "game_mode.status",
             Self::NotifyStatus(_) => "notify.status",
             Self::NotifyTest(_) => "notify.test",
+            Self::ApprovalRespond(_) => "approval.respond",
         }
     }
 }
@@ -367,5 +372,32 @@ pub struct NotifyTestResponse {
     /// Whether the test notification was sent successfully.
     pub success: bool,
     /// Detail message.
+    pub message: String,
+}
+
+/// Parameters of `approval.respond`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRespondParams {
+    /// Trace ID of the request being approved or denied.
+    pub trace_id: String,
+    /// Whether the action is approved.
+    pub approved: bool,
+    /// Command identity being approved.
+    pub command: String,
+    /// Permission tier of the command.
+    pub tier: String,
+    /// Optional human explanation or reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Result of `approval.respond`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRespondResponse {
+    /// Whether the response was recorded successfully.
+    pub success: bool,
+    /// Status message.
     pub message: String,
 }

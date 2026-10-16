@@ -240,6 +240,8 @@ fn parses_every_command() {
         panic!("not notify test");
     };
     assert!(message.is_none());
+
+    assert!(matches!(parse(&["tui"]).command, Command::Tui));
 }
 
 #[test]

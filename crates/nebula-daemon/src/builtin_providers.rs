@@ -184,12 +184,10 @@ pub(crate) fn register_builtins(
 /// The manager is returned so the caller can retain it for the executor (issue #32). Nothing
 /// consumes the lifecycle API yet, so a caller that only needs recovery may drop the returned
 /// handle after this call; the spawned recovery task holds its own clone.
-pub(crate) fn spawn_worktree_recovery(config: &NebulaConfig) -> Arc<WorktreeManager> {
-    // #28 wires no shared `ApprovalStore` into the daemon yet (none is reachable here). Construct a
-    // fresh store so the manager honours the #28 delete-limit approval contract; when #28 wires a
-    // shared store into the daemon, replace this with that shared handle — the manager reuses the
-    // same contract either way. Do NOT add a second approval mechanism.
-    let approvals = Arc::new(ApprovalStore::new());
+pub(crate) fn spawn_worktree_recovery(
+    config: &NebulaConfig,
+    approvals: Arc<ApprovalStore>,
+) -> Arc<WorktreeManager> {
     let manager = Arc::new(WorktreeManager::new(
         config.worktree.clone(),
         config.resources.retired_drive.clone(),
