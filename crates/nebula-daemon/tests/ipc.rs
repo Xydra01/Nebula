@@ -12,8 +12,9 @@ use nebula_model::testing::{FakeLauncher, FakeState, content, finish, reasoning}
 use nebula_proto::{
     ChatCancelParams, ChatId, ChatMessage, ChatStartParams, ChatStarted, CheckStatus, DaemonStatus,
     DoctorCheck, DoctorReport, Empty, Event, LogsSubscribeParams, Message, Method,
-    ModelSetProfileParams, ModelState, ModelStatus, ResourceSnapshot, Role, ToolCallOutcome,
-    ToolList, ToolsCallParams, TraceId, error_code,
+    ModelSetProfileParams, ModelState, ModelStatus, NotifyStatusResponse, NotifyTestParams,
+    NotifyTestResponse, ResourceSnapshot, Role, ToolCallOutcome, ToolList, ToolsCallParams,
+    TraceId, error_code,
 };
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
@@ -352,8 +353,20 @@ async fn protocol_round_trip() {
 
     let report: DoctorReport = c.call(Method::DoctorRun(Empty {})).await.unwrap();
     let names: Vec<&str> = report.checks.iter().map(|c| c.name.as_str()).collect();
-    assert_eq!(names, ["model.chat", "local.fake"]);
+    assert_eq!(names, ["model.chat", "notifications", "local.fake"]);
     assert_eq!(report.overall, CheckStatus::Ok);
+
+    let notify_status: NotifyStatusResponse = c.call(Method::NotifyStatus(Empty {})).await.unwrap();
+    assert!(!notify_status.enabled);
+
+    let notify_res: NotifyTestResponse = c
+        .call(Method::NotifyTest(NotifyTestParams {
+            message: Some("hello".into()),
+        }))
+        .await
+        .unwrap();
+    assert!(!notify_res.success);
+    assert!(notify_res.message.contains("disabled"));
 
     h.daemon.shutdown().await;
 }

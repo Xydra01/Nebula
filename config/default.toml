@@ -39,7 +39,7 @@ load_on_start = "standard"
 # CPU embedding server; "" disables it.
 embedding_profile = "embedding"
 # Credential Manager targets whose values are masked in every log and blob.
-secrets = ["nebula/github_bot_token", "nebula/cursor_api_key", "nebula/rclone_config_pass"]
+secrets = ["nebula/github_bot_token", "nebula/cursor_api_key", "nebula/rclone_config_pass", "nebula/ntfy_token"]
 
 [resources]
 sample_interval_ms = 2000
@@ -359,6 +359,27 @@ desktop_allowlist = [
     "taskmgr.exe",
     "llama-server.exe",
 ]
+
+# Remote push notifications over Tailscale via ntfy (issue #37, design Section 4.5).
+[notifications]
+# Whether push notifications are enabled.
+enabled = false
+# ntfy server URL (e.g. "http://100.x.y.z:8080" or "http://127.0.0.1:8080").
+server_url = "http://127.0.0.1:8080"
+# ntfy topic name. Private topic on your tailnet-only ntfy server.
+topic = "nebula-alerts"
+# Credential Manager target containing an optional authentication token for ntfy.
+token_target = "nebula/ntfy_token"
+# When true, strictly restricts destination server_url to Tailscale IPs (100.64.0.0/10, fd7a:115c:a1e0::/48),
+# MagicDNS hostnames (*.ts.net), or local loopback. Rejects public internet servers to prevent leaking alerts.
+tailscale_only = true
+# Request timeout in seconds for publishing notifications.
+timeout_secs = 5
+# Base URL for the tailnet-only approval page (e.g. "http://ej-pc.tailnet:8080/approve").
+approval_url_base = ""
+# Minimum interval in minutes between periodic doctor health checks/alerts.
+doctor_alert_interval_mins = 60
+
 
 
 

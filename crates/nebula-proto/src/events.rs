@@ -36,6 +36,9 @@ pub enum Event {
     /// Game mode state changed (entered or exited).
     #[serde(rename = "game_mode.changed")]
     GameModeChanged(GameModeChanged),
+    /// An approval is needed for an above-threshold action.
+    #[serde(rename = "approval.needed")]
+    ApprovalNeeded(ApprovalNeeded),
 }
 
 impl Event {
@@ -52,6 +55,7 @@ impl Event {
             Self::TaskStep(_) => "task.step",
             Self::TaskDone(_) => "task.done",
             Self::GameModeChanged(_) => "game_mode.changed",
+            Self::ApprovalNeeded(_) => "approval.needed",
         }
     }
 }
@@ -159,4 +163,21 @@ pub struct GameModeChanged {
     /// Reason for the change, if applicable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// Notification emitted when an approval is required.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalNeeded {
+    /// Command base name requiring approval.
+    pub command: String,
+    /// Permission tier (e.g. Workspace or System).
+    pub tier: String,
+    /// Matched rule id, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule_id: Option<String>,
+    /// Trace ID of the command or task.
+    pub trace_id: String,
+    /// Human-readable explanation.
+    pub summary: String,
 }

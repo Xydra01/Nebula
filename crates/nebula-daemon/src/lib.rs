@@ -13,6 +13,7 @@ pub mod client;
 pub(crate) mod executor;
 pub mod game_mode;
 pub mod github;
+pub mod notifications;
 mod server;
 pub mod win;
 
@@ -108,6 +109,7 @@ pub(crate) struct Shared {
     pub(crate) artifact_checks: bool,
     pub(crate) worktrees: Arc<nebula_sandbox::worktree::manager::WorktreeManager>,
     pub(crate) game_mode: Arc<game_mode::GameModeCoordinator>,
+    pub(crate) notifications: Arc<notifications::NotificationService>,
 }
 
 impl Shared {
@@ -194,6 +196,11 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         detector,
     ));
 
+    let notifications = Arc::new(notifications::NotificationService::new(
+        config.notifications.clone(),
+        Arc::clone(deps.telemetry.redactor()),
+    ));
+
     let pipe_path = config.daemon.pipe_path();
     let shared = Arc::new(Shared {
         config,
@@ -213,6 +220,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         artifact_checks: deps.artifact_checks,
         worktrees: worktree_manager,
         game_mode: Arc::clone(&game_mode),
+        notifications: Arc::clone(&notifications),
     });
 
     // Background monitor for game mode detection and GPU yielding
@@ -235,6 +243,38 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
             }
         }
     });
+
+    // Background monitor for periodic doctor health alerts
+    if shared.config.notifications.enabled {
+        let notif_service = Arc::clone(&notifications);
+        let shared_for_doc = Arc::clone(&shared);
+        tokio::spawn(async move {
+            let interval = Duration::from_secs(
+                shared_for_doc
+                    .config
+                    .notifications
+                    .doctor_alert_interval_mins
+                    .max(1)
+                    * 60,
+            );
+            let mut ticker = tokio::time::interval(interval);
+            ticker.tick().await; // skip initial immediate tick
+            while !shared_for_doc.shutdown.is_cancelled() {
+                tokio::select! {
+                    _ = ticker.tick() => {
+                        if let Ok(report) = server::run_doctor(&shared_for_doc).await {
+                            for check in report.checks {
+                                if check.status == nebula_proto::CheckStatus::Fail {
+                                    notif_service.notify_doctor_fail(&check.name, &check.detail);
+                                }
+                            }
+                        }
+                    }
+                    () = shared_for_doc.shutdown.cancelled() => break,
+                }
+            }
+        });
+    }
 
     let listener = server::Listener::bind(&pipe_path).map_err(|source| DaemonError::Pipe {
         path: pipe_path.clone(),

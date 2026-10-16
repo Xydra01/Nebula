@@ -337,6 +337,9 @@ pub struct NebulaConfig {
     /// Game mode detection and GPU yielding (issue #35).
     #[serde(default)]
     pub game_mode: GameModeConfig,
+    /// Push notifications over Tailscale via ntfy (issue #37).
+    #[serde(default)]
+    pub notifications: NotificationsConfig,
 }
 
 /// The `[circuit_breakers]` section: thresholds for halting tasks upon repetitive failures or runaways (issue #34).
@@ -447,6 +450,74 @@ impl Default for GameModeConfig {
             cooldown_secs: default_game_mode_cooldown_secs(),
             known_processes: default_game_mode_known_processes(),
             desktop_allowlist: default_game_mode_desktop_allowlist(),
+        }
+    }
+}
+
+/// The `[notifications]` section: remote push notifications over Tailscale via ntfy (issue #37, design Section 4.5).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct NotificationsConfig {
+    /// Whether push notifications are enabled.
+    #[serde(default = "default_notifications_enabled")]
+    pub enabled: bool,
+    /// ntfy server URL (e.g. "http://100.x.y.z:8080" or "http://127.0.0.1:8080").
+    #[serde(default = "default_notifications_server_url")]
+    pub server_url: String,
+    /// ntfy topic name. Private topic on your tailnet-only ntfy server.
+    #[serde(default = "default_notifications_topic")]
+    pub topic: String,
+    /// Credential Manager target containing an optional authentication token for ntfy.
+    #[serde(default = "default_notifications_token_target")]
+    pub token_target: String,
+    /// Restricts destination server_url to Tailscale IPs (100.64.0.0/10, fd7a:115c:a1e0::/48),
+    /// MagicDNS hostnames (*.ts.net), or local loopback. Rejects public internet servers.
+    #[serde(default = "default_notifications_tailscale_only")]
+    pub tailscale_only: bool,
+    /// Request timeout in seconds for publishing notifications.
+    #[serde(default = "default_notifications_timeout_secs")]
+    pub timeout_secs: u64,
+    /// Base URL for the tailnet-only approval page (e.g. "http://ej-pc.tailnet:8080/approve").
+    #[serde(default)]
+    pub approval_url_base: String,
+    /// Minimum interval in minutes between periodic doctor health checks/alerts.
+    #[serde(default = "default_notifications_doctor_alert_interval_mins")]
+    pub doctor_alert_interval_mins: u64,
+}
+
+const fn default_notifications_enabled() -> bool {
+    false
+}
+fn default_notifications_server_url() -> String {
+    "http://127.0.0.1:8080".into()
+}
+fn default_notifications_topic() -> String {
+    "nebula-alerts".into()
+}
+fn default_notifications_token_target() -> String {
+    "nebula/ntfy_token".into()
+}
+const fn default_notifications_tailscale_only() -> bool {
+    true
+}
+const fn default_notifications_timeout_secs() -> u64 {
+    5
+}
+const fn default_notifications_doctor_alert_interval_mins() -> u64 {
+    60
+}
+
+impl Default for NotificationsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_notifications_enabled(),
+            server_url: default_notifications_server_url(),
+            topic: default_notifications_topic(),
+            token_target: default_notifications_token_target(),
+            tailscale_only: default_notifications_tailscale_only(),
+            timeout_secs: default_notifications_timeout_secs(),
+            approval_url_base: String::new(),
+            doctor_alert_interval_mins: default_notifications_doctor_alert_interval_mins(),
         }
     }
 }
@@ -640,6 +711,24 @@ impl NebulaConfig {
                 "executor.default_profile names unknown profile {:?}",
                 self.executor.default_profile
             )));
+        }
+        if self.notifications.enabled {
+            if self.notifications.server_url.is_empty() {
+                return Err(ConfigError::Invalid(
+                    "notifications.server_url must not be empty when notifications are enabled"
+                        .into(),
+                ));
+            }
+            if self.notifications.topic.is_empty() {
+                return Err(ConfigError::Invalid(
+                    "notifications.topic must not be empty when notifications are enabled".into(),
+                ));
+            }
+            if self.notifications.timeout_secs == 0 {
+                return Err(ConfigError::Invalid(
+                    "notifications.timeout_secs must be at least 1".into(),
+                ));
+            }
         }
         Ok(())
     }

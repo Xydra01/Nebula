@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 18,
+  "jsonrpc": "2.0",
+  "proto_version": 3,
+  "result": {
+    "message": "Notification sent to topic nebula-alerts",
+    "success": true
+  }
+}

@@ -305,3 +305,69 @@ fn unknown_game_mode_key_is_rejected() {
     let err = NebulaConfig::from_toml(Some("[game_mode]\ninvalid_field = true\n")).unwrap_err();
     assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
 }
+
+#[test]
+fn notifications_defaults_load_and_validate() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    assert!(!cfg.notifications.enabled);
+    assert_eq!(cfg.notifications.server_url, "http://127.0.0.1:8080");
+    assert_eq!(cfg.notifications.topic, "nebula-alerts");
+    assert_eq!(cfg.notifications.token_target, "nebula/ntfy_token");
+    assert!(cfg.notifications.tailscale_only);
+    assert_eq!(cfg.notifications.timeout_secs, 5);
+    assert!(cfg.notifications.approval_url_base.is_empty());
+    assert_eq!(cfg.notifications.doctor_alert_interval_mins, 60);
+    assert!(
+        cfg.daemon
+            .secrets
+            .contains(&"nebula/ntfy_token".to_string())
+    );
+}
+
+#[test]
+fn notifications_overrides_merge_and_validate() {
+    let toml = r#"
+[notifications]
+enabled = true
+server_url = "http://100.64.1.2:8080"
+topic = "my-private-topic"
+token_target = "nebula/custom_token"
+tailscale_only = false
+timeout_secs = 10
+approval_url_base = "http://100.64.1.2:8080/approve"
+doctor_alert_interval_mins = 30
+"#;
+    let cfg = NebulaConfig::from_toml(Some(toml)).unwrap();
+    assert!(cfg.notifications.enabled);
+    assert_eq!(cfg.notifications.server_url, "http://100.64.1.2:8080");
+    assert_eq!(cfg.notifications.topic, "my-private-topic");
+    assert_eq!(cfg.notifications.token_target, "nebula/custom_token");
+    assert!(!cfg.notifications.tailscale_only);
+    assert_eq!(cfg.notifications.timeout_secs, 10);
+    assert_eq!(
+        cfg.notifications.approval_url_base,
+        "http://100.64.1.2:8080/approve"
+    );
+    assert_eq!(cfg.notifications.doctor_alert_interval_mins, 30);
+}
+
+#[test]
+fn unknown_notifications_key_is_rejected() {
+    let err = NebulaConfig::from_toml(Some("[notifications]\ninvalid_field = true\n")).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}
+
+#[test]
+fn notifications_validation_fails_on_empty_fields_when_enabled() {
+    let toml_empty_url = "[notifications]\nenabled = true\nserver_url = \"\"\n";
+    let err = NebulaConfig::from_toml(Some(toml_empty_url)).unwrap_err();
+    assert!(matches!(err, ConfigError::Invalid(_)), "{err}");
+
+    let toml_empty_topic = "[notifications]\nenabled = true\ntopic = \"\"\n";
+    let err = NebulaConfig::from_toml(Some(toml_empty_topic)).unwrap_err();
+    assert!(matches!(err, ConfigError::Invalid(_)), "{err}");
+
+    let toml_zero_timeout = "[notifications]\nenabled = true\ntimeout_secs = 0\n";
+    let err = NebulaConfig::from_toml(Some(toml_zero_timeout)).unwrap_err();
+    assert!(matches!(err, ConfigError::Invalid(_)), "{err}");
+}
