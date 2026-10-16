@@ -21,6 +21,7 @@ use nebula_sandbox::task_job::{CpuRateLimit, JobLimits, MemoryLimit, TaskJob};
 use nebula_tools::{CURRENT_TASK_JOB, CURRENT_WORKTREE};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 use crate::Shared;
 use crate::circuit_breaker::CircuitBreakerTracker;
@@ -438,10 +439,7 @@ async fn execute_loop(
                 || lower.contains("next, ");
             let is_empty = output.text.trim().is_empty();
 
-            if (is_still_planning || is_calling_tools || is_empty)
-                && step_index < 10
-                && nudge_count < 5
-            {
+            if (is_still_planning || is_calling_tools || is_empty) && nudge_count < 5 {
                 nudge_count += 1;
                 tracing::info!(
                     event = "task.nudge",
@@ -488,6 +486,9 @@ async fn execute_loop(
             };
             return (TaskStatus::Completed, summary);
         }
+
+        // Tools were invoked: reset consecutive planning nudge count
+        nudge_count = 0;
 
         // Check if executing this turn's tool calls would exceed the tool call limit
         let num_calls = u32::try_from(output.tool_calls.len()).unwrap_or(u32::MAX);
@@ -558,12 +559,13 @@ async fn execute_loop(
                 let call_res = CURRENT_WORKTREE
                     .scope(
                         Some(ctx.worktree_root.to_path_buf()),
-                        CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
+                        CURRENT_TASK_JOB.scope(
+                            Some(Arc::clone(ctx.task_job)),
                             ctx.shared
                                 .tool_host
                                 .call(&call.name, args.clone(), Some(&trace_str))
-                                .await
-                        }),
+                                .instrument(tracing::info_span!("task", trace_id = %trace_str)),
+                        ),
                     )
                     .await;
 
@@ -638,15 +640,55 @@ async fn execute_loop(
                 match approval_decision {
                     Ok(true) => {
                         tracing::info!(event = "task.approval_granted", tool = %call.name, command = %cmd_name);
+                        let tier = nebula_sandbox::tier::Tier::System;
+                        let normalized_cmd = nebula_sandbox::rules::normalize_command(&cmd_name);
+
+                        // Ensure approval grants are available in ctx.shared.approvals
+                        let grant_id1 =
+                            nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                        let scope1 = nebula_sandbox::approval::ApprovalScope {
+                            command: normalized_cmd.clone(),
+                            tier,
+                            trace_id: "task".into(),
+                        };
+                        ctx.shared
+                            .approvals
+                            .insert(nebula_sandbox::approval::Approval::grant(grant_id1, scope1));
+
+                        let grant_id2 =
+                            nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                        let scope2 = nebula_sandbox::approval::ApprovalScope {
+                            command: normalized_cmd,
+                            tier,
+                            trace_id: trace_str.clone(),
+                        };
+                        ctx.shared
+                            .approvals
+                            .insert(nebula_sandbox::approval::Approval::grant(grant_id2, scope2));
+
+                        let grant_id3 =
+                            nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                        let scope3 = nebula_sandbox::approval::ApprovalScope {
+                            command: cmd_name.clone(),
+                            tier,
+                            trace_id: "task".into(),
+                        };
+                        ctx.shared
+                            .approvals
+                            .insert(nebula_sandbox::approval::Approval::grant(grant_id3, scope3));
+
                         let retry_res = CURRENT_WORKTREE
                             .scope(
                                 Some(ctx.worktree_root.to_path_buf()),
-                                CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
+                                CURRENT_TASK_JOB.scope(
+                                    Some(Arc::clone(ctx.task_job)),
                                     ctx.shared
                                         .tool_host
                                         .call(&call.name, args.clone(), Some(&trace_str))
-                                        .await
-                                }),
+                                        .instrument(
+                                            tracing::info_span!("task", trace_id = %trace_str),
+                                        ),
+                                ),
                             )
                             .await;
 
