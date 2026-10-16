@@ -123,6 +123,8 @@ fn parses_every_command() {
                 max_tool_calls,
                 max_tokens,
                 wall_time_secs,
+                pr,
+                no_pr,
             }),
     } = parse(&[
         "task",
@@ -152,6 +154,17 @@ fn parses_every_command() {
     assert_eq!(max_tool_calls, Some(10));
     assert_eq!(max_tokens, Some(5000));
     assert_eq!(wall_time_secs, Some(60));
+    assert!(!pr);
+    assert!(!no_pr);
+
+    let Command::Task {
+        action: TaskAction::Run(TaskRunArgs { pr, no_pr, .. }),
+    } = parse(&["task", "run", "pr test", "--pr"]).command
+    else {
+        panic!("not task run");
+    };
+    assert!(pr);
+    assert!(!no_pr);
 
     let task_id_str = "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E";
     let Command::Task {

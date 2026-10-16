@@ -247,6 +247,9 @@ pub struct TaskCreateParams {
     /// Wall-clock timeout in seconds; defaults to config if None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wall_time_secs: Option<u64>,
+    /// Whether to open a GitHub PR upon task completion; defaults to config if None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create_pr: Option<bool>,
 }
 
 /// Initial response to `task.create`, returned before any `task.*` events stream.

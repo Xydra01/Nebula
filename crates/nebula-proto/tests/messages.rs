@@ -181,6 +181,7 @@ fn requests() {
                     max_tool_calls: Some(15),
                     max_tokens: Some(40960),
                     wall_time_secs: Some(600),
+                    create_pr: None,
                 }),
             ),
         ),

@@ -23,6 +23,7 @@ nebula-sandbox.workspace = true
 nebula-telemetry.workspace = true
 nebula-tools.workspace = true
 regex.workspace = true
+reqwest = { workspace = true, features = ["default-tls"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -38,6 +39,7 @@ tracing.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_System_Threading"] }
 
 [dev-dependencies]
+axum.workspace = true
 nebula-model = { workspace = true, features = ["test-support"] }
 nebula-tools = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true

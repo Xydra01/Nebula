@@ -102,7 +102,7 @@ When the task is complete, finish with a clear final summary without requesting 
         },
         ChatMessage {
             role: Role::User,
-            content: params.goal,
+            content: params.goal.clone(),
         },
     ];
 
@@ -135,14 +135,46 @@ When the task is complete, finish with a clear final summary without requesting 
 
     // 5. Cleanup and finalization
     drop(task_job);
-    let _ = shared.worktrees.finalize(&wt_task_id).await;
+    let finalized_branch = shared.worktrees.finalize(&wt_task_id).await;
 
-    tracing::info!(event = "task.done", status = ?status, summary = %summary);
+    let should_create_pr = params.create_pr.unwrap_or(shared.config.github.enabled);
+    let mut final_summary = summary;
+    if status == TaskStatus::Completed
+        && should_create_pr
+        && let Ok(branch_name) = finalized_branch
+    {
+        match crate::github::handle_task_completion(crate::github::TaskCompletionParams {
+            repo_root: &worktree_root,
+            branch: &branch_name,
+            goal: &params.goal,
+            summary: &final_summary,
+            trace_id,
+            test_results: None,
+            config: &shared.config.github,
+            token_override: None,
+            api_base_url_override: None,
+            git_remote_url_override: None,
+            extra_coauthor: None,
+        })
+        .await
+        {
+            Ok(Some(pr_url)) => {
+                final_summary = format!("{final_summary}\n\nPull Request: {pr_url}");
+            }
+            Ok(None) => {}
+            Err(e) => {
+                tracing::error!(event = "github.flow_failed", error = %e);
+                final_summary = format!("{final_summary}\n\n(GitHub PR creation failed: {e})");
+            }
+        }
+    }
+
+    tracing::info!(event = "task.done", status = ?status, summary = %final_summary);
     let _ = tx
         .send(note(Event::TaskDone(TaskDone {
             task_id,
             status,
-            summary,
+            summary: final_summary,
         })))
         .await;
 }

@@ -299,3 +299,19 @@ wall_time_secs = 600
 # Default chat profile for executor tasks; empty uses the active profile.
 default_profile = ""
 
+# GitHub flow: automated bot branch push and PR creation (issue #36).
+[github]
+# Whether to automatically push the task branch and open a PR upon successful task completion.
+enabled = false
+# Target repository in "owner/repo" format.
+repo = "Xydra01/Nebula"
+# Base branch to target for PRs. Pushes to this branch are refused in code.
+base_branch = "main"
+# Expected branch prefix for task branches (e.g. "nebula/"). Push refuses branches without this prefix.
+branch_prefix = "nebula/"
+# Credential Manager target containing the GitHub bot token.
+token_target = "nebula/github_bot_token"
+# GitHub bot username for user-agent, author attribution, and PR search.
+bot_username = "Nebula-dev-bot"
+
+

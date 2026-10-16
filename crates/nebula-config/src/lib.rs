@@ -242,6 +242,59 @@ impl Default for ExecutorConfig {
     }
 }
 
+/// The `[github]` section: automated bot branch push and PR creation (issue #36).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GitHubConfig {
+    /// Whether to automatically push the task branch and open a PR upon successful task completion.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Target repository in "owner/repo" format.
+    #[serde(default = "default_github_repo")]
+    pub repo: String,
+    /// Base branch to target for PRs. Pushes to this branch are refused in code.
+    #[serde(default = "default_github_base_branch")]
+    pub base_branch: String,
+    /// Expected branch prefix for task branches (e.g. "nebula/"). Push refuses branches without this prefix.
+    #[serde(default = "default_github_branch_prefix")]
+    pub branch_prefix: String,
+    /// Credential Manager target containing the GitHub bot token.
+    #[serde(default = "default_github_token_target")]
+    pub token_target: String,
+    /// GitHub bot username for user-agent, author attribution, and PR search.
+    #[serde(default = "default_github_bot_username")]
+    pub bot_username: String,
+}
+
+fn default_github_repo() -> String {
+    "Xydra01/Nebula".to_owned()
+}
+fn default_github_base_branch() -> String {
+    "main".to_owned()
+}
+fn default_github_branch_prefix() -> String {
+    "nebula/".to_owned()
+}
+fn default_github_token_target() -> String {
+    "nebula/github_bot_token".to_owned()
+}
+fn default_github_bot_username() -> String {
+    "Nebula-dev-bot".to_owned()
+}
+
+impl Default for GitHubConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            repo: default_github_repo(),
+            base_branch: default_github_base_branch(),
+            branch_prefix: default_github_branch_prefix(),
+            token_target: default_github_token_target(),
+            bot_username: default_github_bot_username(),
+        }
+    }
+}
+
 /// The whole configuration.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -275,6 +328,9 @@ pub struct NebulaConfig {
     /// Autonomous single executor loop bounds and defaults (issue #32).
     #[serde(default)]
     pub executor: ExecutorConfig,
+    /// GitHub flow: bot branch push and PR creation (issue #36).
+    #[serde(default)]
+    pub github: GitHubConfig,
 }
 
 fn parse_table(text: &str, origin: &str) -> Result<toml::Table, ConfigError> {
