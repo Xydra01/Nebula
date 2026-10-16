@@ -222,6 +222,19 @@ fn requests() {
                 }),
             ),
         ),
+        (
+            "req_approval_respond",
+            request(
+                19,
+                Method::ApprovalRespond(ApprovalRespondParams {
+                    trace_id: "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E".into(),
+                    approved: true,
+                    command: "git push origin main".into(),
+                    tier: "System".into(),
+                    reason: Some("User approved via TUI".into()),
+                }),
+            ),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -388,6 +401,17 @@ fn responses() {
                 &NotifyTestResponse {
                     success: true,
                     message: "Notification sent to topic nebula-alerts".into(),
+                },
+            )
+            .unwrap(),
+        ),
+        (
+            "res_approval_respond",
+            Response::ok(
+                id(19),
+                &ApprovalRespondResponse {
+                    success: true,
+                    message: "Approval granted for command 'git push origin main'".into(),
                 },
             )
             .unwrap(),

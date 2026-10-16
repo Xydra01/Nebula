@@ -35,6 +35,7 @@ tokio-util = { workspace = true, features = ["codec", "rt"] }
 sysinfo.workspace = true
 toml.workspace = true
 tracing.workspace = true
+ulid.workspace = true
 
 
 [target.'cfg(windows)'.dependencies]

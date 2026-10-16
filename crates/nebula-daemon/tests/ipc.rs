@@ -10,11 +10,11 @@ use nebula_daemon::{Daemon, DaemonError, Deps};
 use nebula_model::SupervisorConfig;
 use nebula_model::testing::{FakeLauncher, FakeState, content, finish, reasoning};
 use nebula_proto::{
-    ChatCancelParams, ChatId, ChatMessage, ChatStartParams, ChatStarted, CheckStatus, DaemonStatus,
-    DoctorCheck, DoctorReport, Empty, Event, LogsSubscribeParams, Message, Method,
-    ModelSetProfileParams, ModelState, ModelStatus, NotifyStatusResponse, NotifyTestParams,
-    NotifyTestResponse, ResourceSnapshot, Role, ToolCallOutcome, ToolList, ToolsCallParams,
-    TraceId, error_code,
+    ApprovalRespondParams, ApprovalRespondResponse, ChatCancelParams, ChatId, ChatMessage,
+    ChatStartParams, ChatStarted, CheckStatus, DaemonStatus, DoctorCheck, DoctorReport, Empty,
+    Event, LogsSubscribeParams, Message, Method, ModelSetProfileParams, ModelState, ModelStatus,
+    NotifyStatusResponse, NotifyTestParams, NotifyTestResponse, ResourceSnapshot, Role,
+    ToolCallOutcome, ToolList, ToolsCallParams, TraceId, error_code,
 };
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
@@ -367,6 +367,32 @@ async fn protocol_round_trip() {
         .unwrap();
     assert!(!notify_res.success);
     assert!(notify_res.message.contains("disabled"));
+
+    let approve_res: ApprovalRespondResponse = c
+        .call(Method::ApprovalRespond(ApprovalRespondParams {
+            trace_id: "01J9ZQ3V5W8X0Y2Z4A6B8C0D2E".into(),
+            approved: true,
+            command: "git push origin main".into(),
+            tier: "System".into(),
+            reason: Some("approved by human".into()),
+        }))
+        .await
+        .unwrap();
+    assert!(approve_res.success);
+    assert!(approve_res.message.contains("Granted approval"));
+
+    let deny_res: ApprovalRespondResponse = c
+        .call(Method::ApprovalRespond(ApprovalRespondParams {
+            trace_id: "01J9ZQ3V5W8X0Y2Z4A6B8C0D2F".into(),
+            approved: false,
+            command: "rm -rf /".into(),
+            tier: "System".into(),
+            reason: Some("denied".into()),
+        }))
+        .await
+        .unwrap();
+    assert!(deny_res.success);
+    assert!(deny_res.message.contains("Denied approval"));
 
     h.daemon.shutdown().await;
 }

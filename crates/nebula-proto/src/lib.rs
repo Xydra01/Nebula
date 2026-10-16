@@ -24,11 +24,11 @@ pub use events::{
 };
 pub use ids::{ChatId, SpanId, StepId, TaskId, TraceId};
 pub use methods::{
-    ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, GameModeSetParams,
-    GameModeStatusResponse, LogsSubscribeParams, Method, ModelSetProfileParams,
-    NotifyStatusResponse, NotifyTestParams, NotifyTestResponse, TaskCancelParams, TaskCreateParams,
-    TaskStarted, TaskStopAllParams, TaskStopAllResponse, ToolCallOutcome, ToolInfo, ToolList,
-    ToolsCallParams,
+    ApprovalRespondParams, ApprovalRespondResponse, ChatCancelParams, ChatStartParams, ChatStarted,
+    DaemonStatus, Empty, GameModeSetParams, GameModeStatusResponse, LogsSubscribeParams, Method,
+    ModelSetProfileParams, NotifyStatusResponse, NotifyTestParams, NotifyTestResponse,
+    TaskCancelParams, TaskCreateParams, TaskStarted, TaskStopAllParams, TaskStopAllResponse,
+    ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
 };
 
 pub use types::{

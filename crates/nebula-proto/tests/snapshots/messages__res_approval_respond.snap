@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 19,
+  "jsonrpc": "2.0",
+  "proto_version": 3,
+  "result": {
+    "message": "Approval granted for command 'git push origin main'",
+    "success": true
+  }
+}

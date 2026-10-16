@@ -1,0 +1,7 @@
+# .config.kiro
+spec_version: "1.0"
+feature_name: "basic-tui"
+tracking_issue: 31
+branch: "feat/basic-tui"
+crate: "nebula-cli"
+status: "planning"

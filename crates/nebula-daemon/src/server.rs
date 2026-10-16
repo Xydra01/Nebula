@@ -381,6 +381,43 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                 }),
             }
         }
+        Method::ApprovalRespond(p) => {
+            let trace_str = p.trace_id.clone();
+            let decision = if p.approved { "approved" } else { "denied" };
+            tracing::info!(
+                event = "permit.decision",
+                decision = decision,
+                command = %p.command,
+                tier = %p.tier,
+                trace_id = %trace_str,
+                reason = ?p.reason,
+            );
+            if p.approved {
+                let tier = match p.tier.to_lowercase().as_str() {
+                    "read" => nebula_sandbox::tier::Tier::Read,
+                    "sandbox" => nebula_sandbox::tier::Tier::Sandbox,
+                    "workspace" => nebula_sandbox::tier::Tier::Workspace,
+                    _ => nebula_sandbox::tier::Tier::System,
+                };
+                let grant_id = nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                let scope = nebula_sandbox::approval::ApprovalScope {
+                    command: p.command.clone(),
+                    tier,
+                    trace_id: trace_str,
+                };
+                let approval = nebula_sandbox::approval::Approval::grant(grant_id, scope);
+                shared.approvals.insert(approval);
+                to_value(&nebula_proto::ApprovalRespondResponse {
+                    success: true,
+                    message: format!("Granted approval for command '{}'", p.command),
+                })
+            } else {
+                to_value(&nebula_proto::ApprovalRespondResponse {
+                    success: true,
+                    message: format!("Denied approval for command '{}'", p.command),
+                })
+            }
+        }
 
         Method::ModelStatus(Empty {}) => to_value(&shared.chat.status()),
         Method::ModelSetProfile(ModelSetProfileParams { profile }) => {
