@@ -192,6 +192,15 @@ fn requests() {
                 Method::TaskCancel(TaskCancelParams { task_id: task_id() }),
             ),
         ),
+        (
+            "req_task_stop_all",
+            request(
+                14,
+                Method::TaskStopAll(TaskStopAllParams {
+                    reason: Some("emergency stop".into()),
+                }),
+            ),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -320,6 +329,10 @@ fn responses() {
                 },
             )
             .unwrap(),
+        ),
+        (
+            "res_task_stop_all",
+            Response::ok(id(14), &TaskStopAllResponse { stopped: 2 }).unwrap(),
         ),
     ];
     for (name, res) in cases {

@@ -1,0 +1,12 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 14,
+  "jsonrpc": "2.0",
+  "proto_version": 3,
+  "result": {
+    "stopped": 2
+  }
+}

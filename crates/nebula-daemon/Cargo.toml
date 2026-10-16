@@ -32,8 +32,10 @@ thiserror.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
 tokio-util = { workspace = true, features = ["codec", "rt"] }
+sysinfo.workspace = true
 toml.workspace = true
 tracing.workspace = true
+
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Credentials", "Win32_System_Threading"] }

@@ -145,3 +145,26 @@ pub(crate) async fn cancel(ctx: &Ctx, task_id: TaskId, out: &mut dyn Write) -> a
     }
     Ok(0)
 }
+
+/// Stop all running tasks immediately.
+pub(crate) async fn stop_all(
+    ctx: &Ctx,
+    reason: Option<String>,
+    out: &mut dyn Write,
+) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let res: nebula_proto::TaskStopAllResponse = c
+        .call(Method::TaskStopAll(nebula_proto::TaskStopAllParams {
+            reason,
+        }))
+        .await?;
+
+    if ctx.json {
+        emit_json(out, &serde_json::json!({ "stopped": res.stopped }))?;
+    } else if res.stopped == 0 {
+        writeln!(out, "no running tasks to stop")?;
+    } else {
+        writeln!(out, "stopped {} running task(s)", res.stopped)?;
+    }
+    Ok(0)
+}

@@ -276,6 +276,19 @@ impl TaskJob {
             None => None,
         }
     }
+
+    /// Immediately terminate all member processes belonging to this task's job.
+    ///
+    /// Used by global stop (`nebula stop` / `task.stop_all`) to end active task execution.
+    ///
+    /// # Errors
+    /// [`JobError`] if OS termination fails.
+    pub fn terminate(&self) -> Result<(), JobError> {
+        self.job.terminate(1).map_err(|e| JobError::Assign {
+            task_id: self.task_id.clone(),
+            detail: format!("terminate failed: {e}"),
+        })
+    }
 }
 
 /// Installed physical memory in bytes, used to range-check a configured memory cap.

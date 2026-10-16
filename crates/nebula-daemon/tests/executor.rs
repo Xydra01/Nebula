@@ -18,6 +18,7 @@ use nebula_proto::{
 };
 use nebula_resources::Sources;
 use nebula_resources::sources::{GpuReading, GpuSource, SystemReading, SystemSource};
+
 use nebula_telemetry::{Telemetry, TelemetryConfig};
 use nebula_tools::ToolHost;
 use nebula_tools::testing::{FakeTool, host_config};
@@ -569,4 +570,384 @@ async fn test_real_model_fixes_failing_test() {
 
     let (_steps, done) = collect_task_events(&mut c, started.task_id).await;
     assert_eq!(done.status, TaskStatus::Completed);
+}
+
+#[tokio::test]
+async fn test_circuit_breaker_repeated_tool_failure() {
+    let h = start_harness().await;
+    // Model calls fs.read on a nonexistent file 3 times consecutively
+    h.state.set_chunks(tool_call_turn(
+        "call_1",
+        "fs.read",
+        r#"{"path":"missing.txt"}"#,
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Read nonexistent file".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(10),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (_steps, done) = collect_task_events(&mut c, started.task_id).await;
+    assert_eq!(done.status, TaskStatus::LimitReached);
+    assert!(
+        done.summary.contains("circuit breaker tripped"),
+        "expected breaker tripped in summary, got: {}",
+        done.summary
+    );
+    assert!(
+        done.summary
+            .contains("tool 'fs.read' failed 3 times consecutively"),
+        "summary was: {}",
+        done.summary
+    );
+}
+
+#[tokio::test]
+async fn test_circuit_breaker_repeated_file_edits() {
+    let h = start_harness().await;
+    // Model writes to foo.txt 5 times
+    h.state.set_chunks(tool_call_turn(
+        "call_1",
+        "fs.write",
+        r#"{"path":"foo.txt","content":"hello"}"#,
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Repeatedly write file".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(15),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (_steps, done) = collect_task_events(&mut c, started.task_id).await;
+    assert_eq!(done.status, TaskStatus::LimitReached);
+    assert!(
+        done.summary.contains("circuit breaker tripped"),
+        "summary was: {}",
+        done.summary
+    );
+    assert!(
+        done.summary.contains("file 'foo.txt' modified 5 times"),
+        "summary was: {}",
+        done.summary
+    );
+}
+
+#[tokio::test]
+async fn test_circuit_breaker_runaway_tokens() {
+    let h = start_harness().await;
+    // Model returns a turn that exceeds runaway_step_tokens (default 16384)
+    h.state.set_chunks(vec![json!({
+        "choices": [{
+            "delta": {
+                "tool_calls": [{
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "fs.list",
+                        "arguments": r#"{"path":"."}"#,
+                    }
+                }]
+            },
+            "finish_reason": "tool_calls",
+        }],
+        "timings": {
+            "prompt_n": 10000,
+            "prompt_ms": 100.0,
+            "predicted_n": 7000,
+            "predicted_ms": 100.0,
+        }
+    })]);
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Runaway token test".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(10),
+            max_tokens: Some(50000),
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (_steps, done) = collect_task_events(&mut c, started.task_id).await;
+    assert_eq!(done.status, TaskStatus::LimitReached);
+    assert!(
+        done.summary.contains("circuit breaker tripped"),
+        "summary was: {}",
+        done.summary
+    );
+    assert!(
+        done.summary
+            .contains("step token usage (17000) exceeded limit (16384)"),
+        "summary was: {}",
+        done.summary
+    );
+}
+
+#[tokio::test]
+async fn test_global_stop_terminates_all_tasks_within_two_seconds() {
+    let h = start_harness().await;
+    // Model runs shell command sleeping 60 seconds
+    h.state.set_chunks(tool_call_turn(
+        "call_1",
+        "shell.run",
+        r#"{"command":"powershell -NoProfile -Command Start-Sleep -Seconds 60"}"#,
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run long sleeping task".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: None,
+            max_tokens: None,
+            wall_time_secs: Some(120),
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    // Wait until the step event is emitted indicating the command is running
+    let step = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(Event::TaskStep(s)) = c.next_event().await
+                && s.task_id == started.task_id
+            {
+                return s;
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for task step to start");
+    assert_eq!(step.tool_calls, vec!["shell.run"]);
+
+    // Send task.stop_all and time it
+    let start_stop = tokio::time::Instant::now();
+    let mut c2 = Client::connect(&h.pipe, TIMEOUT).await.unwrap();
+    let res: nebula_proto::TaskStopAllResponse = c2
+        .call(Method::TaskStopAll(nebula_proto::TaskStopAllParams {
+            reason: Some("emergency test stop".into()),
+        }))
+        .await
+        .unwrap();
+    let elapsed = start_stop.elapsed();
+
+    assert!(
+        elapsed < Duration::from_secs(2),
+        "global stop took {elapsed:?}, exceeding 2s requirement"
+    );
+    assert!(res.stopped >= 1, "expected at least 1 task stopped");
+
+    // The task should yield TaskDone with Cancelled status within 2 seconds
+    let done = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let Ok(Event::TaskDone(d)) = c.next_event().await
+                && d.task_id == started.task_id
+            {
+                return d;
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for task done after global stop");
+
+    assert_eq!(done.status, TaskStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn test_disk_guard_trips_with_fake_low_space() {
+    let unique = ChatId::new().to_string();
+    let pipe_name = format!("nebula-test-{unique}");
+    let instance = format!(r"Local\NebulaExecutorTest-{unique}");
+    let state = FakeState::new();
+    let launcher = FakeLauncher::new(Arc::clone(&state));
+
+    let worktrees_dir = tempfile::tempdir().unwrap();
+    let retired_drive = retired_drive_off(worktrees_dir.path());
+
+    let mut config = NebulaConfig::from_toml(None).unwrap();
+    config.model = nebula_model::testing::config();
+    config.daemon.pipe_name = pipe_name.clone();
+    config.daemon.load_on_start = "a".into();
+    config.daemon.embedding_profile = String::new();
+    config.resources.sample_interval_ms = 100;
+    config.worktree.worktrees_dir = worktrees_dir.path().to_path_buf();
+    config.resources.retired_drive = retired_drive;
+
+    // Configure a volume guard for the worktrees_dir volume with warn_gb = 30
+    let mount = worktrees_dir
+        .path()
+        .to_string_lossy()
+        .chars()
+        .take(3)
+        .collect::<String>();
+    config.resources.volumes = vec![nebula_config::VolumeGuard {
+        mount: mount.clone(),
+        warn_gb: 30,
+        block_gb: Some(20),
+        pause_gb: Some(12),
+    }];
+
+    // Fake system reporting only 10 GB free space (< 30 GB budget)
+    struct FakeLowDiskSystem {
+        mount: String,
+    }
+    impl SystemSource for FakeLowDiskSystem {
+        fn read(
+            &mut self,
+            _mounts: &[String],
+        ) -> Result<SystemReading, nebula_resources::ResourceError> {
+            Ok(SystemReading {
+                ram_used_mib: 4000,
+                ram_total_mib: 16000,
+                commit_used_mib: 5000,
+                commit_limit_mib: 20000,
+                cpu_pct: 10.0,
+                disks: vec![nebula_proto::DiskUsage {
+                    mount: self.mount.clone(),
+                    free_bytes: 10 * nebula_resources::GB,
+                    total_bytes: 500 * nebula_resources::GB,
+                }],
+            })
+        }
+        fn process_names(&mut self, _pids: &[u32]) -> HashMap<u32, String> {
+            HashMap::new()
+        }
+    }
+
+    let external_launcher = nebula_tools::testing::launcher(vec![FakeTool::echo()]);
+    let tool_host =
+        ToolHost::start_with(&host_config("fs", 1_000), None, external_launcher.as_ref())
+            .await
+            .unwrap();
+
+    let deps = Deps {
+        telemetry: telemetry(),
+        launcher: Arc::clone(&launcher) as _,
+        tool_host,
+        sources: Some(Sources {
+            gpu: Some(Box::new(FakeGpu)),
+            gpu_processes: None,
+            system: Box::new(FakeLowDiskSystem {
+                mount: mount.clone(),
+            }),
+        }),
+        preflight: None,
+        supervisor: supervisor_policy(),
+        instance_name: instance,
+        local_checks: Arc::new(|_| {
+            DoctorReport::from_checks(vec![DoctorCheck {
+                name: "local.fake".into(),
+                status: CheckStatus::Ok,
+                detail: "fine".into(),
+            }])
+        }),
+        artifact_checks: false,
+    };
+
+    let daemon = nebula_daemon::start(config.clone(), deps).unwrap();
+
+    // Wait for sampler to take initial reading
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    let repo = seed_repo();
+    let mut c = Client::connect(&config.daemon.pipe_path(), TIMEOUT)
+        .await
+        .unwrap();
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Task with low disk space".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: None,
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (_steps, done) = collect_task_events(&mut c, started.task_id).await;
+    assert_eq!(done.status, TaskStatus::LimitReached);
+    assert!(
+        done.summary.contains("disk guard tripped"),
+        "summary was: {}",
+        done.summary
+    );
+    assert!(
+        done.summary
+            .contains("below budget (10 GB free < 30 GB budget)"),
+        "summary was: {}",
+        done.summary
+    );
+    drop(daemon);
+}
+
+#[tokio::test]
+async fn test_refuse_writes_to_retired_drive() {
+    let h = start_harness().await;
+    let retired_path = format!(r"{}\evil.txt", retired_drive_off(h._worktrees_dir.path()));
+    let write_args = json!({ "path": retired_path, "content": "exploit" });
+    h.state.set_chunks(tool_call_turn(
+        "call_1",
+        "fs.write",
+        &write_args.to_string(),
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Attempt write to retired drive".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(1),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+    assert_eq!(steps.len(), 1);
+    assert_eq!(done.status, TaskStatus::LimitReached);
 }

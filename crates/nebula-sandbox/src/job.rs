@@ -42,8 +42,9 @@ use windows::Win32::System::JobObjects::{
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_PROCESS_MEMORY,
     JOBOBJECT_CPU_RATE_CONTROL_INFORMATION, JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_0,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectCpuRateControlInformation,
-    JobObjectExtendedLimitInformation, SetInformationJobObject,
+    JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
 };
+
 use windows::core::PCWSTR;
 
 /// Which committed-memory cap a [`Job`] enforces (Requirement 7).
@@ -184,6 +185,18 @@ impl Job {
         // SAFETY: both handles are valid for the duration of the call; `self.0` is this `Job`'s
         // live handle and `process` is borrowed from a live `Child`.
         unsafe { AssignProcessToJobObject(self.0, HANDLE(process)) }.map_err(|e| win_err(&e))
+    }
+
+    /// Immediately terminate all processes currently associated with this job.
+    ///
+    /// Used by global stop (`nebula stop` / `task.stop_all`) to kill all running task processes
+    /// synchronously without waiting for handle drop (Requirement 3.2, 3.3).
+    ///
+    /// # Errors
+    /// The underlying Win32 error if termination fails.
+    pub fn terminate(&self, exit_code: u32) -> io::Result<()> {
+        // SAFETY: `self.0` is a valid, live Job Object handle.
+        unsafe { TerminateJobObject(self.0, exit_code) }.map_err(|e| win_err(&e))
     }
 
     /// The raw job handle, for associating a completion port (see [`crate::job::CompletionPort`]).

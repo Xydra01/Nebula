@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 14,
+  "jsonrpc": "2.0",
+  "method": "task.stop_all",
+  "params": {
+    "reason": "emergency stop"
+  },
+  "proto_version": 3
+}

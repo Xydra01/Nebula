@@ -54,6 +54,7 @@ Binaries: `nebula.exe` (from `nebula-cli`) and `nebula-daemon.exe` (from `nebula
 | What gets logged and redacted | `nebula-telemetry/src/layer.rs`, `redact.rs`; the secret targets are `daemon.secrets` in config |
 | CLI output format | `nebula-cli/src/format.rs` (snapshot-tested in `tests/snapshots/`) |
 | Executor loop & autonomous tasks | `nebula-daemon/src/executor.rs`, dispatch in `nebula-daemon/src/server.rs`, CLI in `nebula-cli/src/task.rs` |
+| Circuit breakers, global stop & disk guard | `nebula-daemon/src/circuit_breaker.rs`, disk guard in `nebula-daemon/src/executor.rs`, job termination in `nebula-sandbox/src/job.rs`, and CLI `nebula stop` in `nebula-cli/src/task.rs` |
 | Automated GitHub flow & bot PRs | `crates/nebula-daemon/src/github/` (`safety.rs`, `push.rs`, `api.rs`, `format.rs`); config in `[github]` |
 
 ### Per-task worktree
