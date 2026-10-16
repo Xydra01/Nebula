@@ -19,13 +19,15 @@ pub use envelope::{
     Response, RpcError, error_code,
 };
 pub use events::{
-    ChatDone, ChatError, ChatToken, Event, ModelStateChanged, TaskDone, TaskStatus, TaskStep,
+    ChatDone, ChatError, ChatToken, Event, GameModeChanged, ModelStateChanged, TaskDone,
+    TaskStatus, TaskStep,
 };
 pub use ids::{ChatId, SpanId, StepId, TaskId, TraceId};
 pub use methods::{
-    ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, LogsSubscribeParams,
-    Method, ModelSetProfileParams, TaskCancelParams, TaskCreateParams, TaskStarted,
-    TaskStopAllParams, TaskStopAllResponse, ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,
+    ChatCancelParams, ChatStartParams, ChatStarted, DaemonStatus, Empty, GameModeSetParams,
+    GameModeStatusResponse, LogsSubscribeParams, Method, ModelSetProfileParams, TaskCancelParams,
+    TaskCreateParams, TaskStarted, TaskStopAllParams, TaskStopAllResponse, ToolCallOutcome,
+    ToolInfo, ToolList, ToolsCallParams,
 };
 
 pub use types::{

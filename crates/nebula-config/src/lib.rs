@@ -334,6 +334,9 @@ pub struct NebulaConfig {
     /// Circuit breakers: safety stops and runaway detection (issue #34).
     #[serde(default)]
     pub circuit_breakers: CircuitBreakersConfig,
+    /// Game mode detection and GPU yielding (issue #35).
+    #[serde(default)]
+    pub game_mode: GameModeConfig,
 }
 
 /// The `[circuit_breakers]` section: thresholds for halting tasks upon repetitive failures or runaways (issue #34).
@@ -367,6 +370,83 @@ impl Default for CircuitBreakersConfig {
             max_repeated_tool_failures: default_max_repeated_tool_failures(),
             max_file_edits: default_max_file_edits(),
             runaway_step_tokens: default_runaway_step_tokens(),
+        }
+    }
+}
+
+/// The `[game_mode]` section: detection and GPU yielding (issue #35, design Section 2.6).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameModeConfig {
+    /// Whether automatic game-mode monitoring is enabled.
+    #[serde(default = "default_game_mode_enabled")]
+    pub enabled: bool,
+    /// Poll interval in seconds for checking foreground window and GPU processes.
+    #[serde(default = "default_game_mode_poll_interval_s")]
+    pub poll_interval_s: u64,
+    /// VRAM threshold in MiB held by a non-Nebula process to trigger game mode.
+    #[serde(default = "default_game_mode_vram_threshold_mib")]
+    pub vram_threshold_mib: u64,
+    /// Resume cooldown in seconds after a game exits before reloading model and resuming tasks.
+    #[serde(default = "default_game_mode_cooldown_secs")]
+    pub cooldown_secs: u64,
+    /// Known game processes or launcher executables.
+    #[serde(default = "default_game_mode_known_processes")]
+    pub known_processes: Vec<String>,
+    /// Allowlist of normal desktop apps that should never trigger game mode.
+    #[serde(default = "default_game_mode_desktop_allowlist")]
+    pub desktop_allowlist: Vec<String>,
+}
+
+const fn default_game_mode_enabled() -> bool {
+    true
+}
+const fn default_game_mode_poll_interval_s() -> u64 {
+    2
+}
+const fn default_game_mode_vram_threshold_mib() -> u64 {
+    2048
+}
+const fn default_game_mode_cooldown_secs() -> u64 {
+    10
+}
+fn default_game_mode_known_processes() -> Vec<String> {
+    vec![
+        "steam.exe".into(),
+        "steamservice.exe".into(),
+        "steamwebhelper.exe".into(),
+        "epicgameslauncher.exe".into(),
+        "battle.net.exe".into(),
+        "riotclientservices.exe".into(),
+        "galaxyclient.exe".into(),
+    ]
+}
+fn default_game_mode_desktop_allowlist() -> Vec<String> {
+    vec![
+        "explorer.exe".into(),
+        "cursor.exe".into(),
+        "code.exe".into(),
+        "firefox.exe".into(),
+        "chrome.exe".into(),
+        "msedge.exe".into(),
+        "discord.exe".into(),
+        "slack.exe".into(),
+        "windowsterminal.exe".into(),
+        "powershell.exe".into(),
+        "cmd.exe".into(),
+        "taskmgr.exe".into(),
+    ]
+}
+
+impl Default for GameModeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_game_mode_enabled(),
+            poll_interval_s: default_game_mode_poll_interval_s(),
+            vram_threshold_mib: default_game_mode_vram_threshold_mib(),
+            cooldown_secs: default_game_mode_cooldown_secs(),
+            known_processes: default_game_mode_known_processes(),
+            desktop_allowlist: default_game_mode_desktop_allowlist(),
         }
     }
 }

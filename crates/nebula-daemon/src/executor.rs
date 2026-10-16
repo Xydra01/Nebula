@@ -297,6 +297,10 @@ async fn execute_loop(
             return (TaskStatus::Cancelled, "task cancelled by client".into());
         }
 
+        if let Err(e) = ctx.shared.game_mode.wait_if_active(ctx.token).await {
+            return (TaskStatus::Cancelled, e);
+        }
+
         // List tools and convert to OpenAI function schemas
         let descriptors = ctx.shared.tool_host.list_tools();
         let tools: Vec<Value> = descriptors

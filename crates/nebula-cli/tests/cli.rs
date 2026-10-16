@@ -3,14 +3,14 @@
 use clap::Parser;
 use nebula_cli::format::{self, Style};
 use nebula_cli::{
-    BackupAction, ChatArgs, Cli, Command, DaemonAction, Level, LogsAction, ModelAction, Reasoning,
-    TaskAction, TaskRunArgs, doctor_exit_code,
+    BackupAction, ChatArgs, Cli, Command, DaemonAction, GameModeAction, Level, LogsAction,
+    ModelAction, Reasoning, TaskAction, TaskRunArgs, doctor_exit_code,
 };
 use nebula_config::NebulaConfig;
 use nebula_proto::{
-    CheckStatus, DaemonStatus, DiskUsage, DoctorCheck, DoctorReport, GpuProcess, ModelState,
-    ModelStatus, ResourceSnapshot, StepId, StopReason, TaskDone, TaskId, TaskStatus, TaskStep,
-    Usage,
+    CheckStatus, DaemonStatus, DiskUsage, DoctorCheck, DoctorReport, GameModeStatusResponse,
+    GpuProcess, ModelState, ModelStatus, ResourceSnapshot, StepId, StopReason, TaskDone, TaskId,
+    TaskStatus, TaskStep, Usage,
 };
 use time::macros::datetime;
 
@@ -192,6 +192,30 @@ fn parses_every_command() {
         panic!("not task stop-all");
     };
     assert_eq!(reason, None);
+
+    assert!(matches!(
+        parse(&["game-mode"]).command,
+        Command::GameMode { action: None }
+    ));
+    assert!(matches!(
+        parse(&["game-mode", "status"]).command,
+        Command::GameMode {
+            action: Some(GameModeAction::Status)
+        }
+    ));
+    assert!(matches!(
+        parse(&["game-mode", "on"]).command,
+        Command::GameMode {
+            action: Some(GameModeAction::On)
+        }
+    ));
+    assert!(matches!(
+        parse(&["game-mode", "off"]).command,
+        Command::GameMode {
+            action: Some(GameModeAction::Off)
+        }
+    ));
+    assert!(matches!(parse(&["resume"]).command, Command::Resume));
 }
 
 #[test]
@@ -359,4 +383,25 @@ fn snapshot_task_formatting() {
         format::task_done(&done, Style::PLAIN),
     ];
     insta::assert_snapshot!(lines.join("\n"));
+}
+
+#[test]
+fn snapshot_game_mode_formatting() {
+    let inactive = GameModeStatusResponse {
+        active: false,
+        manual_override: None,
+        reason: None,
+        process_name: None,
+    };
+    let active = GameModeStatusResponse {
+        active: true,
+        manual_override: Some(true),
+        reason: Some("fullscreen window (Cyberpunk2077.exe)".into()),
+        process_name: Some("Cyberpunk2077.exe".into()),
+    };
+    let lines = [
+        format::game_mode_status(&inactive, Style::PLAIN),
+        format::game_mode_status(&active, Style::PLAIN),
+    ];
+    insta::assert_snapshot!(lines.join("---\n"));
 }

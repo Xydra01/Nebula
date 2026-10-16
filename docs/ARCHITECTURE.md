@@ -56,6 +56,7 @@ Binaries: `nebula.exe` (from `nebula-cli`) and `nebula-daemon.exe` (from `nebula
 | Executor loop & autonomous tasks | `nebula-daemon/src/executor.rs`, dispatch in `nebula-daemon/src/server.rs`, CLI in `nebula-cli/src/task.rs` |
 | Circuit breakers, global stop & disk guard | `nebula-daemon/src/circuit_breaker.rs`, disk guard in `nebula-daemon/src/executor.rs`, job termination in `nebula-sandbox/src/job.rs`, and CLI `nebula stop` in `nebula-cli/src/task.rs` |
 | Automated GitHub flow & bot PRs | `crates/nebula-daemon/src/github/` (`safety.rs`, `push.rs`, `api.rs`, `format.rs`); config in `[github]` |
+| Game mode detection & GPU yielding | `crates/nebula-daemon/src/game_mode.rs`, Win32 foreground detector in `crates/nebula-daemon/src/win.rs`, executor pause in `crates/nebula-daemon/src/executor.rs`, CLI in `crates/nebula-cli/src/lib.rs` (`nebula game-mode`, `nebula resume`); config in `[game_mode]` |
 
 ### Per-task worktree
 

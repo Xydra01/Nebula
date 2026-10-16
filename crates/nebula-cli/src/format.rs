@@ -4,8 +4,8 @@ use std::fmt::Write as _;
 
 use nebula_config::VolumeGuard;
 use nebula_proto::{
-    CheckStatus, DaemonStatus, DoctorReport, ModelState, ModelStatus, ResourceSnapshot, StopReason,
-    TaskDone, TaskStatus, TaskStep, Usage,
+    CheckStatus, DaemonStatus, DoctorReport, GameModeStatusResponse, ModelState, ModelStatus,
+    ResourceSnapshot, StopReason, TaskDone, TaskStatus, TaskStep, Usage,
 };
 use nebula_resources::{GB, GuardLevel, guard_disks};
 use serde::Serialize;
@@ -257,4 +257,29 @@ pub fn task_done(done: &TaskDone, style: Style) -> String {
         TaskStatus::Failed => style.bad("failed"),
     };
     format!("task {} {}\n{}", done.task_id, status_str, done.summary)
+}
+
+/// The lines printed for game mode status.
+#[must_use]
+pub fn game_mode_status(s: &GameModeStatusResponse, style: Style) -> String {
+    let state_str = if s.active {
+        style.warn("active (gaming)")
+    } else {
+        style.good("inactive")
+    };
+    let mut out = format!("game mode: {state_str}\n");
+    if let Some(forced) = s.manual_override {
+        let _ = writeln!(
+            out,
+            "override:  {}",
+            if forced { "forced ON" } else { "forced OFF" }
+        );
+    }
+    if let Some(reason) = &s.reason {
+        let _ = writeln!(out, "reason:    {reason}");
+    }
+    if let Some(proc) = &s.process_name {
+        let _ = writeln!(out, "process:   {proc}");
+    }
+    out
 }

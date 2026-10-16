@@ -7,7 +7,10 @@ use std::io;
 
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HLOCAL, LocalFree,
+    CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HLOCAL, HWND, LocalFree, RECT,
+};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -18,6 +21,9 @@ use windows::Win32::Security::{
     TokenUser,
 };
 use windows::Win32::System::Threading::{CreateMutexW, GetCurrentProcess, OpenProcessToken};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId,
+};
 use windows::core::{HSTRING, PWSTR};
 
 fn io_err(e: &windows::core::Error) -> io::Error {
@@ -184,4 +190,101 @@ pub fn read_credential(target: &str) -> Option<String> {
     // SAFETY: frees the buffer returned by CredReadW, once.
     unsafe { CredFree(cred.cast_const().cast()) };
     text
+}
+
+/// Information about the current foreground window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ForegroundWindowInfo {
+    /// PID of the process owning the foreground window.
+    pub pid: u32,
+    /// Whether the window spans or exceeds its monitor.
+    pub is_fullscreen: bool,
+}
+
+/// Seam for detecting the foreground window, abstracted for tests.
+pub trait ForegroundDetector: Send + Sync {
+    /// Detects current foreground window if one exists.
+    fn detect(&self) -> Option<ForegroundWindowInfo>;
+}
+
+/// Real Win32 foreground window detector.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Win32ForegroundDetector;
+
+impl ForegroundDetector for Win32ForegroundDetector {
+    fn detect(&self) -> Option<ForegroundWindowInfo> {
+        current_foreground_window()
+    }
+}
+
+/// A foreground detector that detects nothing (for test harnesses and headless mode).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NullForegroundDetector;
+
+impl ForegroundDetector for NullForegroundDetector {
+    fn detect(&self) -> Option<ForegroundWindowInfo> {
+        None
+    }
+}
+
+/// Queries Win32 for the current foreground window, its owner PID, and whether it is fullscreen.
+#[must_use]
+pub fn current_foreground_window() -> Option<ForegroundWindowInfo> {
+    // SAFETY: GetForegroundWindow is safe to call from any thread.
+    let hwnd: HWND = unsafe { GetForegroundWindow() };
+    if hwnd.0.is_null() {
+        return None;
+    }
+
+    // Check class name: ignore shell / desktop windows (Progman, WorkerW, Shell_TrayWnd)
+    let mut class_buf = [0u16; 256];
+    // SAFETY: buffer is valid for up to 256 wide chars.
+    let len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    if len > 0 {
+        let len_usize = usize::try_from(len).unwrap_or(0);
+        let class_name = String::from_utf16_lossy(&class_buf[..len_usize.min(class_buf.len())]);
+        if class_name == "Progman" || class_name == "WorkerW" || class_name == "Shell_TrayWnd" {
+            return None;
+        }
+    }
+
+    let mut pid: u32 = 0;
+    // SAFETY: out-pointer to pid.
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
+    if pid == 0 {
+        return None;
+    }
+
+    let mut rect = RECT::default();
+    // SAFETY: hwnd is checked non-null; out-pointer to rect.
+    let ok = unsafe { GetWindowRect(hwnd, &raw mut rect) };
+    if ok.is_err() {
+        return Some(ForegroundWindowInfo {
+            pid,
+            is_fullscreen: false,
+        });
+    }
+
+    // SAFETY: MONITOR_DEFAULTTONEAREST returns a valid HMONITOR even if hwnd is partially invalid.
+    let hmon = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    let mut mi = MONITORINFO {
+        cbSize: u32::try_from(std::mem::size_of::<MONITORINFO>()).unwrap_or(0),
+        ..Default::default()
+    };
+    // SAFETY: mi.cbSize is initialized to sizeof(MONITORINFO); out-pointer to mi.
+    let mon_ok = unsafe { GetMonitorInfoW(hmon, &raw mut mi) };
+    if !mon_ok.as_bool() {
+        return Some(ForegroundWindowInfo {
+            pid,
+            is_fullscreen: false,
+        });
+    }
+
+    // A window is fullscreen if its bounds cover or exceed the monitor's bounds
+    let is_fullscreen = rect.left <= mi.rcMonitor.left
+        && rect.top <= mi.rcMonitor.top
+        && rect.right >= mi.rcMonitor.right
+        && rect.bottom >= mi.rcMonitor.bottom;
+
+    Some(ForegroundWindowInfo { pid, is_fullscreen })
 }

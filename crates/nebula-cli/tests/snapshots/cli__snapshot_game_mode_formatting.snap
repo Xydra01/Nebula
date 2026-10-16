@@ -1,0 +1,10 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "lines.join(\"---\\n\")"
+---
+game mode: inactive
+---
+game mode: active (gaming)
+override:  forced ON
+reason:    fullscreen window (Cyberpunk2077.exe)
+process:   Cyberpunk2077.exe

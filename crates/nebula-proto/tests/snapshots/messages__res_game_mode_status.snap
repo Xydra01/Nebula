@@ -1,0 +1,14 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 16,
+  "jsonrpc": "2.0",
+  "proto_version": 3,
+  "result": {
+    "active": true,
+    "manual_override": true,
+    "reason": "manual override"
+  }
+}

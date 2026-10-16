@@ -201,6 +201,14 @@ fn requests() {
                 }),
             ),
         ),
+        (
+            "req_game_mode_set",
+            request(15, Method::GameModeSet(GameModeSetParams { enabled: true })),
+        ),
+        (
+            "req_game_mode_status",
+            request(16, Method::GameModeStatus(Empty {})),
+        ),
     ];
     let mut seen = Vec::new();
     for (name, msg) in &cases {
@@ -334,6 +342,19 @@ fn responses() {
             "res_task_stop_all",
             Response::ok(id(14), &TaskStopAllResponse { stopped: 2 }).unwrap(),
         ),
+        (
+            "res_game_mode_status",
+            Response::ok(
+                id(16),
+                &GameModeStatusResponse {
+                    active: true,
+                    manual_override: Some(true),
+                    reason: Some("manual override".into()),
+                    process_name: None,
+                },
+            )
+            .unwrap(),
+        ),
     ];
     for (name, res) in cases {
         check(name, &Message::Response(res));
@@ -418,6 +439,13 @@ fn events() {
                 task_id: task_id(),
                 status: TaskStatus::Completed,
                 summary: "Fixed test_calc by correcting off-by-one error".into(),
+            }),
+        ),
+        (
+            "evt_game_mode_changed",
+            Event::GameModeChanged(GameModeChanged {
+                active: true,
+                reason: Some("fullscreen window (game.exe)".into()),
             }),
         ),
     ];

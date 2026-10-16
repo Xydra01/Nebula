@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "jsonrpc": "2.0",
+  "method": "game_mode.changed",
+  "params": {
+    "active": true,
+    "reason": "fullscreen window (game.exe)"
+  },
+  "proto_version": 3
+}

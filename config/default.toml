@@ -323,5 +323,42 @@ max_file_edits = 5
 # Maximum tokens in a single step before tripping runaway token breaker.
 runaway_step_tokens = 16384
 
+# Game mode detection and GPU yielding (issue #35, design Section 2.6).
+[game_mode]
+# Whether automatic game-mode monitoring is enabled.
+enabled = true
+# Poll interval in seconds for checking foreground window and GPU processes.
+poll_interval_s = 2
+# VRAM threshold in MiB held by a non-Nebula process to trigger game mode (2 GB).
+vram_threshold_mib = 2048
+# Resume cooldown in seconds after a game exits before reloading model and resuming tasks.
+cooldown_secs = 10
+# Known game processes or launcher executables.
+known_processes = [
+    "steam.exe",
+    "steamservice.exe",
+    "steamwebhelper.exe",
+    "epicgameslauncher.exe",
+    "battle.net.exe",
+    "riotclientservices.exe",
+    "galaxyclient.exe",
+]
+# Allowlist of normal desktop apps that should never trigger game mode.
+desktop_allowlist = [
+    "explorer.exe",
+    "cursor.exe",
+    "code.exe",
+    "firefox.exe",
+    "chrome.exe",
+    "msedge.exe",
+    "discord.exe",
+    "slack.exe",
+    "windowsterminal.exe",
+    "powershell.exe",
+    "cmd.exe",
+    "taskmgr.exe",
+    "llama-server.exe",
+]
+
 
 
