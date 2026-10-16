@@ -61,11 +61,17 @@ pub enum Method {
     /// Cancel all running executor tasks immediately. Result: [`TaskStopAllResponse`].
     #[serde(rename = "task.stop_all")]
     TaskStopAll(TaskStopAllParams),
+    /// Manually enable or disable game mode. Result: [`GameModeStatusResponse`].
+    #[serde(rename = "game_mode.set")]
+    GameModeSet(GameModeSetParams),
+    /// Query current game mode state. Result: [`GameModeStatusResponse`].
+    #[serde(rename = "game_mode.status")]
+    GameModeStatus(Empty),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 14] = [
+    pub const NAMES: [&'static str; 16] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -80,6 +86,8 @@ impl Method {
         "task.create",
         "task.cancel",
         "task.stop_all",
+        "game_mode.set",
+        "game_mode.status",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -100,6 +108,8 @@ impl Method {
             Self::TaskCreate(_) => "task.create",
             Self::TaskCancel(_) => "task.cancel",
             Self::TaskStopAll(_) => "task.stop_all",
+            Self::GameModeSet(_) => "game_mode.set",
+            Self::GameModeStatus(_) => "game_mode.status",
         }
     }
 }
@@ -290,4 +300,29 @@ pub struct TaskStopAllParams {
 pub struct TaskStopAllResponse {
     /// Number of tasks stopped.
     pub stopped: u32,
+}
+
+/// Parameters of `game_mode.set`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameModeSetParams {
+    /// Enable (`true`) or disable (`false`) game mode manually.
+    pub enabled: bool,
+}
+
+/// Result of `game_mode.set` and `game_mode.status`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameModeStatusResponse {
+    /// Whether game mode is currently active.
+    pub active: bool,
+    /// Manual override state, if any (`Some(true)` or `Some(false)`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_override: Option<bool>,
+    /// Why game mode is active, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// Process name that triggered game mode, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
 }

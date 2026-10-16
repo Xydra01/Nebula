@@ -106,6 +106,7 @@ fn start() -> Harness {
             }])
         }),
         artifact_checks: false,
+        foreground_detector: None,
     };
     let daemon = nebula_daemon::start(config.clone(), deps).unwrap();
     let ctx = Ctx {

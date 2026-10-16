@@ -123,6 +123,7 @@ fn deps(launcher: &Arc<FakeLauncher>, instance: &str, tool_host: ToolHost) -> De
             }])
         }),
         artifact_checks: false,
+        foreground_detector: None,
     }
 }
 

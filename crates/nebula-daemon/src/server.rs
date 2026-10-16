@@ -129,6 +129,7 @@ async fn connection(shared: Arc<Shared>, pipe: NamedPipeServer) {
     if let Some(e) = &shared.embedding {
         forward_model_events(e.subscribe(), tx.clone(), conn.clone());
     }
+    forward_game_mode_events(shared.game_mode.subscribe(), tx.clone(), conn.clone());
 
     let mut lines = FramedRead::new(rd, LinesCodec::new_with_max_length(MAX_LINE));
     loop {
@@ -183,6 +184,30 @@ fn forward_model_events(
             match ev {
                 Ok(ev) => {
                     if tx.send(note(Event::ModelStateChanged(ev))).await.is_err() {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {}
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+fn forward_game_mode_events(
+    mut rx: broadcast::Receiver<nebula_proto::GameModeChanged>,
+    tx: Outbox,
+    conn: CancellationToken,
+) {
+    tokio::spawn(async move {
+        loop {
+            let ev = tokio::select! {
+                () = conn.cancelled() => break,
+                ev = rx.recv() => ev,
+            };
+            match ev {
+                Ok(ev) => {
+                    if tx.send(note(Event::GameModeChanged(ev))).await.is_err() {
                         break;
                     }
                 }
@@ -323,6 +348,14 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
             tracing::warn!(event = "task.stop_all", stopped = stopped, reason = ?reason);
             to_value(&TaskStopAllResponse { stopped })
         }
+
+        Method::GameModeSet(nebula_proto::GameModeSetParams { enabled }) => {
+            match shared.game_mode.set_manual(&shared.chat, enabled).await {
+                Ok(res) => to_value(&res),
+                Err(e) => Err(RpcError::new(error_code::INTERNAL_ERROR, e)),
+            }
+        }
+        Method::GameModeStatus(Empty {}) => to_value(&shared.game_mode.status()),
 
         Method::ModelStatus(Empty {}) => to_value(&shared.chat.status()),
         Method::ModelSetProfile(ModelSetProfileParams { profile }) => {

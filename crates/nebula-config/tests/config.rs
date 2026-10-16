@@ -259,3 +259,49 @@ fn unknown_circuit_breakers_key_is_rejected() {
         NebulaConfig::from_toml(Some("[circuit_breakers]\ninvalid_field = 123\n")).unwrap_err();
     assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
 }
+
+#[test]
+fn game_mode_defaults_load_and_validate() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    assert!(cfg.game_mode.enabled);
+    assert_eq!(cfg.game_mode.poll_interval_s, 2);
+    assert_eq!(cfg.game_mode.vram_threshold_mib, 2048);
+    assert_eq!(cfg.game_mode.cooldown_secs, 10);
+    assert!(cfg.game_mode.known_processes.contains(&"steam.exe".into()));
+    assert!(
+        cfg.game_mode
+            .desktop_allowlist
+            .contains(&"firefox.exe".into())
+    );
+    assert!(
+        cfg.game_mode
+            .desktop_allowlist
+            .contains(&"cursor.exe".into())
+    );
+}
+
+#[test]
+fn game_mode_overrides_merge_and_validate() {
+    let toml = r#"
+[game_mode]
+enabled = false
+poll_interval_s = 5
+vram_threshold_mib = 4096
+cooldown_secs = 30
+known_processes = ["game.exe"]
+desktop_allowlist = ["app.exe"]
+"#;
+    let cfg = NebulaConfig::from_toml(Some(toml)).unwrap();
+    assert!(!cfg.game_mode.enabled);
+    assert_eq!(cfg.game_mode.poll_interval_s, 5);
+    assert_eq!(cfg.game_mode.vram_threshold_mib, 4096);
+    assert_eq!(cfg.game_mode.cooldown_secs, 30);
+    assert_eq!(cfg.game_mode.known_processes, vec!["game.exe"]);
+    assert_eq!(cfg.game_mode.desktop_allowlist, vec!["app.exe"]);
+}
+
+#[test]
+fn unknown_game_mode_key_is_rejected() {
+    let err = NebulaConfig::from_toml(Some("[game_mode]\ninvalid_field = true\n")).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}

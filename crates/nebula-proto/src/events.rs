@@ -33,6 +33,9 @@ pub enum Event {
     /// An executor task finished.
     #[serde(rename = "task.done")]
     TaskDone(TaskDone),
+    /// Game mode state changed (entered or exited).
+    #[serde(rename = "game_mode.changed")]
+    GameModeChanged(GameModeChanged),
 }
 
 impl Event {
@@ -48,6 +51,7 @@ impl Event {
             Self::LogEvent(_) => "log.event",
             Self::TaskStep(_) => "task.step",
             Self::TaskDone(_) => "task.done",
+            Self::GameModeChanged(_) => "game_mode.changed",
         }
     }
 }
@@ -144,4 +148,15 @@ pub struct TaskDone {
     pub status: TaskStatus,
     /// Human-readable summary of the outcome or reason for stopping.
     pub summary: String,
+}
+
+/// Notification emitted when game mode state changes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameModeChanged {
+    /// Whether game mode is now active.
+    pub active: bool,
+    /// Reason for the change, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }

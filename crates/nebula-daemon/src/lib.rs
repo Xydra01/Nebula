@@ -11,6 +11,7 @@ pub mod checks;
 pub mod circuit_breaker;
 pub mod client;
 pub(crate) mod executor;
+pub mod game_mode;
 pub mod github;
 mod server;
 pub mod win;
@@ -80,6 +81,8 @@ pub struct Deps {
     pub local_checks: Arc<LocalChecks>,
     /// Whether `doctor.run` also checks runtime versions and model hashes.
     pub artifact_checks: bool,
+    /// Optional foreground window detector seam (for tests).
+    pub foreground_detector: Option<Arc<dyn win::ForegroundDetector>>,
 }
 
 pub(crate) struct RunningTaskState {
@@ -104,6 +107,7 @@ pub(crate) struct Shared {
     pub(crate) local_checks: Arc<LocalChecks>,
     pub(crate) artifact_checks: bool,
     pub(crate) worktrees: Arc<nebula_sandbox::worktree::manager::WorktreeManager>,
+    pub(crate) game_mode: Arc<game_mode::GameModeCoordinator>,
 }
 
 impl Shared {
@@ -182,11 +186,19 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         )?)
     };
 
+    let detector: Arc<dyn win::ForegroundDetector> = deps
+        .foreground_detector
+        .unwrap_or_else(|| Arc::new(win::Win32ForegroundDetector));
+    let game_mode = Arc::new(game_mode::GameModeCoordinator::new(
+        config.game_mode.clone(),
+        detector,
+    ));
+
     let pipe_path = config.daemon.pipe_path();
     let shared = Arc::new(Shared {
         config,
         telemetry: deps.telemetry,
-        chat,
+        chat: chat.clone(),
         embedding,
         tool_host: Arc::new(tool_host),
         sampler: Mutex::new(sampler),
@@ -200,6 +212,28 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         local_checks: deps.local_checks,
         artifact_checks: deps.artifact_checks,
         worktrees: worktree_manager,
+        game_mode: Arc::clone(&game_mode),
+    });
+
+    // Background monitor for game mode detection and GPU yielding
+    let gm = Arc::clone(&game_mode);
+    let chat_gm = chat;
+    let shared_for_gm = Arc::clone(&shared);
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(gm.config.poll_interval_s.max(1));
+        let mut ticker = tokio::time::interval(interval);
+        while !shared_for_gm.shutdown.is_cancelled() {
+            tokio::select! {
+                _ = ticker.tick() => {
+                    let procs = shared_for_gm
+                        .latest_snapshot()
+                        .map(|s| s.gpu_processes)
+                        .unwrap_or_default();
+                    gm.check_and_update(&chat_gm, &procs).await;
+                }
+                () = shared_for_gm.shutdown.cancelled() => break,
+            }
+        }
     });
 
     let listener = server::Listener::bind(&pipe_path).map_err(|source| DaemonError::Pipe {

@@ -147,6 +147,7 @@ async fn start_harness() -> Harness {
             }])
         }),
         artifact_checks: false,
+        foreground_detector: None,
     };
 
     let daemon = nebula_daemon::start(config.clone(), deps).unwrap();
@@ -877,6 +878,7 @@ async fn test_disk_guard_trips_with_fake_low_space() {
             }])
         }),
         artifact_checks: false,
+        foreground_detector: None,
     };
 
     let daemon = nebula_daemon::start(config.clone(), deps).unwrap();

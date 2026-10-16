@@ -20,9 +20,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use nebula_config::NebulaConfig;
 use nebula_daemon::client::{Client, ClientError};
 use nebula_proto::{
-    CheckStatus, DaemonStatus, DoctorCheck, DoctorReport, Empty, Event, LogLevel,
-    LogsSubscribeParams, Method, ModelSetProfileParams, ModelStatus, ReasoningEffort,
-    ResourceSnapshot, TaskId, TraceId, error_code,
+    CheckStatus, DaemonStatus, DoctorCheck, DoctorReport, Empty, Event, GameModeSetParams,
+    GameModeStatusResponse, LogLevel, LogsSubscribeParams, Method, ModelSetProfileParams,
+    ModelStatus, ReasoningEffort, ResourceSnapshot, TaskId, TraceId, error_code,
 };
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -91,6 +91,25 @@ pub enum Command {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Inspect or control game mode (model unloading and GPU yielding).
+    GameMode {
+        /// Action. Defaults to status if omitted.
+        #[command(subcommand)]
+        action: Option<GameModeAction>,
+    },
+    /// Resume tasks and clear manual game mode override.
+    Resume,
+}
+
+/// `nebula game-mode ...`.
+#[derive(Debug, Subcommand)]
+pub enum GameModeAction {
+    /// Manually enable game mode (unload model and pause tasks).
+    On,
+    /// Manually disable game mode and clear manual override (reload model and resume tasks).
+    Off,
+    /// Show current game mode status and reason.
+    Status,
 }
 
 /// `nebula task ...`.
@@ -327,7 +346,39 @@ pub async fn run(
             TaskAction::StopAll { reason } => task::stop_all(ctx, reason, out).await,
         },
         Command::Stop { reason } => task::stop_all(ctx, reason, out).await,
+        Command::GameMode { action } => match action.unwrap_or(GameModeAction::Status) {
+            GameModeAction::On => game_mode_set(ctx, true, out).await,
+            GameModeAction::Off => game_mode_set(ctx, false, out).await,
+            GameModeAction::Status => game_mode_status(ctx, out).await,
+        },
+        Command::Resume => game_mode_set(ctx, false, out).await,
     }
+}
+
+async fn game_mode_status(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let s: GameModeStatusResponse = c.call(Method::GameModeStatus(Empty {})).await?;
+    if ctx.json {
+        emit_json(out, &s)?;
+    } else {
+        write!(out, "{}", format::game_mode_status(&s, ctx.style))?;
+    }
+    Ok(0)
+}
+
+async fn game_mode_set(ctx: &Ctx, enabled: bool, out: &mut dyn Write) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let s: GameModeStatusResponse = c
+        .call(Method::GameModeSet(GameModeSetParams { enabled }))
+        .await?;
+    if ctx.json {
+        emit_json(out, &s)?;
+    } else if enabled {
+        writeln!(out, "game mode enabled (model unloaded, tasks paused)")?;
+    } else {
+        writeln!(out, "game mode disabled (resumed)")?;
+    }
+    Ok(0)
 }
 
 async fn daemon_status(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {

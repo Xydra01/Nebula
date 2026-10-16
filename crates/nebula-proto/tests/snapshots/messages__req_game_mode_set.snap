@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 15,
+  "jsonrpc": "2.0",
+  "method": "game_mode.set",
+  "params": {
+    "enabled": true
+  },
+  "proto_version": 3
+}
