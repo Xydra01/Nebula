@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use nebula_config::NebulaConfig;
+use nebula_daemon::win::Win32ForegroundDetector;
 use nebula_daemon::{DaemonError, Deps, INSTANCE_MUTEX};
 use nebula_model::{ProcessLauncher, SupervisorConfig};
 use nebula_resources::{CommitPreflight, Sources};
@@ -59,7 +60,7 @@ async fn real_main() -> anyhow::Result<()> {
         instance_name: INSTANCE_MUTEX.to_owned(),
         local_checks: Arc::new(nebula_resources::doctor::local_checks),
         artifact_checks: true,
-        foreground_detector: Some(Arc::new(win::Win32ForegroundDetector)),
+        foreground_detector: Some(Arc::new(Win32ForegroundDetector)),
     };
     nebula_daemon::run(config, deps).await?;
     Ok(())
