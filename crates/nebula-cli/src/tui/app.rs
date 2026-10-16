@@ -225,9 +225,13 @@ impl TuiApp {
                     }
                 }
                 ActivePane::Streaming => {
+                    if self.auto_scroll {
+                        let lines = self.streaming_text.lines().count();
+                        self.streaming_scroll = lines;
+                        self.auto_scroll = false;
+                    }
                     if self.streaming_scroll > 0 {
                         self.streaming_scroll -= 1;
-                        self.auto_scroll = false;
                     }
                 }
                 ActivePane::ToolCalls => {
@@ -244,6 +248,10 @@ impl TuiApp {
                 }
                 ActivePane::Streaming => {
                     self.streaming_scroll += 1;
+                    let lines = self.streaming_text.lines().count();
+                    if self.streaming_scroll >= lines {
+                        self.auto_scroll = true;
+                    }
                 }
                 ActivePane::ToolCalls => {
                     if !self.tool_calls.is_empty()
@@ -254,17 +262,27 @@ impl TuiApp {
                 }
             },
             (KeyCode::PageUp, _) if self.active_pane == ActivePane::Streaming => {
+                if self.auto_scroll {
+                    let lines = self.streaming_text.lines().count();
+                    self.streaming_scroll = lines;
+                    self.auto_scroll = false;
+                }
                 self.streaming_scroll = self.streaming_scroll.saturating_sub(10);
-                self.auto_scroll = false;
             }
             (KeyCode::PageDown, _) if self.active_pane == ActivePane::Streaming => {
                 self.streaming_scroll = self.streaming_scroll.saturating_add(10);
+                let lines = self.streaming_text.lines().count();
+                if self.streaming_scroll >= lines {
+                    self.auto_scroll = true;
+                }
             }
             (KeyCode::Home, _) if self.active_pane == ActivePane::Streaming => {
                 self.streaming_scroll = 0;
                 self.auto_scroll = false;
             }
             (KeyCode::End, _) if self.active_pane == ActivePane::Streaming => {
+                let lines = self.streaming_text.lines().count();
+                self.streaming_scroll = lines;
                 self.auto_scroll = true;
             }
             _ => {}
@@ -282,8 +300,7 @@ impl TuiApp {
                     self.streaming_text.push_str(&t.text);
                 }
                 if self.auto_scroll {
-                    let lines = self.streaming_text.lines().count();
-                    self.streaming_scroll = lines.saturating_sub(1);
+                    self.streaming_scroll = self.streaming_text.lines().count();
                 }
             }
             Event::TaskStep(step) => {
@@ -311,21 +328,49 @@ impl TuiApp {
                         self.tool_calls.pop_front();
                     }
                 }
+
+                let tools_desc = if step.tool_calls.is_empty() {
+                    "thinking".to_string()
+                } else {
+                    step.tool_calls.join(", ")
+                };
+                self.streaming_text.push_str(&format!(
+                    "\n\n─── Step {} [{}] ───\n",
+                    step.step_index, tools_desc
+                ));
+                if self.auto_scroll {
+                    self.streaming_scroll = self.streaming_text.lines().count();
+                }
             }
             Event::TaskDone(done) => {
                 if let Some(task) = self.tasks.iter_mut().find(|t| t.id == done.task_id) {
                     task.status = done.status.into();
-                    task.summary = done.summary;
+                    task.summary = done.summary.clone();
                 } else {
                     self.tasks.push(TaskItem {
                         id: done.task_id,
                         status: done.status.into(),
-                        summary: done.summary,
+                        summary: done.summary.clone(),
                         step_count: 0,
                     });
                 }
+
+                self.streaming_text.push_str(&format!(
+                    "\n\n═══ Task Done [{:?}] ═══\n{}\n",
+                    done.status, done.summary
+                ));
+                if self.auto_scroll {
+                    self.streaming_scroll = self.streaming_text.lines().count();
+                }
             }
             Event::ApprovalNeeded(req) => {
+                self.streaming_text.push_str(&format!(
+                    "\n\n⚠ APPROVAL NEEDED: command '{}' ({})\n",
+                    req.command, req.tier
+                ));
+                if self.auto_scroll {
+                    self.streaming_scroll = self.streaming_text.lines().count();
+                }
                 self.pending_approval = Some(req);
                 self.approval_modal_open = true;
             }

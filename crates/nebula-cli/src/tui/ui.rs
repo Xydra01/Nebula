@@ -5,7 +5,7 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table,
+    Block, BorderType, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table, Wrap,
 };
 
 use super::app::{ActivePane, TuiApp};
@@ -372,9 +372,38 @@ fn render_streaming_pane(app: &TuiApp, frame: &mut Frame, area: Rect) {
         &app.streaming_text
     };
 
-    let scroll_y = u16::try_from(app.streaming_scroll).unwrap_or(u16::MAX);
+    let inner_width = area.width.saturating_sub(2).max(1) as usize;
+    let inner_height = area.height.saturating_sub(2) as usize;
+
+    let total_visual_lines: usize = text_content
+        .split('\n')
+        .map(|l| {
+            let len = l.chars().count();
+            if len == 0 {
+                1
+            } else {
+                len.div_ceil(inner_width)
+            }
+        })
+        .sum();
+
+    let max_scroll = total_visual_lines.saturating_sub(inner_height);
+    let scroll_y = if app.auto_scroll {
+        max_scroll
+    } else {
+        app.streaming_scroll.min(max_scroll)
+    };
+
+    let scroll_status = if app.auto_scroll {
+        "Auto-Scroll".to_string()
+    } else {
+        format!("Scroll: {scroll_y}/{total_visual_lines}")
+    };
+
+    let scroll_u16 = u16::try_from(scroll_y).unwrap_or(u16::MAX);
     let paragraph = Paragraph::new(Text::raw(text_content))
-        .scroll((scroll_y, 0))
+        .wrap(Wrap { trim: false })
+        .scroll((scroll_u16, 0))
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -385,8 +414,7 @@ fn render_streaming_pane(app: &TuiApp, frame: &mut Frame, area: Rect) {
                 })
                 .border_style(Style::default().fg(border_color))
                 .title(format!(
-                    " Streaming Model Output (Tab: 2) [Line: {}] ",
-                    app.streaming_scroll
+                    " Streaming Model Output (Tab: 2) [{scroll_status}] "
                 )),
         );
 
