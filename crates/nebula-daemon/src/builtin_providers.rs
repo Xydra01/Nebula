@@ -116,15 +116,18 @@ impl ResourceProvider for NoResourceProvider {
 fn build_tool_context(
     config: &NebulaConfig,
     sampler: Option<&Sampler>,
+    approvals: Arc<ApprovalStore>,
 ) -> Result<ToolContext, LoadError> {
     let resources: Arc<dyn ResourceProvider> = match sampler {
         Some(s) => Arc::new(SamplerResourceProvider { rx: s.subscribe() }),
         None => Arc::new(NoResourceProvider),
     };
-    let classifier: Arc<dyn CommandClassifier> = Arc::new(RulesClassifier::embedded(
-        config.tools.builtin.worktree_root.clone(),
-        config.resources.retired_drive.clone(),
-    )?);
+    let classifier: Arc<dyn CommandClassifier> =
+        Arc::new(RulesClassifier::embedded_with_approvals(
+            config.tools.builtin.worktree_root.clone(),
+            config.resources.retired_drive.clone(),
+            approvals,
+        )?);
     Ok(ToolContext {
         worktree: Arc::new(TaskWorktreeProvider::new()),
         classifier,
@@ -155,8 +158,9 @@ pub(crate) fn register_builtins(
     host: &mut ToolHost,
     config: &NebulaConfig,
     sampler: Option<&Sampler>,
+    approvals: Arc<ApprovalStore>,
 ) -> Result<(), DaemonError> {
-    let ctx = build_tool_context(config, sampler)
+    let ctx = build_tool_context(config, sampler, approvals)
         .map_err(|e| DaemonError::Other(format!("permission rules table failed to load: {e}")))?;
     if let Err(e) = nebula_tools::builtins::register_all(host, ctx) {
         tracing::warn!(event = "tool.builtin_register_failed", error = %e);
@@ -205,7 +209,10 @@ pub(crate) fn spawn_worktree_recovery(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use nebula_config::NebulaConfig;
+    use nebula_sandbox::approval::ApprovalStore;
     use nebula_sandbox::rules::{LoadError, RulesTable};
 
     use super::{DaemonError, build_tool_context};
@@ -219,7 +226,7 @@ mod tests {
         // No sampler: exercises the `None` resource-provider branch; the classifier load is the
         // part under test and is independent of the sampler.
         assert!(
-            build_tool_context(&config, None).is_ok(),
+            build_tool_context(&config, None, Arc::new(ApprovalStore::new())).is_ok(),
             "the embedded rules table must load so the daemon can start with a classifier",
         );
     }

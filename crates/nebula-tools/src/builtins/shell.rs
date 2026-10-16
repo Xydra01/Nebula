@@ -258,6 +258,40 @@ impl BuiltinTool for ShellRun {
 /// on with the per-call timeout, and its combined output capped. Dropping the returned guard on
 /// timeout (or on any early return) closes the job handle and kills the child and its descendants.
 #[cfg(windows)]
+fn resolve_executable(command: &str) -> std::path::PathBuf {
+    use std::path::PathBuf;
+
+    if command.contains('\\') || command.contains('/') {
+        return PathBuf::from(command);
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            // Skip WindowsApps execution aliases (0-byte shims that cannot join Job Objects)
+            if dir
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .contains("windowsapps")
+            {
+                continue;
+            }
+            let candidate = dir.join(command);
+            if candidate.is_file() {
+                return candidate;
+            }
+            for ext in [".exe", ".cmd", ".bat"] {
+                let with_ext = dir.join(format!("{command}{ext}"));
+                if with_ext.is_file() {
+                    return with_ext;
+                }
+            }
+        }
+    }
+
+    PathBuf::from(command)
+}
+
+#[cfg(windows)]
 async fn execute(
     command: &str,
     args: &[String],
@@ -274,8 +308,9 @@ async fn execute(
         detail,
     };
 
+    let program = resolve_executable(command);
     let build_cmd = || {
-        let mut cmd = Command::new(command);
+        let mut cmd = Command::new(&program);
         cmd.args(args)
             .current_dir(worktree_root)
             .env_clear()

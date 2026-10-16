@@ -262,11 +262,11 @@ impl RulesTable {
 ///
 /// Mirrors the normalization the issue #27 placeholder classifier used, so a rule naming `reg`
 /// matches `C:\Windows\System32\reg.exe` and `/usr/bin/rm` matches a rule naming `rm`: the input
-/// is trimmed, reduced to the final path component (after the last `/` or `\`), stripped of a
-/// trailing `.exe`, and lower-cased. Exposed to the crate so the engine normalizes a segment's
-/// command the same way the index was built.
+/// Normalize a command string for matching and approval scoping.
+///
+/// Trims whitespace, strips path prefix, strips `.exe`, and lowercases.
 #[must_use]
-pub(crate) fn normalize_command(command: &str) -> String {
+pub fn normalize_command(command: &str) -> String {
     let trimmed = command.trim();
     let last = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
     let base = last.strip_suffix(".exe").unwrap_or(last);

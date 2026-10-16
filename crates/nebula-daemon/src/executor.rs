@@ -108,11 +108,11 @@ pub(crate) async fn run_task(
     let mut messages = vec![
         ChatMessage {
             role: Role::System,
-            content: "You are Nebula, an autonomous local AI coding assistant. You are working in an isolated git worktree for a task. \
+            content: "You are Nebula, an autonomous local AI coding assistant working in an isolated git worktree. \
 Your working directory is the root of the worktree. \
-Inspect files, run commands and tests, edit code, and verify your changes. \
-Use the available tools according to their schema. \
-When the task is complete, finish with a clear final summary without requesting further tools.".into(),
+Inspect files, run commands and tests, edit code, and verify your changes autonomously. \
+CRITICAL: You MUST execute tool calls on every step to make progress. Do NOT output conversational plans, status updates, or thoughts without tool calls. If you need to inspect files or run commands, invoke the tools directly. \
+Only provide a final plain-text response without tool calls when the entire task has been fully implemented, verified, and completed.".into(),
         },
         ChatMessage {
             role: Role::User,
@@ -148,6 +148,11 @@ When the task is complete, finish with a clear final summary without requesting 
 
     // 5. Cleanup and finalization
     drop(task_job);
+
+    if status == TaskStatus::Completed {
+        commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
+    }
+
     let finalized_branch = shared.worktrees.finalize(&wt_task_id).await;
 
     let should_create_pr = params.create_pr.unwrap_or(shared.config.github.enabled);
@@ -293,6 +298,7 @@ async fn execute_loop(
     let mut step_index: u32 = 0;
     let mut tool_calls_executed: u32 = 0;
     let mut total_tokens_used: u32 = 0;
+    let mut nudge_count: u32 = 0;
 
     loop {
         if ctx.token.is_cancelled() {
@@ -417,9 +423,54 @@ async fn execute_loop(
             }
         }
 
-        // If the model finished without calling any tools, the task is complete.
+        // If the model finished without calling any tools, check if it was conversational planning, pseudo-tool text, or completion.
         if output.tool_calls.is_empty() {
-            let summary = if output.text.is_empty() {
+            let lower = output.text.to_lowercase();
+            let is_calling_tools = lower.starts_with("calling tools")
+                || lower.starts_with("calling tool")
+                || lower.starts_with("invoking tool")
+                || lower.starts_with("executing tool");
+            let is_still_planning = lower.contains("let me ")
+                || lower.contains("i will ")
+                || lower.contains("i'll ")
+                || lower.contains("i need to ")
+                || lower.starts_with("let's ")
+                || lower.contains("next, ");
+            let is_empty = output.text.trim().is_empty();
+
+            if (is_still_planning || is_calling_tools || is_empty)
+                && step_index < 10
+                && nudge_count < 3
+            {
+                nudge_count += 1;
+                tracing::info!(
+                    event = "task.nudge",
+                    text = %output.text,
+                    is_calling_tools = is_calling_tools,
+                    is_still_planning = is_still_planning,
+                    is_empty = is_empty
+                );
+                messages.push(ChatMessage {
+                    role: Role::Assistant,
+                    content: output.text,
+                });
+                let prompt = if is_calling_tools {
+                    "To invoke a tool, you must emit a structured tool call. If all necessary actions are complete, provide a final plain-text response detailing what was created and verified."
+                } else if is_empty {
+                    "Please provide a final summary of what was accomplished, or invoke the appropriate tools to continue the task."
+                } else {
+                    "Please proceed with executing the task using the available tools now."
+                };
+                messages.push(ChatMessage {
+                    role: Role::User,
+                    content: prompt.into(),
+                });
+                continue;
+            }
+
+            let summary = if is_calling_tools {
+                format!("Task completed after executing {tool_calls_executed} tool call(s).")
+            } else if output.text.trim().is_empty() {
                 "Task completed".into()
             } else {
                 output.text
@@ -460,15 +511,10 @@ async fn execute_loop(
         );
         step_index += 1;
 
-        // Add assistant turn to conversation
-        let assistant_turn = if output.text.is_empty() {
-            format!("Calling tools: {}", tool_names.join(", "))
-        } else {
-            output.text
-        };
+        // Add assistant turn to conversation without synthetic text poisoning
         messages.push(ChatMessage {
             role: Role::Assistant,
-            content: assistant_turn,
+            content: output.text,
         });
 
         // Dispatch each tool call within worktree and job scopes
@@ -493,7 +539,7 @@ async fn execute_loop(
                 )
                 .await;
 
-            let (result_content, is_error) = match call_res {
+            let (mut result_content, mut is_error) = match call_res {
                 Ok(outcome) => {
                     let err = outcome.is_error;
                     let text = if err {
@@ -510,17 +556,98 @@ async fn execute_loop(
                 && (result_content.contains("requires an approval")
                     || result_content.contains("lacking an approval"))
             {
+                let cmd_name = if call.name == "shell.run" {
+                    args.get("command")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(&call.name)
+                        .to_string()
+                } else {
+                    call.name.clone()
+                };
+
                 ctx.shared
                     .notifications
-                    .notify_approval_needed(&call.name, "System", None, &trace_str);
+                    .notify_approval_needed(&cmd_name, "System", None, &trace_str);
                 let app_needed = nebula_proto::ApprovalNeeded {
-                    command: call.name.clone(),
+                    command: cmd_name.clone(),
                     tier: "System".into(),
                     rule_id: None,
                     trace_id: trace_str.clone(),
                     summary: result_content.clone(),
                 };
                 ctx.shared.emit_event(Event::ApprovalNeeded(app_needed));
+
+                // Pause execution and wait for user's approval response (via TUI or ntfy)
+                let mut resp_rx = ctx.shared.approval_responses.subscribe();
+                let wait_for_approval = async {
+                    loop {
+                        match resp_rx.recv().await {
+                            Ok(resp)
+                                if resp.trace_id == trace_str
+                                    || resp.command == cmd_name
+                                    || nebula_sandbox::rules::normalize_command(&resp.command)
+                                        == nebula_sandbox::rules::normalize_command(&cmd_name) =>
+                            {
+                                return Ok(resp.approved);
+                            }
+                            Ok(_) => continue,
+                            Err(_) => return Err("approval notification channel closed"),
+                        }
+                    }
+                };
+
+                let approval_decision = tokio::select! {
+                    () = ctx.token.cancelled() => {
+                        return (TaskStatus::Cancelled, "task cancelled while waiting for approval".into());
+                    }
+                    () = tokio::time::sleep(Duration::from_secs(300)) => {
+                        Err("approval request timed out after 5 minutes")
+                    }
+                    decision = wait_for_approval => decision,
+                };
+
+                match approval_decision {
+                    Ok(true) => {
+                        tracing::info!(event = "task.approval_granted", tool = %call.name, command = %cmd_name);
+                        let retry_res = CURRENT_WORKTREE
+                            .scope(
+                                Some(ctx.worktree_root.to_path_buf()),
+                                CURRENT_TASK_JOB.scope(Some(Arc::clone(ctx.task_job)), async {
+                                    ctx.shared
+                                        .tool_host
+                                        .call(&call.name, args.clone(), Some(&trace_str))
+                                        .await
+                                }),
+                            )
+                            .await;
+
+                        match retry_res {
+                            Ok(outcome) => {
+                                is_error = outcome.is_error;
+                                result_content = if is_error {
+                                    format!("[tool error] {}", outcome.content)
+                                } else {
+                                    outcome.content.to_string()
+                                };
+                            }
+                            Err(err) => {
+                                is_error = true;
+                                result_content = format!("[tool dispatch error: {err}]");
+                            }
+                        }
+                    }
+                    Ok(false) => {
+                        tracing::info!(event = "task.approval_denied", tool = %call.name, command = %cmd_name);
+                        result_content =
+                            format!("[tool error] command '{cmd_name}' was denied by user");
+                        is_error = true;
+                    }
+                    Err(reason) => {
+                        tracing::warn!(event = "task.approval_timeout", reason = %reason);
+                        result_content = format!("[tool error] {reason}");
+                        is_error = true;
+                    }
+                }
             }
 
             if let Err(trip) = tracker.record_tool_call(&call.name, &args, is_error) {
@@ -534,10 +661,87 @@ async fn execute_loop(
                 );
             }
 
+            let tool_output = format!("[tool result: {}]\n{}", call.name, result_content);
             messages.push(ChatMessage {
                 role: Role::Tool,
-                content: result_content,
+                content: tool_output,
             });
+        }
+    }
+}
+
+async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &TaskId) {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    // 1. Check if git status has uncommitted or untracked changes
+    let mut status_cmd = Command::new("git");
+    status_cmd
+        .args(["status", "--porcelain"])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let is_dirty = match status_cmd.output().await {
+        Ok(out) => !out.stdout.is_empty(),
+        Err(e) => {
+            tracing::warn!(event = "task.git_status_failed", error = %e);
+            false
+        }
+    };
+
+    if !is_dirty {
+        return;
+    }
+
+    // 2. Stage all changes
+    let mut add_cmd = Command::new("git");
+    add_cmd
+        .args(["add", "-A"])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    if let Err(e) = add_cmd.output().await {
+        tracing::warn!(event = "task.git_add_failed", error = %e);
+        return;
+    }
+
+    // 3. Commit staged changes with conventional commit format
+    let commit_msg = format!(
+        "feat: {goal}\n\nAutomated commit for task {task_id}.\n\nCo-authored-by: Nebula <nebula@local>"
+    );
+    let mut commit_cmd = Command::new("git");
+    commit_cmd
+        .args([
+            "-c",
+            "user.name=Nebula",
+            "-c",
+            "user.email=nebula@local",
+            "commit",
+            "-m",
+            &commit_msg,
+        ])
+        .current_dir(worktree_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    match commit_cmd.output().await {
+        Ok(out) if out.status.success() => {
+            tracing::info!(event = "task.worktree_committed", task_id = %task_id);
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::warn!(event = "task.git_commit_failed", stderr = %stderr);
+        }
+        Err(e) => {
+            tracing::warn!(event = "task.git_commit_spawn_failed", error = %e);
         }
     }
 }

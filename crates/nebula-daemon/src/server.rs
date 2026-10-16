@@ -417,6 +417,7 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                 trace_id = %trace_str,
                 reason = ?p.reason,
             );
+            let _ = shared.approval_responses.send(p.clone());
             if p.approved {
                 let tier = match p.tier.to_lowercase().as_str() {
                     "read" => nebula_sandbox::tier::Tier::Read,
@@ -425,8 +426,9 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                     _ => nebula_sandbox::tier::Tier::System,
                 };
                 let grant_id = nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                let normalized_cmd = nebula_sandbox::rules::normalize_command(&p.command);
                 let scope = nebula_sandbox::approval::ApprovalScope {
-                    command: p.command.clone(),
+                    command: normalized_cmd,
                     tier,
                     trace_id: trace_str,
                 };
