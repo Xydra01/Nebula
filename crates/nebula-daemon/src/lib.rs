@@ -10,6 +10,7 @@ mod builtin_providers;
 pub mod checks;
 pub mod client;
 pub(crate) mod executor;
+pub mod github;
 mod server;
 pub mod win;
 

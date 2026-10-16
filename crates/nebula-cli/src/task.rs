@@ -33,6 +33,12 @@ pub struct TaskRunArgs {
     /// Wall-clock timeout in seconds.
     #[arg(long)]
     pub wall_time_secs: Option<u64>,
+    /// Automatically push branch and open a GitHub PR upon task completion.
+    #[arg(long, conflicts_with = "no_pr")]
+    pub pr: bool,
+    /// Do not open a GitHub PR upon task completion.
+    #[arg(long, conflicts_with = "pr")]
+    pub no_pr: bool,
 }
 
 /// Run an autonomous task to completion, streaming steps.
@@ -40,6 +46,14 @@ pub(crate) async fn run(ctx: &Ctx, args: &TaskRunArgs, out: &mut dyn Write) -> a
     let repo = match &args.repo {
         Some(p) => p.clone(),
         None => std::env::current_dir().context("getting current directory for repo")?,
+    };
+
+    let create_pr = if args.pr {
+        Some(true)
+    } else if args.no_pr {
+        Some(false)
+    } else {
+        None
     };
 
     let mut c = connect(ctx).await?;
@@ -51,6 +65,7 @@ pub(crate) async fn run(ctx: &Ctx, args: &TaskRunArgs, out: &mut dyn Write) -> a
         max_tool_calls: args.max_tool_calls,
         max_tokens: args.max_tokens,
         wall_time_secs: args.wall_time_secs,
+        create_pr,
     };
 
     let started: TaskStarted = c.call(Method::TaskCreate(params)).await?;

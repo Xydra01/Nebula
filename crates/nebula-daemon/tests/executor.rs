@@ -276,6 +276,7 @@ async fn test_executor_completes_without_tools() {
             max_tool_calls: None,
             max_tokens: None,
             wall_time_secs: None,
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -309,6 +310,7 @@ async fn test_executor_tool_call_limit_reached() {
             max_tool_calls: Some(2),
             max_tokens: None,
             wall_time_secs: None,
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -362,6 +364,7 @@ async fn test_executor_token_budget_exhausted() {
             max_tool_calls: Some(10),
             max_tokens: Some(100),
             wall_time_secs: None,
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -395,6 +398,7 @@ async fn test_executor_wall_clock_timeout() {
             max_tool_calls: None,
             max_tokens: None,
             wall_time_secs: Some(1),
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -425,6 +429,7 @@ async fn test_executor_cancellation() {
             max_tool_calls: Some(10),
             max_tokens: None,
             wall_time_secs: None,
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -496,6 +501,7 @@ async fn test_phase1_exit_criterion_fixes_failing_test() {
             max_tool_calls: Some(10),
             max_tokens: Some(5000),
             wall_time_secs: Some(30),
+            create_pr: None,
         }))
         .await
         .unwrap();
@@ -556,6 +562,7 @@ async fn test_real_model_fixes_failing_test() {
             max_tool_calls: Some(10),
             max_tokens: Some(5000),
             wall_time_secs: Some(120),
+            create_pr: None,
         }))
         .await
         .unwrap();

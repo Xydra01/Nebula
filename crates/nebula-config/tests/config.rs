@@ -195,3 +195,38 @@ fn unknown_executor_default_profile_is_rejected() {
         "{err}"
     );
 }
+
+#[test]
+fn github_defaults_load_and_validate() {
+    let cfg = NebulaConfig::from_toml(None).unwrap();
+    assert!(!cfg.github.enabled);
+    assert_eq!(cfg.github.repo, "Xydra01/Nebula");
+    assert_eq!(cfg.github.base_branch, "main");
+    assert_eq!(cfg.github.branch_prefix, "nebula/");
+    assert_eq!(cfg.github.token_target, "nebula/github_bot_token");
+    assert_eq!(cfg.github.bot_username, "Nebula-dev-bot");
+}
+
+#[test]
+fn github_overrides_merge_and_validate() {
+    let toml = r#"
+[github]
+enabled = true
+repo = "custom-owner/custom-repo"
+base_branch = "develop"
+branch_prefix = "task/"
+bot_username = "CustomBot"
+"#;
+    let cfg = NebulaConfig::from_toml(Some(toml)).unwrap();
+    assert!(cfg.github.enabled);
+    assert_eq!(cfg.github.repo, "custom-owner/custom-repo");
+    assert_eq!(cfg.github.base_branch, "develop");
+    assert_eq!(cfg.github.branch_prefix, "task/");
+    assert_eq!(cfg.github.bot_username, "CustomBot");
+}
+
+#[test]
+fn unknown_github_key_is_rejected() {
+    let err = NebulaConfig::from_toml(Some("[github]\ninvalid_key = true\n")).unwrap_err();
+    assert!(matches!(err, ConfigError::Parse { .. }), "{err}");
+}
