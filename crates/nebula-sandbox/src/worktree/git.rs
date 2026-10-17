@@ -148,25 +148,14 @@ pub async fn worktree_add(
     start_point: Option<&str>,
 ) -> Result<GitOutput, WorktreeError> {
     let path_str = path.to_string_lossy();
-    let mut args = vec!["worktree", "add", "-b", branch, path_str.as_ref()];
+    let mut args = vec!["worktree", "add"];
     if let Some(start) = start_point {
-        args.push(start);
+        args.extend(["-b", branch, path_str.as_ref(), start]);
+    } else {
+        args.extend(["--orphan", "-b", branch, path_str.as_ref()]);
     }
     let out = run_git(repo, &args, GIT_TIMEOUT).await?;
     require_success(out, "worktree add")
-}
-
-/// Whether `repo` has any commits across all references.
-///
-/// Runs `git rev-list -n 1 --all` to determine whether at least one commit object exists in `repo`.
-/// Returns `Ok(false)` for a newly-initialized repository with no commits.
-///
-/// # Errors
-/// Returns [`WorktreeError::Git`] if git fails to spawn, times out, or exits non-zero.
-pub async fn repo_has_commits(repo: &Path) -> Result<bool, WorktreeError> {
-    let out = run_git(repo, &["rev-list", "-n", "1", "--all"], GIT_TIMEOUT).await?;
-    let out = require_success(out, "rev-list -n 1 --all")?;
-    Ok(!out.stdout.trim().is_empty())
 }
 
 /// `git worktree list --porcelain` in `repo`: enumerate the registered worktrees in the stable

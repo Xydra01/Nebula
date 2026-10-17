@@ -164,21 +164,14 @@ impl WorktreeManager {
 
         // Resolve the start-point: the supplied ref (unresolvable → UnresolvableRef, nothing
         // created, Req 1.2) or the repository's current HEAD / default-branch HEAD (Req 1.1).
-        // If the repository is newly initialized and has no commits, create an orphan worktree.
+        // If the repository has an unborn HEAD (zero commits on the default branch), create an orphan worktree.
         let resolved_start = match start_point {
             Some(reference) if reference != "HEAD" => {
                 Some(git::rev_parse_verify(repo, reference).await?)
             }
             _ => match git::rev_parse_verify(repo, "HEAD").await {
                 Ok(sha) => Some(sha),
-                Err(WorktreeError::UnresolvableRef(_)) => {
-                    if git::repo_has_commits(repo).await? {
-                        return Err(WorktreeError::UnresolvableRef(
-                            start_point.unwrap_or("HEAD").to_owned(),
-                        ));
-                    }
-                    None
-                }
+                Err(WorktreeError::UnresolvableRef(_)) => None,
                 Err(e) => return Err(e),
             },
         };

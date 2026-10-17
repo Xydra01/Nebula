@@ -198,8 +198,9 @@ async fn create_with_a_bogus_ref_is_unresolvable_and_creates_nothing() {
     mgr.create(&task, repo.path(), None).await.unwrap();
 }
 
-/// In a newly-initialized repository with zero commits, `create` with `None` or `HEAD`
-/// succeeds by creating an orphan branch without requiring a resolvable start point.
+/// In a newly-initialized repository with zero commits, or where HEAD points to an unborn branch
+/// even after commits exist on other branches, `create` with `None` or `HEAD` succeeds by creating
+/// an orphan branch without requiring a resolvable start point.
 #[tokio::test]
 async fn create_on_an_empty_repo_succeeds_with_orphan_branch() {
     let repo = TempDir::new().unwrap();
@@ -214,11 +215,26 @@ async fn create_on_an_empty_repo_succeeds_with_orphan_branch() {
     let head1 = git_stdout(&root1, &["symbolic-ref", "--short", "HEAD"]);
     assert_eq!(head1, "nebula/task-empty-default");
 
+    // Commit a file on task1's branch so the repository contains a commit object,
+    // while the main repository's default branch HEAD remains unborn.
+    git(&root1, &["config", "user.name", "Nebula Test"]);
+    git(&root1, &["config", "user.email", "test@nebula.local"]);
+    let seed_file = root1.join("hello.txt");
+    std::fs::write(&seed_file, b"initial").unwrap();
+    git(&root1, &["add", "hello.txt"]);
+    git(&root1, &["commit", "-m", "initial commit on task branch"]);
+
     let task2 = TaskId::new("task-empty-head");
     let root2 = mgr.create(&task2, repo.path(), Some("HEAD")).await.unwrap();
     assert!(root2.is_dir(), "worktree directory created for task2");
     let head2 = git_stdout(&root2, &["symbolic-ref", "--short", "HEAD"]);
     assert_eq!(head2, "nebula/task-empty-head");
+
+    let task3 = TaskId::new("task-empty-none");
+    let root3 = mgr.create(&task3, repo.path(), None).await.unwrap();
+    assert!(root3.is_dir(), "worktree directory created for task3");
+    let head3 = git_stdout(&root3, &["symbolic-ref", "--short", "HEAD"]);
+    assert_eq!(head3, "nebula/task-empty-none");
 }
 
 /// A pre-existing branch collision maps to [`WorktreeError::BranchExists`], leaves the branch
