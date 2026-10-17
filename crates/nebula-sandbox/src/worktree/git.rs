@@ -131,9 +131,9 @@ pub async fn is_git_repo(repo: &Path) -> Result<bool, WorktreeError> {
     Ok(out.success && out.stdout.trim() == "true")
 }
 
-/// `git worktree add -b <branch> <path> <start_point>` in `repo`: create a new worktree at `path`
-/// checking out a newly created `branch` based on `start_point` (design Section 4.4; Requirements
-/// 1.1, 1.4).
+/// `git worktree add -b <branch> <path> [<start_point>]` in `repo`: create a new worktree at `path`
+/// checking out a newly created `branch` based on `start_point` (or orphan/HEAD if None)
+/// (design Section 4.4; Requirements 1.1, 1.4).
 ///
 /// The caller resolves `start_point` and confirms `branch` does not already exist beforehand; this
 /// wrapper only shells the command and requires a successful exit.
@@ -145,16 +145,28 @@ pub async fn worktree_add(
     repo: &Path,
     branch: &str,
     path: &Path,
-    start_point: &str,
+    start_point: Option<&str>,
 ) -> Result<GitOutput, WorktreeError> {
     let path_str = path.to_string_lossy();
-    let out = run_git(
-        repo,
-        &["worktree", "add", "-b", branch, &path_str, start_point],
-        GIT_TIMEOUT,
-    )
-    .await?;
+    let mut args = vec!["worktree", "add", "-b", branch, path_str.as_ref()];
+    if let Some(start) = start_point {
+        args.push(start);
+    }
+    let out = run_git(repo, &args, GIT_TIMEOUT).await?;
     require_success(out, "worktree add")
+}
+
+/// Whether `repo` has any commits across all references.
+///
+/// Runs `git rev-list -n 1 --all` to determine whether at least one commit object exists in `repo`.
+/// Returns `Ok(false)` for a newly-initialized repository with no commits.
+///
+/// # Errors
+/// Returns [`WorktreeError::Git`] if git fails to spawn, times out, or exits non-zero.
+pub async fn repo_has_commits(repo: &Path) -> Result<bool, WorktreeError> {
+    let out = run_git(repo, &["rev-list", "-n", "1", "--all"], GIT_TIMEOUT).await?;
+    let out = require_success(out, "rev-list -n 1 --all")?;
+    Ok(!out.stdout.trim().is_empty())
 }
 
 /// `git worktree list --porcelain` in `repo`: enumerate the registered worktrees in the stable
