@@ -298,13 +298,15 @@ impl TuiApp {
                 }
                 if !t.text.is_empty() {
                     if t.text.contains("[ERROR]")
-                        && let Some(last_tc) = self.tool_calls.back_mut()
+                        && let Some(tc) =
+                            self.tool_calls.iter_mut().find(|tc| tc.status == "running")
                     {
-                        last_tc.status = "error".into();
+                        tc.status = "error".into();
                     } else if t.text.contains("[OK]")
-                        && let Some(last_tc) = self.tool_calls.back_mut()
+                        && let Some(tc) =
+                            self.tool_calls.iter_mut().find(|tc| tc.status == "running")
                     {
-                        last_tc.status = "ok".into();
+                        tc.status = "ok".into();
                     }
                     self.streaming_text.push_str(&t.text);
                 }
@@ -368,6 +370,18 @@ impl TuiApp {
                         summary: done.summary.clone(),
                         step_count: 0,
                     });
+                }
+
+                // Resolve any tool calls still marked running
+                for tc in self
+                    .tool_calls
+                    .iter_mut()
+                    .filter(|tc| tc.status == "running")
+                {
+                    tc.status = match done.status {
+                        nebula_proto::TaskStatus::Completed => "ok".into(),
+                        _ => "error".into(),
+                    };
                 }
 
                 let prefix =
