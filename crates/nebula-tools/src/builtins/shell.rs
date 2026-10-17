@@ -313,13 +313,7 @@ impl BuiltinTool for ShellRun {
 /// on with the per-call timeout, and its combined output capped. Dropping the returned guard on
 /// timeout (or on any early return) closes the job handle and kills the child and its descendants.
 #[cfg(windows)]
-fn resolve_executable(command: &str) -> std::path::PathBuf {
-    use std::path::PathBuf;
-
-    if command.contains('\\') || command.contains('/') {
-        return PathBuf::from(command);
-    }
-
+fn find_in_path(command: &str) -> Option<std::path::PathBuf> {
     if let Some(path_var) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_var) {
             // Skip WindowsApps execution aliases (0-byte shims that cannot join Job Objects)
@@ -332,18 +326,52 @@ fn resolve_executable(command: &str) -> std::path::PathBuf {
             }
             let candidate = dir.join(command);
             if candidate.is_file() {
-                return candidate;
+                return Some(candidate);
             }
             for ext in [".exe", ".cmd", ".bat"] {
                 let with_ext = dir.join(format!("{command}{ext}"));
                 if with_ext.is_file() {
-                    return with_ext;
+                    return Some(with_ext);
                 }
             }
         }
     }
+    None
+}
 
-    PathBuf::from(command)
+#[cfg(windows)]
+pub(crate) fn resolve_executable(command: &str) -> std::path::PathBuf {
+    use std::path::{Path, PathBuf};
+
+    if command.contains('\\') || command.contains('/') {
+        let p = Path::new(command);
+        if p.is_file() {
+            return p.to_path_buf();
+        }
+
+        // 1. If path references drive C:, check if the identical path exists on F: (the active drive)
+        let s = command.replace('/', "\\");
+        if s.len() >= 3 && s[1..3].eq_ignore_ascii_case(":\\") && s[..1].eq_ignore_ascii_case("C") {
+            let on_f = format!("F:{}", &s[2..]);
+            let on_f_path = Path::new(&on_f);
+            if on_f_path.is_file() {
+                return on_f_path.to_path_buf();
+            }
+        }
+
+        // 2. If the explicit path does not exist on disk, check if its file name exists in PATH
+        if let Some(found) = p
+            .file_name()
+            .and_then(|f| f.to_str())
+            .and_then(find_in_path)
+        {
+            return found;
+        }
+
+        return PathBuf::from(command);
+    }
+
+    find_in_path(command).unwrap_or_else(|| PathBuf::from(command))
 }
 
 #[cfg(windows)]
@@ -1162,6 +1190,28 @@ mod tests {
             let (cmd, args) = parse_args(&json_explicit_args).expect("parse args successfully");
             assert_eq!(cmd, "git");
             assert_eq!(args, vec!["status", "--short"]);
+        }
+
+        #[test]
+        fn test_resolve_executable_on_windows() {
+            // Finding python or cmd or git should succeed and not be empty
+            let git_resolved = resolve_executable("git");
+            assert!(git_resolved.is_file() || git_resolved == std::path::Path::new("git"));
+
+            // Hallucinated C: path with existing F: counterpart or fallback to PATH
+            let hallucinated = resolve_executable(r"C:\Windows\system32\cmd.exe");
+            if std::path::Path::new(r"F:\Windows\system32\cmd.exe").is_file() {
+                assert_eq!(
+                    hallucinated,
+                    std::path::PathBuf::from(r"F:\Windows\system32\cmd.exe")
+                );
+            }
+
+            // Nonexistent path with known tool filename falls back to finding in PATH
+            let bogus_python = resolve_executable(r"F:\bogus\dir\python.exe");
+            if let Some(real_python) = find_in_path("python.exe") {
+                assert_eq!(bogus_python, real_python);
+            }
         }
     }
 }

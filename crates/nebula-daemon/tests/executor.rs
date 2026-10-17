@@ -1073,3 +1073,74 @@ async fn test_executor_approval_pause_and_resume() {
 
     assert!(task_completed);
 }
+
+#[tokio::test]
+async fn test_executor_completion_summary_with_conversational_phrase() {
+    let h = start_harness().await;
+    // Step 1: Tool call runs
+    h.state
+        .push_turn(tool_call_turn("call_1", "fs.list", r#"{"path":"."}"#));
+    // Step 2: Completion text with conversational phrase
+    h.state.push_turn(completion_turn(
+        "The script has been created and verified. Let me know if you need anything else!",
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run tool and complete with conversational phrase".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(5),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert!(done.summary.contains("created and verified"));
+    assert_eq!(steps.len(), 1);
+}
+
+#[tokio::test]
+async fn test_executor_nudge_exhaustion_completes_if_tools_executed() {
+    let h = start_harness().await;
+    // Turn 1: Run one tool
+    h.state
+        .push_turn(tool_call_turn("call_1", "fs.list", r#"{"path":"."}"#));
+    // Turns 2..7: repeated planning text -> 5 nudges then exhaustion
+    for _ in 0..6 {
+        h.state
+            .push_turn(completion_turn("Let me do another check now"));
+    }
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run tool and exhaust nudges".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(10),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+
+    // Because tool_calls_executed > 0, it finishes as Completed rather than LimitReached
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert_eq!(steps.len(), 1);
+}

@@ -21,5 +21,13 @@ New-Item -ItemType Directory -Force -Path $bin | Out-Null
 foreach ($exe in 'nebula.exe', 'nebula-daemon.exe') {
     Copy-Item -Force (Join-Path $env:CARGO_TARGET_DIR "release\$exe") (Join-Path $bin $exe)
 }
+$tools = 'F:\Nebula\tools'
+New-Item -ItemType Directory -Force -Path $tools | Out-Null
+$targetDevtools = Join-Path $repo 'tools\nebula-devtools'
+$destDevtools = Join-Path $tools 'nebula-devtools'
+if (-not (Test-Path $destDevtools)) {
+    New-Item -ItemType Junction -Path $destDevtools -Target $targetDevtools | Out-Null
+}
+
 Write-Host "Installed to $bin"
 & (Join-Path $bin 'nebula.exe') --version

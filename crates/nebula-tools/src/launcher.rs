@@ -71,7 +71,12 @@ impl ToolLauncher for StdioLauncher {
             server: spec.server.clone(),
             detail,
         };
-        let mut cmd = Command::new(&spec.program);
+        #[cfg(windows)]
+        let program = crate::builtins::resolve_executable(&spec.program.to_string_lossy());
+        #[cfg(not(windows))]
+        let program = spec.program.clone();
+
+        let mut cmd = Command::new(&program);
         cmd.args(&spec.args)
             .envs(spec.env.iter().map(|(k, v)| (k, v)))
             .stdin(Stdio::piped())
