@@ -240,8 +240,17 @@ async fn test_game_mode_detection_loop_and_cooldown() {
     .expect("game mode never activated via detector");
 
     // Verify model is unloaded
-    let model_status: ModelStatus = c.call(Method::ModelStatus(Empty {})).await.unwrap();
-    assert_eq!(model_status.state, ModelState::Unloaded);
+    tokio::time::timeout(TIMEOUT, async {
+        loop {
+            let model_status: ModelStatus = c.call(Method::ModelStatus(Empty {})).await.unwrap();
+            if model_status.state == ModelState::Unloaded {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("model never unloaded after game mode activated");
 
     // Clear game window (game exited)
     h.mock_det.set(None);

@@ -258,10 +258,10 @@ impl GameModeCoordinator {
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = process;
 
-        let _ = self.active_tx.send(true);
-
-        // Unload model to release VRAM
+        // Unload model to release VRAM before marking game mode active
         let _ = chat.unload().await;
+
+        let _ = self.active_tx.send(true);
 
         tracing::info!(
             event = "game_mode.entered",
