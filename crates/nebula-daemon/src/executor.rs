@@ -112,6 +112,10 @@ pub(crate) async fn run_task(
             content: "You are Nebula, an autonomous local AI coding assistant working in an isolated git worktree. \
 Your working directory is the root of the worktree. \
 Inspect files, run commands and tests, edit code, and verify your changes autonomously. \
+Environment & Tools: \
+- System drives: The active repository/worktree is on drive F:. Never touch or reference drive C:. \
+- Available tools: Standard environment tools such as python, git, uv, cargo, and pytest are available in PATH. Run them directly without hardcoded absolute paths. \
+- Filesystem: Always use built-in tools (such as fs.list, fs.read, fs.write) to examine or modify files in the repository rather than shell commands like dir or cat. \
 CRITICAL: You MUST execute tool calls on every step to make progress. Do NOT output conversational plans, status updates, or thoughts without tool calls. If you need to inspect files or run commands, invoke the tools directly. \
 Only provide a final plain-text response without tool calls when the entire task has been fully implemented, verified, and completed.".into(),
         },
@@ -432,12 +436,25 @@ async fn execute_loop(
                 || lower.starts_with("calling tool")
                 || lower.starts_with("invoking tool")
                 || lower.starts_with("executing tool");
-            let is_still_planning = lower.contains("let me ")
+            let has_completion_markers = lower.contains("complete")
+                || lower.contains("created")
+                || lower.contains("implemented")
+                || lower.contains("summary")
+                || lower.contains("finished")
+                || lower.contains("verified")
+                || lower.contains("here is")
+                || lower.contains("in summary");
+            let is_planning_phrase = (lower.contains("let me ")
+                && !lower.contains("let me know")
+                && !lower.contains("let me summarize")
+                && !lower.contains("let me explain"))
                 || lower.contains("i will ")
                 || lower.contains("i'll ")
                 || lower.contains("i need to ")
                 || lower.starts_with("let's ")
                 || lower.contains("next, ");
+            let is_still_planning =
+                is_planning_phrase && !(tool_calls_executed > 0 && has_completion_markers);
             let is_empty = output.text.trim().is_empty();
 
             if (is_still_planning || is_calling_tools || is_empty) && nudge_count < 5 {
@@ -457,6 +474,8 @@ async fn execute_loop(
                     "To invoke a tool, you must emit a structured tool call. If all necessary actions are complete, provide a final plain-text response detailing what was created and verified."
                 } else if is_empty {
                     "Please provide a final summary of what was accomplished, or invoke the appropriate tools to continue the task."
+                } else if tool_calls_executed > 0 {
+                    "If all necessary actions are complete, please provide your final plain-text summary of what was accomplished. Otherwise, continue executing the task using the available tools."
                 } else {
                     "Please proceed with executing the task using the available tools now."
                 };
@@ -468,6 +487,14 @@ async fn execute_loop(
             }
 
             if (is_still_planning || is_calling_tools) && nudge_count >= 5 {
+                if tool_calls_executed > 0 {
+                    tracing::info!(
+                        event = "task.nudge_limit_resolved_as_completed",
+                        text = %output.text,
+                        tool_calls = tool_calls_executed
+                    );
+                    return (TaskStatus::Completed, output.text.trim().to_owned());
+                }
                 tracing::warn!(event = "task.nudge_limit_exhausted", text = %output.text);
                 return (
                     TaskStatus::LimitReached,
