@@ -915,7 +915,7 @@ async fn test_disk_guard_trips_with_fake_low_space() {
     );
     assert!(
         done.summary
-            .contains("below budget (10 GB free < 30 GB budget)"),
+            .contains("below budget (10 GB free < 20 GB budget)"),
         "summary was: {}",
         done.summary
     );

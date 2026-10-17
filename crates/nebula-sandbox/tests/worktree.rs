@@ -198,6 +198,29 @@ async fn create_with_a_bogus_ref_is_unresolvable_and_creates_nothing() {
     mgr.create(&task, repo.path(), None).await.unwrap();
 }
 
+/// In a newly-initialized repository with zero commits, `create` with `None` or `HEAD`
+/// succeeds by creating an orphan branch without requiring a resolvable start point.
+#[tokio::test]
+async fn create_on_an_empty_repo_succeeds_with_orphan_branch() {
+    let repo = TempDir::new().unwrap();
+    git(repo.path(), &["init"]);
+
+    let wt = TempDir::new().unwrap();
+    let mgr = manager(wt.path(), "Q:");
+
+    let task1 = TaskId::new("task-empty-default");
+    let root1 = mgr.create(&task1, repo.path(), None).await.unwrap();
+    assert!(root1.is_dir(), "worktree directory created for task1");
+    let head1 = git_stdout(&root1, &["symbolic-ref", "--short", "HEAD"]);
+    assert_eq!(head1, "nebula/task-empty-default");
+
+    let task2 = TaskId::new("task-empty-head");
+    let root2 = mgr.create(&task2, repo.path(), Some("HEAD")).await.unwrap();
+    assert!(root2.is_dir(), "worktree directory created for task2");
+    let head2 = git_stdout(&root2, &["symbolic-ref", "--short", "HEAD"]);
+    assert_eq!(head2, "nebula/task-empty-head");
+}
+
 /// A pre-existing branch collision maps to [`WorktreeError::BranchExists`], leaves the branch
 /// untouched, and creates no worktree directory (Req 1.5).
 #[tokio::test]

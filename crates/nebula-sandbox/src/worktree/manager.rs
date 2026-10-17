@@ -164,13 +164,32 @@ impl WorktreeManager {
 
         // Resolve the start-point: the supplied ref (unresolvable → UnresolvableRef, nothing
         // created, Req 1.2) or the repository's current HEAD / default-branch HEAD (Req 1.1).
-        let resolved_start = git::rev_parse_verify(repo, start_point.unwrap_or("HEAD")).await?;
+        // If the repository is newly initialized and has no commits, create an orphan worktree.
+        let resolved_start = match start_point {
+            Some(reference) if reference != "HEAD" => {
+                Some(git::rev_parse_verify(repo, reference).await?)
+            }
+            _ => match git::rev_parse_verify(repo, "HEAD").await {
+                Ok(sha) => Some(sha),
+                Err(WorktreeError::UnresolvableRef(_)) => {
+                    if git::repo_has_commits(repo).await? {
+                        return Err(WorktreeError::UnresolvableRef(
+                            start_point.unwrap_or("HEAD").to_owned(),
+                        ));
+                    }
+                    None
+                }
+                Err(e) => return Err(e),
+            },
+        };
 
         // Create the worktree and branch. On failure, clean up any partial directory honouring the
         // Delete_Limit before returning (Requirements 1.7, 1.8). No live assignment is recorded
         // until after a successful add, so any early-return error path below leaves `live` without
         // this `task_id` — a subsequent create for the same id is accepted (Requirement 9.6).
-        if let Err(add_err) = git::worktree_add(repo, &branch, &path, &resolved_start).await {
+        if let Err(add_err) =
+            git::worktree_add(repo, &branch, &path, resolved_start.as_deref()).await
+        {
             // Measure the partial directory and gate its removal against the Delete_Limit
             // (reuses the #28 approval contract via `prepare_delete`). The gate also absorbs a
             // measurement failure as its own error; on measurement failure we retain and surface

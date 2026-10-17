@@ -269,18 +269,19 @@ fn check_disk_guard(shared: &Shared, worktree_root: &Path) -> Result<(), String>
             .unwrap_or(u64::MAX)
     };
 
-    let warn_bytes = guard.warn_gb * GB;
-    if free_bytes < warn_bytes {
+    let block_gb = guard.block_gb.unwrap_or(guard.warn_gb);
+    let block_bytes = block_gb * GB;
+    if free_bytes < block_bytes {
         let free_gb = free_bytes / GB;
         tracing::warn!(
             event = "disk_guard.tripped",
             mount = %guard.mount,
             free_gb = free_gb,
-            warn_gb = guard.warn_gb,
+            block_gb = block_gb,
         );
         return Err(format!(
             "disk guard tripped: free space on {} is below budget ({} GB free < {} GB budget)",
-            guard.mount, free_gb, guard.warn_gb
+            guard.mount, free_gb, block_gb
         ));
     }
 
