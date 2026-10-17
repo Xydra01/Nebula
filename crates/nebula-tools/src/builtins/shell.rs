@@ -172,11 +172,12 @@ fn parse_args(arguments: &serde_json::Value) -> Result<(String, Vec<String>), To
         Some(_) => return Err(invalid("`args` must be an array of strings".to_owned())),
     };
 
-    let command = if args.is_empty() && raw_command.chars().any(char::is_whitespace) {
+    let command = if raw_command.chars().any(char::is_whitespace) {
         if std::path::Path::new(raw_command).exists() {
             raw_command.to_owned()
         } else {
-            let (cmd, parsed_args) = split_command_line(raw_command);
+            let (cmd, mut parsed_args) = split_command_line(raw_command);
+            parsed_args.extend(args);
             args = parsed_args;
             cmd
         }
@@ -558,6 +559,20 @@ mod tests {
             parse_args(&serde_json::json!({ "command": "echo", "args": ["a", "b"] })).unwrap();
         assert_eq!(cmd, "echo");
         assert_eq!(args, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn parse_args_splits_whitespace_in_command_and_prepends_to_args() {
+        let (cmd, args) = parse_args(&serde_json::json!({
+            "command": "python disk_sweeper.py",
+            "args": ["--dry-run"]
+        }))
+        .unwrap();
+        assert_eq!(cmd, "python");
+        assert_eq!(
+            args,
+            vec!["disk_sweeper.py".to_owned(), "--dry-run".to_owned()]
+        );
     }
 
     #[test]

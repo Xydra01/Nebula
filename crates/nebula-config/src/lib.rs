@@ -222,10 +222,10 @@ pub struct ExecutorConfig {
 }
 
 const fn default_max_tool_calls() -> u32 {
-    15
+    50
 }
 const fn default_max_tokens() -> u32 {
-    40960
+    65536
 }
 const fn default_wall_time_secs() -> u64 {
     600

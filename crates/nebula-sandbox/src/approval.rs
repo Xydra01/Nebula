@@ -136,9 +136,17 @@ impl Approval {
     /// approval store (task 4.2).
     #[must_use]
     pub fn authorizes(&self, command: &str, tier: Tier, trace_id: &str) -> bool {
-        (self.scope.command == command || self.scope.command.eq_ignore_ascii_case(command))
+        let norm_cmd = crate::rules::normalize_command(command);
+        let norm_scope = crate::rules::normalize_command(&self.scope.command);
+        (self.scope.command == command
+            || self.scope.command.eq_ignore_ascii_case(command)
+            || norm_cmd == norm_scope
+            || norm_cmd == self.scope.command
+            || norm_scope == command)
             && self.scope.tier == tier
-            && (self.scope.trace_id == trace_id || trace_id == "task")
+            && (self.scope.trace_id == trace_id
+                || trace_id == "task"
+                || self.scope.trace_id == "task")
     }
 }
 

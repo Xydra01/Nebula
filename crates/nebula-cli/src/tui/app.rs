@@ -297,6 +297,17 @@ impl TuiApp {
                     self.streaming_text.push_str(&t.reasoning);
                 }
                 if !t.text.is_empty() {
+                    if t.text.contains("[ERROR]")
+                        && let Some(tc) =
+                            self.tool_calls.iter_mut().find(|tc| tc.status == "running")
+                    {
+                        tc.status = "error".into();
+                    } else if t.text.contains("[OK]")
+                        && let Some(tc) =
+                            self.tool_calls.iter_mut().find(|tc| tc.status == "running")
+                    {
+                        tc.status = "ok".into();
+                    }
                     self.streaming_text.push_str(&t.text);
                 }
                 if self.auto_scroll {
@@ -316,13 +327,13 @@ impl TuiApp {
                     });
                 }
 
-                // Record tool calls
+                // Record tool calls with initial 'running' status
                 for call in &step.tool_calls {
                     self.tool_calls.push_back(ToolCallItem {
                         task_id: step.task_id,
                         step_index: step.step_index,
                         summary: call.clone(),
-                        status: "done".into(),
+                        status: "running".into(),
                     });
                     if self.tool_calls.len() > MAX_TOOL_CALLS {
                         self.tool_calls.pop_front();
@@ -334,8 +345,14 @@ impl TuiApp {
                 } else {
                     step.tool_calls.join(", ")
                 };
+                let prefix =
+                    if self.streaming_text.is_empty() || self.streaming_text.ends_with('\n') {
+                        ""
+                    } else {
+                        "\n"
+                    };
                 self.streaming_text.push_str(&format!(
-                    "\n\n─── Step {} [{}] ───\n",
+                    "{prefix}─── Step {} [{}] ───\n",
                     step.step_index, tools_desc
                 ));
                 if self.auto_scroll {
@@ -355,8 +372,26 @@ impl TuiApp {
                     });
                 }
 
+                // Resolve any tool calls still marked running
+                for tc in self
+                    .tool_calls
+                    .iter_mut()
+                    .filter(|tc| tc.status == "running")
+                {
+                    tc.status = match done.status {
+                        nebula_proto::TaskStatus::Completed => "ok".into(),
+                        _ => "error".into(),
+                    };
+                }
+
+                let prefix =
+                    if self.streaming_text.is_empty() || self.streaming_text.ends_with('\n') {
+                        ""
+                    } else {
+                        "\n"
+                    };
                 self.streaming_text.push_str(&format!(
-                    "\n\n═══ Task Done [{:?}] ═══\n{}\n",
+                    "{prefix}═══ Task Done [{:?}] ═══\n{}\n",
                     done.status, done.summary
                 ));
                 if self.auto_scroll {
@@ -364,8 +399,14 @@ impl TuiApp {
                 }
             }
             Event::ApprovalNeeded(req) => {
+                let prefix =
+                    if self.streaming_text.is_empty() || self.streaming_text.ends_with('\n') {
+                        ""
+                    } else {
+                        "\n"
+                    };
                 self.streaming_text.push_str(&format!(
-                    "\n\n⚠ APPROVAL NEEDED: command '{}' ({})\n",
+                    "{prefix}⚠ APPROVAL NEEDED: command '{}' ({})\n",
                     req.command, req.tier
                 ));
                 if self.auto_scroll {

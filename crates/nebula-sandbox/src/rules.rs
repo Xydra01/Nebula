@@ -268,7 +268,19 @@ impl RulesTable {
 #[must_use]
 pub fn normalize_command(command: &str) -> String {
     let trimmed = command.trim();
-    let last = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    let raw_cmd =
+        if trimmed.contains(char::is_whitespace) && !std::path::Path::new(trimmed).exists() {
+            if let Some(stripped) = trimmed.strip_prefix('"') {
+                stripped.split('"').next().unwrap_or(trimmed)
+            } else if let Some(stripped) = trimmed.strip_prefix('\'') {
+                stripped.split('\'').next().unwrap_or(trimmed)
+            } else {
+                trimmed.split_whitespace().next().unwrap_or(trimmed)
+            }
+        } else {
+            trimmed
+        };
+    let last = raw_cmd.rsplit(['/', '\\']).next().unwrap_or(raw_cmd);
     let base = last.strip_suffix(".exe").unwrap_or(last);
     base.to_ascii_lowercase()
 }
@@ -282,6 +294,11 @@ mod tests {
         assert_eq!(normalize_command(r"C:\Windows\System32\reg.exe"), "reg");
         assert_eq!(normalize_command("/usr/bin/RM"), "rm");
         assert_eq!(normalize_command("  Git  "), "git");
+        assert_eq!(normalize_command("python3 --version"), "python3");
+        assert_eq!(
+            normalize_command(r#""C:\Program Files\Git\bin\git.exe" status"#),
+            "git"
+        );
     }
 
     #[test]

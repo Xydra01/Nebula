@@ -428,12 +428,23 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                 let grant_id = nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
                 let normalized_cmd = nebula_sandbox::rules::normalize_command(&p.command);
                 let scope = nebula_sandbox::approval::ApprovalScope {
-                    command: normalized_cmd,
+                    command: normalized_cmd.clone(),
                     tier,
                     trace_id: trace_str,
                 };
                 let approval = nebula_sandbox::approval::Approval::grant(grant_id, scope);
                 shared.approvals.insert(approval);
+
+                let grant_id_task =
+                    nebula_sandbox::approval::GrantId::new(ulid::Ulid::generate().0);
+                let scope_task = nebula_sandbox::approval::ApprovalScope {
+                    command: normalized_cmd,
+                    tier,
+                    trace_id: "task".into(),
+                };
+                let approval_task =
+                    nebula_sandbox::approval::Approval::grant(grant_id_task, scope_task);
+                shared.approvals.insert(approval_task);
                 to_value(&nebula_proto::ApprovalRespondResponse {
                     success: true,
                     message: format!("Granted approval for command '{}'", p.command),

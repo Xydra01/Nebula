@@ -291,9 +291,9 @@ cpu_rate_percent = 0
 # Autonomous single executor loop (issue #32).
 [executor]
 # Maximum tool calls per task before stopping cleanly as limit_reached.
-max_tool_calls = 15
+max_tool_calls = 50
 # Maximum cumulative model tokens per task across all turns before stopping as limit_reached.
-max_tokens = 40960
+max_tokens = 65536
 # Wall-clock timeout in seconds per task before stopping cleanly as limit_reached.
 wall_time_secs = 600
 # Default chat profile for executor tasks; empty uses the active profile.
@@ -379,7 +379,3 @@ timeout_secs = 5
 approval_url_base = ""
 # Minimum interval in minutes between periodic doctor health checks/alerts.
 doctor_alert_interval_mins = 60
-
-
-
-

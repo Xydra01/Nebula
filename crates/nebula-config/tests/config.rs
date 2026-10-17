@@ -135,8 +135,8 @@ fn all_paths_includes_the_worktrees_dir() {
 #[test]
 fn executor_defaults_load_and_validate() {
     let cfg = NebulaConfig::from_toml(None).unwrap();
-    assert_eq!(cfg.executor.max_tool_calls, 15);
-    assert_eq!(cfg.executor.max_tokens, 40960);
+    assert_eq!(cfg.executor.max_tool_calls, 50);
+    assert_eq!(cfg.executor.max_tokens, 65536);
     assert_eq!(cfg.executor.wall_time_secs, 600);
     assert_eq!(cfg.executor.default_profile, "");
 }
