@@ -1,0 +1,13 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 21,
+  "jsonrpc": "2.0",
+  "method": "language.info",
+  "params": {
+    "language": "python"
+  },
+  "proto_version": 3
+}

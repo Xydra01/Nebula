@@ -39,6 +39,9 @@ pub struct TaskRunArgs {
     /// Do not open a GitHub PR upon task completion.
     #[arg(long, conflicts_with = "pr")]
     pub no_pr: bool,
+    /// Target language module identifier (e.g. "python", "cpp", "sql").
+    #[arg(long = "lang")]
+    pub language: Option<String>,
 }
 
 /// Run an autonomous task to completion, streaming steps.
@@ -66,6 +69,8 @@ pub(crate) async fn run(ctx: &Ctx, args: &TaskRunArgs, out: &mut dyn Write) -> a
         max_tokens: args.max_tokens,
         wall_time_secs: args.wall_time_secs,
         create_pr,
+        language: args.language.clone(),
+        language_config: None,
     };
 
     let started: TaskStarted = c.call(Method::TaskCreate(params)).await?;

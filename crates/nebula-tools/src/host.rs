@@ -298,6 +298,81 @@ impl ToolHost {
         result
     }
 
+    /// Validates `arguments` against `builtin`'s schema, then calls it, enforcing the host's
+    /// per-call timeout and output cap. Emits a `tool.call` event tagged with `trace_id`.
+    ///
+    /// This allows task-scoped tools (such as language module tools) to be called through the
+    /// same standard safeguards and logging without mutating the host registry.
+    ///
+    /// # Errors
+    /// [`ToolError::InvalidArguments`] if the arguments fail schema validation;
+    /// [`ToolError::Unavailable`] if no built-in context is installed;
+    /// [`ToolError::Timeout`] if the call runs past the per-call timeout;
+    /// [`ToolError::OutputTooLarge`] if the result exceeds the cap; or a tool execution error.
+    pub async fn call_builtin(
+        &self,
+        builtin: &Arc<dyn BuiltinTool>,
+        arguments: Value,
+        trace_id: Option<&str>,
+    ) -> Result<ToolCallResult, ToolError> {
+        let started = Instant::now();
+        let outcome = self.call_builtin_inner(builtin, &arguments).await;
+        let (result, output_blob) = match outcome {
+            Ok((result, blob)) => (Ok(result), blob),
+            Err(e) => (Err(e), None),
+        };
+        self.log_call_with_server(
+            builtin.name(),
+            &arguments,
+            &result,
+            output_blob,
+            trace_id,
+            started,
+            Some("builtin"),
+        );
+        result
+    }
+
+    async fn call_builtin_inner(
+        &self,
+        builtin: &Arc<dyn BuiltinTool>,
+        arguments: &Value,
+    ) -> Result<(ToolCallResult, Option<String>), ToolError> {
+        let input_schema = builtin.input_schema();
+        let validator =
+            jsonschema::validator_for(&input_schema).map_err(|e| ToolError::InvalidArguments {
+                tool: builtin.name().to_owned(),
+                detail: e.to_string(),
+            })?;
+        if let Some(error) = validator.iter_errors(arguments).next() {
+            return Err(ToolError::InvalidArguments {
+                tool: builtin.name().to_owned(),
+                detail: error.to_string(),
+            });
+        }
+        let ctx = self
+            .builtin_ctx
+            .as_ref()
+            .ok_or_else(|| ToolError::Unavailable {
+                server: "builtin".to_owned(),
+                detail: "built-in tool context not configured".to_owned(),
+            })?;
+        let call = builtin.call(arguments.clone(), ctx);
+        match tokio::time::timeout(ctx.limits.call_timeout, call).await {
+            Ok(Ok(output)) => enforce_cap(
+                builtin.name(),
+                output,
+                ctx.limits.output_cap,
+                self.blobs.as_ref(),
+            ),
+            Ok(Err(other)) => Err(other),
+            Err(_) => Err(ToolError::Timeout {
+                tool: builtin.name().to_owned(),
+                timeout_ms: duration_ms(ctx.limits.call_timeout),
+            }),
+        }
+    }
+
     async fn call_inner(
         &self,
         tool: &str,
@@ -402,6 +477,28 @@ impl ToolHost {
         trace_id: Option<&str>,
         started: Instant,
     ) {
+        self.log_call_with_server(
+            tool,
+            arguments,
+            result,
+            output_blob,
+            trace_id,
+            started,
+            None,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn log_call_with_server(
+        &self,
+        tool: &str,
+        arguments: &Value,
+        result: &Result<ToolCallResult, ToolError>,
+        output_blob: Option<String>,
+        trace_id: Option<&str>,
+        started: Instant,
+        server_override: Option<&str>,
+    ) {
         let put = |v: &Value| -> Option<String> {
             let blobs = self.blobs.as_ref()?;
             let bytes = serde_json::to_vec(v).ok()?;
@@ -414,7 +511,7 @@ impl ToolHost {
             }
         };
         let args_blob = put(arguments);
-        let server = self.tools.get(tool).map(tool_owner);
+        let server = server_override.or_else(|| self.tools.get(tool).map(tool_owner));
         let wall_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         // `output_blob` is the full-output blob computed by `enforce_cap` when the output was
         // capped; it is already the preserved full output, so it is not re-`put` here. For
@@ -635,6 +732,29 @@ mod tests {
             invoked.load(Ordering::SeqCst),
             "the built-in's call must have run"
         );
+    }
+
+    #[tokio::test]
+    async fn call_builtin_executes_dynamic_tool() {
+        let mut host = ToolHost::empty();
+        host.set_builtin_context(test_ctx());
+        let invoked = Arc::new(AtomicBool::new(false));
+        let tool: Arc<dyn BuiltinTool> = Arc::new(FakeEcho {
+            invoked: Arc::clone(&invoked),
+        });
+
+        let result = host
+            .call_builtin(
+                &tool,
+                json!({ "message": "dynamic" }),
+                Some("trace-dynamic"),
+            )
+            .await
+            .expect("calling dynamic builtin should succeed");
+
+        assert!(!result.is_error);
+        assert_eq!(result.content[0]["text"], "dynamic");
+        assert!(invoked.load(Ordering::SeqCst));
     }
 
     /// Req 1.5: arguments are validated against the schema before dispatch — a missing required

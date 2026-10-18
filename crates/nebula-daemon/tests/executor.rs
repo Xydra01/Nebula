@@ -280,6 +280,8 @@ async fn test_executor_completes_without_tools() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -314,6 +316,8 @@ async fn test_executor_tool_call_limit_reached() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -368,6 +372,8 @@ async fn test_executor_token_budget_exhausted() {
             max_tokens: Some(100),
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -402,6 +408,8 @@ async fn test_executor_wall_clock_timeout() {
             max_tokens: None,
             wall_time_secs: Some(1),
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -433,6 +441,8 @@ async fn test_executor_cancellation() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -505,6 +515,8 @@ async fn test_phase1_exit_criterion_fixes_failing_test() {
             max_tokens: Some(5000),
             wall_time_secs: Some(30),
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -566,6 +578,8 @@ async fn test_real_model_fixes_failing_test() {
             max_tokens: Some(5000),
             wall_time_secs: Some(120),
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -597,6 +611,8 @@ async fn test_circuit_breaker_repeated_tool_failure() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -639,6 +655,8 @@ async fn test_circuit_breaker_repeated_file_edits() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -697,6 +715,8 @@ async fn test_circuit_breaker_runaway_tokens() {
             max_tokens: Some(50000),
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -739,6 +759,8 @@ async fn test_global_stop_terminates_all_tasks_within_two_seconds() {
             max_tokens: None,
             wall_time_secs: Some(120),
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -902,6 +924,8 @@ async fn test_disk_guard_trips_with_fake_low_space() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -946,6 +970,8 @@ async fn test_refuse_writes_to_retired_drive() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -975,6 +1001,8 @@ async fn test_executor_events_broadcast_to_observer_client() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();
@@ -1029,6 +1057,8 @@ async fn test_executor_approval_pause_and_resume() {
             max_tokens: None,
             wall_time_secs: None,
             create_pr: None,
+            language: None,
+            language_config: None,
         }))
         .await
         .unwrap();

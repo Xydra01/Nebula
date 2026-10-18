@@ -520,6 +520,32 @@ async fn handle(shared: Arc<Shared>, req: Request, tx: Outbox, conn: Cancellatio
                     })
                 })
         }
+        Method::LanguageList(Empty {}) => {
+            let languages = shared.languages.list();
+            to_value(&nebula_proto::LanguageListResponse { languages })
+        }
+        Method::LanguageInfo(nebula_proto::LanguageInfoParams { language }) => {
+            match shared.languages.get(&language) {
+                Some(module) => {
+                    let metadata = module.metadata();
+                    let tools = module
+                        .tools()
+                        .into_iter()
+                        .map(|t| ToolInfo {
+                            server: format!("language_{}", module.id()),
+                            name: t.name().to_string(),
+                            description: t.description().map(ToOwned::to_owned),
+                            input_schema: t.input_schema(),
+                        })
+                        .collect();
+                    to_value(&nebula_proto::LanguageInfoResponse { metadata, tools })
+                }
+                None => Err(RpcError::new(
+                    error_code::NOT_FOUND,
+                    format!("unknown language module: {language}"),
+                )),
+            }
+        }
     };
     let _ = tx.send(reply(id, result)).await;
 }

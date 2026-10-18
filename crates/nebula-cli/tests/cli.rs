@@ -3,8 +3,8 @@
 use clap::Parser;
 use nebula_cli::format::{self, Style};
 use nebula_cli::{
-    BackupAction, ChatArgs, Cli, Command, DaemonAction, GameModeAction, Level, LogsAction,
-    ModelAction, NotifyAction, Reasoning, TaskAction, TaskRunArgs, doctor_exit_code,
+    BackupAction, ChatArgs, Cli, Command, DaemonAction, GameModeAction, LangAction, Level,
+    LogsAction, ModelAction, NotifyAction, Reasoning, TaskAction, TaskRunArgs, doctor_exit_code,
 };
 use nebula_config::NebulaConfig;
 use nebula_proto::{
@@ -125,6 +125,7 @@ fn parses_every_command() {
                 wall_time_secs,
                 pr,
                 no_pr,
+                language,
             }),
     } = parse(&[
         "task",
@@ -156,6 +157,15 @@ fn parses_every_command() {
     assert_eq!(wall_time_secs, Some(60));
     assert!(!pr);
     assert!(!no_pr);
+    assert_eq!(language, None);
+
+    let Command::Task {
+        action: TaskAction::Run(TaskRunArgs { language, .. }),
+    } = parse(&["task", "run", "python task", "--lang", "python"]).command
+    else {
+        panic!("not task run with lang");
+    };
+    assert_eq!(language.as_deref(), Some("python"));
 
     let Command::Task {
         action: TaskAction::Run(TaskRunArgs { pr, no_pr, .. }),
@@ -240,6 +250,30 @@ fn parses_every_command() {
         panic!("not notify test");
     };
     assert!(message.is_none());
+
+    assert!(matches!(
+        parse(&["lang"]).command,
+        Command::Lang { action: None }
+    ));
+    assert!(matches!(
+        parse(&["lang", "list"]).command,
+        Command::Lang {
+            action: Some(LangAction::List)
+        }
+    ));
+    assert!(matches!(
+        parse(&["language", "list"]).command,
+        Command::Lang {
+            action: Some(LangAction::List)
+        }
+    ));
+    let Command::Lang {
+        action: Some(LangAction::Info { language }),
+    } = parse(&["lang", "info", "python"]).command
+    else {
+        panic!("not lang info");
+    };
+    assert_eq!(language, "python");
 
     assert!(matches!(parse(&["tui"]).command, Command::Tui));
 }
@@ -449,6 +483,52 @@ fn snapshot_notify_formatting() {
     let lines = [
         format::notify_status(&disabled, Style::PLAIN),
         format::notify_status(&enabled, Style::PLAIN),
+    ];
+    insta::assert_snapshot!(lines.join("---\n"));
+}
+
+#[test]
+fn snapshot_language_formatting() {
+    let list = nebula_proto::LanguageListResponse {
+        languages: vec![
+            nebula_proto::LanguageMetadata {
+                id: "polyglot".into(),
+                display_name: "Generic / Polyglot".into(),
+                description: "Standard environment with basic tools".into(),
+                supported_versions: Vec::new(),
+                default_version: None,
+            },
+            nebula_proto::LanguageMetadata {
+                id: "python".into(),
+                display_name: "Python (uv-managed)".into(),
+                description: "Python development with uv virtual environments".into(),
+                supported_versions: vec!["3.11".into(), "3.12".into()],
+                default_version: Some("3.12".into()),
+            },
+        ],
+    };
+    let info = nebula_proto::LanguageInfoResponse {
+        metadata: nebula_proto::LanguageMetadata {
+            id: "python".into(),
+            display_name: "Python (uv-managed)".into(),
+            description: "Python development with uv virtual environments".into(),
+            supported_versions: vec!["3.11".into(), "3.12".into()],
+            default_version: Some("3.12".into()),
+        },
+        tools: vec![nebula_proto::ToolInfo {
+            server: "language_python".into(),
+            name: "python.run".into(),
+            description: Some("Run a script in the venv".into()),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "script": { "type": "string" } },
+                "required": ["script"]
+            }),
+        }],
+    };
+    let lines = [
+        format::language_list(&list, Style::PLAIN),
+        format::language_info(&info, Style::PLAIN),
     ];
     insta::assert_snapshot!(lines.join("---\n"));
 }

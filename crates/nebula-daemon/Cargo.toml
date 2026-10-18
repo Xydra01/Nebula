@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 futures-util.workspace = true
 nebula-config.workspace = true
 nebula-model.workspace = true

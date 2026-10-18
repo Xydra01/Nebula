@@ -182,6 +182,8 @@ fn requests() {
                     max_tokens: Some(40960),
                     wall_time_secs: Some(600),
                     create_pr: None,
+                    language: None,
+                    language_config: None,
                 }),
             ),
         ),
@@ -232,6 +234,19 @@ fn requests() {
                     command: "git push origin main".into(),
                     tier: "System".into(),
                     reason: Some("User approved via TUI".into()),
+                }),
+            ),
+        ),
+        (
+            "req_language_list",
+            request(20, Method::LanguageList(Empty {})),
+        ),
+        (
+            "req_language_info",
+            request(
+                21,
+                Method::LanguageInfo(LanguageInfoParams {
+                    language: "python".into(),
                 }),
             ),
         ),
@@ -412,6 +427,62 @@ fn responses() {
                 &ApprovalRespondResponse {
                     success: true,
                     message: "Approval granted for command 'git push origin main'".into(),
+                },
+            )
+            .unwrap(),
+        ),
+        (
+            "res_language_list",
+            Response::ok(
+                id(20),
+                &LanguageListResponse {
+                    languages: vec![
+                        LanguageMetadata {
+                            id: "cpp".into(),
+                            display_name: "C++ (MSVC / Clang / GCC)".into(),
+                            description:
+                                "Native C++ development with compiler toolchains and CMake".into(),
+                            supported_versions: vec!["c++17".into(), "c++20".into()],
+                            default_version: Some("c++20".into()),
+                        },
+                        LanguageMetadata {
+                            id: "python".into(),
+                            display_name: "Python (uv-managed)".into(),
+                            description:
+                                "Python development with uv virtual environments and tools".into(),
+                            supported_versions: vec!["3.10".into(), "3.11".into(), "3.12".into()],
+                            default_version: Some("3.12".into()),
+                        },
+                    ],
+                },
+            )
+            .unwrap(),
+        ),
+        (
+            "res_language_info",
+            Response::ok(
+                id(21),
+                &LanguageInfoResponse {
+                    metadata: LanguageMetadata {
+                        id: "python".into(),
+                        display_name: "Python (uv-managed)".into(),
+                        description: "Python development with uv virtual environments and tools"
+                            .into(),
+                        supported_versions: vec!["3.10".into(), "3.11".into(), "3.12".into()],
+                        default_version: Some("3.12".into()),
+                    },
+                    tools: vec![ToolInfo {
+                        server: "language_python".into(),
+                        name: "python_run".into(),
+                        description: Some(
+                            "Run a python script in the task virtual environment".into(),
+                        ),
+                        input_schema: json!({
+                            "type": "object",
+                            "properties": { "script": { "type": "string" } },
+                            "required": ["script"],
+                        }),
+                    }],
                 },
             )
             .unwrap(),

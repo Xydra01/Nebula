@@ -106,8 +106,27 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<NotifyAction>,
     },
+    /// Inspect registered language modules.
+    #[command(alias = "language")]
+    Lang {
+        /// Action. Defaults to list if omitted.
+        #[command(subcommand)]
+        action: Option<LangAction>,
+    },
     /// Interactive terminal UI for live monitoring and approvals.
     Tui,
+}
+
+/// `nebula lang ...`.
+#[derive(Debug, Subcommand)]
+pub enum LangAction {
+    /// List all registered language modules.
+    List,
+    /// Show details and tools for a specific language module.
+    Info {
+        /// Language module identifier (e.g. "python", "cpp", "sql").
+        language: String,
+    },
 }
 
 /// `nebula notify ...`.
@@ -378,11 +397,41 @@ pub async fn run(
             NotifyAction::Status => notify_status(ctx, out).await,
             NotifyAction::Test { message } => notify_test(ctx, message, out).await,
         },
+        Command::Lang { action } => match action.unwrap_or(LangAction::List) {
+            LangAction::List => lang_list(ctx, out).await,
+            LangAction::Info { language } => lang_info(ctx, &language, out).await,
+        },
         Command::Tui => {
             tui::run_tui(&ctx.pipe).await?;
             Ok(0)
         }
     }
+}
+
+async fn lang_list(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let res: nebula_proto::LanguageListResponse = c.call(Method::LanguageList(Empty {})).await?;
+    if ctx.json {
+        emit_json(out, &res)?;
+    } else {
+        write!(out, "{}", format::language_list(&res, ctx.style))?;
+    }
+    Ok(0)
+}
+
+async fn lang_info(ctx: &Ctx, language: &str, out: &mut dyn Write) -> anyhow::Result<u8> {
+    let mut c = connect(ctx).await?;
+    let res: nebula_proto::LanguageInfoResponse = c
+        .call(Method::LanguageInfo(nebula_proto::LanguageInfoParams {
+            language: language.to_string(),
+        }))
+        .await?;
+    if ctx.json {
+        emit_json(out, &res)?;
+    } else {
+        write!(out, "{}", format::language_info(&res, ctx.style))?;
+    }
+    Ok(0)
 }
 
 async fn notify_status(ctx: &Ctx, out: &mut dyn Write) -> anyhow::Result<u8> {
