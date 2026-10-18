@@ -1,0 +1,40 @@
+---
+source: crates/nebula-proto/tests/messages.rs
+expression: value
+---
+{
+  "id": 21,
+  "jsonrpc": "2.0",
+  "proto_version": 3,
+  "result": {
+    "metadata": {
+      "default_version": "3.12",
+      "description": "Python development with uv virtual environments and tools",
+      "display_name": "Python (uv-managed)",
+      "id": "python",
+      "supported_versions": [
+        "3.10",
+        "3.11",
+        "3.12"
+      ]
+    },
+    "tools": [
+      {
+        "description": "Run a python script in the task virtual environment",
+        "input_schema": {
+          "properties": {
+            "script": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "script"
+          ],
+          "type": "object"
+        },
+        "name": "python_run",
+        "server": "language_python"
+      }
+    ]
+  }
+}

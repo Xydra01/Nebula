@@ -1,0 +1,16 @@
+---
+source: crates/nebula-cli/tests/cli.rs
+expression: "lines.join(\"---\\n\")"
+---
+ID           NAME                     DESCRIPTION
+polyglot     Generic / Polyglot       Standard environment with basic tools
+python       Python (uv-managed)      Python development with uv virtual environments
+---
+Language:     Python (uv-managed)
+ID:           python
+Description:  Python development with uv virtual environments
+Default Ver:  3.12
+Supported:    3.11, 3.12
+
+Tools (1):
+  - python.run           Run a script in the venv

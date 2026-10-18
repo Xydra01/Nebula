@@ -4,6 +4,7 @@
 //! achieved, a limit is reached, or the task is cancelled. Runs inside the task's
 //! isolated git worktree and Windows Job Object.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
@@ -25,6 +26,7 @@ use tracing::Instrument;
 
 use crate::Shared;
 use crate::circuit_breaker::CircuitBreakerTracker;
+use crate::language::ProvisionContext;
 
 const DEFAULT_STEP_MAX_TOKENS: u32 = 16384;
 
@@ -105,15 +107,145 @@ pub(crate) async fn run_task(
         .wall_time_secs
         .unwrap_or(shared.config.executor.wall_time_secs);
 
-    // 4. Seed conversation
-    let mut messages = vec![
-        ChatMessage {
-            role: Role::System,
-            content: "You are Nebula, an autonomous local AI coding assistant working in an isolated git worktree. \
+    // 4. Resolve Language Module (explicit or auto-detected)
+    let lang_module = if let Some(ref lang_id) = params.language {
+        match shared.languages.get(lang_id) {
+            Some(m) => Some(m),
+            None => {
+                let summary = format!("unknown language module: {lang_id}");
+                tracing::error!(event = "task.language_not_found", language = %lang_id);
+                let _ = shared.worktrees.finalize(&wt_task_id).await;
+                shared.notifications.notify_task_done(
+                    &task_id,
+                    &TaskStatus::Failed,
+                    &summary,
+                    &trace_id,
+                );
+                let done_ev = Event::TaskDone(TaskDone {
+                    task_id,
+                    status: TaskStatus::Failed,
+                    summary,
+                });
+                shared.emit_event(done_ev);
+                return;
+            }
+        }
+    } else {
+        let detected = shared.languages.detect(&worktree_root).await;
+        if let Some(ref m) = detected {
+            tracing::info!(
+                event = "language.detected",
+                language = %m.id(),
+                repo = %worktree_root.display()
+            );
+        }
+        detected
+    };
+
+    // 5. Provision Hermetic Environment
+    if let Some(ref module) = lang_module {
+        let prov_ctx = ProvisionContext {
+            task_id: &task_id,
+            worktree_root: &worktree_root,
+            task_job: Some(&task_job),
+            language_config: params.language_config.as_ref(),
+            trace_id: &trace_id,
+        };
+        let prov_started = std::time::Instant::now();
+        if let Err(e) = module.provision(&prov_ctx).await {
+            tracing::error!(event = "language.provision_failed", error = %e);
+            let _ = shared.worktrees.finalize(&wt_task_id).await;
+            let summary = format!("language module provisioning failed: {e}");
+            shared.notifications.notify_task_done(
+                &task_id,
+                &TaskStatus::Failed,
+                &summary,
+                &trace_id,
+            );
+            let done_ev = Event::TaskDone(TaskDone {
+                task_id,
+                status: TaskStatus::Failed,
+                summary,
+            });
+            shared.emit_event(done_ev);
+            return;
+        }
+        tracing::info!(
+            event = "language.provisioned",
+            language = %module.id(),
+            duration_ms = prov_started.elapsed().as_millis()
+        );
+    }
+
+    // 6. Check tool collisions and prepare language tools
+    let language_tools: Vec<Arc<dyn nebula_tools::BuiltinTool>> =
+        lang_module.as_ref().map(|m| m.tools()).unwrap_or_default();
+
+    let existing_tool_names: HashSet<String> = shared
+        .tool_host
+        .list_tools()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+
+    for lt in &language_tools {
+        if existing_tool_names.contains(lt.name()) {
+            let summary = format!(
+                "tool name collision: language module tool '{}' collides with existing tool",
+                lt.name()
+            );
+            tracing::error!(event = "task.tool_collision", tool = %lt.name());
+            let _ = shared.worktrees.finalize(&wt_task_id).await;
+            shared.notifications.notify_task_done(
+                &task_id,
+                &TaskStatus::Failed,
+                &summary,
+                &trace_id,
+            );
+            let done_ev = Event::TaskDone(TaskDone {
+                task_id,
+                status: TaskStatus::Failed,
+                summary,
+            });
+            shared.emit_event(done_ev);
+            return;
+        }
+    }
+
+    // 7. Seed conversation
+    let mut system_prompt = String::from(
+        "You are Nebula, an autonomous local AI coding assistant working in an isolated git worktree. \
 Your working directory is the root of the worktree. \
 Inspect files, run commands and tests, edit code, and verify your changes autonomously. \
 CRITICAL: You MUST execute tool calls on every step to make progress. Do NOT output conversational plans, status updates, or thoughts without tool calls. If you need to inspect files or run commands, invoke the tools directly. \
-Only provide a final plain-text response without tool calls when the entire task has been fully implemented, verified, and completed.".into(),
+Only provide a final plain-text response without tool calls when the entire task has been fully implemented, verified, and completed.",
+    );
+
+    if let Some(ref module) = lang_module {
+        let prov_ctx = ProvisionContext {
+            task_id: &task_id,
+            worktree_root: &worktree_root,
+            task_job: Some(&task_job),
+            language_config: params.language_config.as_ref(),
+            trace_id: &trace_id,
+        };
+        let guidelines = module.prompt_guidelines(&prov_ctx);
+        if !guidelines.is_empty() {
+            system_prompt.push_str("\n\n--- Language Guidelines (");
+            system_prompt.push_str(module.id());
+            system_prompt.push_str(") ---\n");
+            for g in guidelines {
+                system_prompt.push_str("- ");
+                system_prompt.push_str(&g);
+                system_prompt.push('\n');
+            }
+        }
+    }
+
+    let mut messages = vec![
+        ChatMessage {
+            role: Role::System,
+            content: system_prompt,
         },
         ChatMessage {
             role: Role::User,
@@ -131,6 +263,8 @@ Only provide a final plain-text response without tool calls when the entire task
             max_tool_calls,
             max_tokens,
             token: &token,
+            language_tools: &language_tools,
+            language_id: lang_module.as_ref().map(|m| m.id()),
         },
         &mut messages,
     );
@@ -147,8 +281,34 @@ Only provide a final plain-text response without tool calls when the entire task
             }
         };
 
-    // 5. Cleanup and finalization
+    // 8. Cleanup and finalization
     drop(task_job);
+
+    if status == TaskStatus::Completed
+        && let Some(ref module) = lang_module
+    {
+        let prov_ctx = ProvisionContext {
+            task_id: &task_id,
+            worktree_root: &worktree_root,
+            task_job: None,
+            language_config: params.language_config.as_ref(),
+            trace_id: &trace_id,
+        };
+        match module.finalize(&prov_ctx).await {
+            Ok(report) => {
+                tracing::info!(
+                    event = "language.finalized",
+                    language = %module.id(),
+                    success = report.success,
+                    summary = %report.summary,
+                    artifacts_count = report.artifacts.len()
+                );
+            }
+            Err(e) => {
+                tracing::warn!(event = "language.finalize_failed", error = %e);
+            }
+        }
+    }
 
     if status == TaskStatus::Completed || status == TaskStatus::LimitReached {
         commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
@@ -227,6 +387,8 @@ struct LoopContext<'a> {
     max_tool_calls: u32,
     max_tokens: u32,
     token: &'a CancellationToken,
+    language_tools: &'a [Arc<dyn nebula_tools::BuiltinTool>],
+    language_id: Option<&'a str>,
 }
 
 fn normalize_mount_path(p: &Path) -> String {
@@ -312,7 +474,15 @@ async fn execute_loop(
         }
 
         // List tools and convert to OpenAI function schemas
-        let descriptors = ctx.shared.tool_host.list_tools();
+        let mut descriptors = ctx.shared.tool_host.list_tools();
+        for lt in ctx.language_tools {
+            descriptors.push(nebula_tools::ToolDescriptor {
+                server: format!("language_{}", ctx.language_id.unwrap_or("module")),
+                name: lt.name().to_string(),
+                description: lt.description().map(ToOwned::to_owned),
+                input_schema: lt.input_schema(),
+            });
+        }
         let tools: Vec<Value> = descriptors
             .into_iter()
             .map(|t| {
@@ -557,15 +727,32 @@ async fn execute_loop(
             let (mut result_content, mut is_error) = if let Some(err_msg) = parse_error {
                 (format!("[tool error] {err_msg}"), true)
             } else {
+                let lang_tool = ctx
+                    .language_tools
+                    .iter()
+                    .find(|t| t.name() == call.name)
+                    .cloned();
+
                 let call_res = CURRENT_WORKTREE
                     .scope(
                         Some(ctx.worktree_root.to_path_buf()),
                         CURRENT_TASK_JOB.scope(
                             Some(Arc::clone(ctx.task_job)),
-                            ctx.shared
-                                .tool_host
-                                .call(&call.name, args.clone(), Some(&trace_str))
-                                .instrument(tracing::info_span!("task", trace_id = %trace_str)),
+                            async {
+                                if let Some(ref lt) = lang_tool {
+                                    ctx.shared
+                                        .tool_host
+                                        .call_builtin(lt, args.clone(), Some(&trace_str))
+                                        .instrument(tracing::info_span!("task.lang_tool", trace_id = %trace_str))
+                                        .await
+                                } else {
+                                    ctx.shared
+                                        .tool_host
+                                        .call(&call.name, args.clone(), Some(&trace_str))
+                                        .instrument(tracing::info_span!("task", trace_id = %trace_str))
+                                        .await
+                                }
+                            },
                         ),
                     )
                     .await;

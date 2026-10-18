@@ -59,6 +59,7 @@ Binaries: `nebula.exe` (from `nebula-cli`) and `nebula-daemon.exe` (from `nebula
 | Game mode detection & GPU yielding | `crates/nebula-daemon/src/game_mode.rs`, Win32 foreground detector in `crates/nebula-daemon/src/win.rs`, executor pause in `crates/nebula-daemon/src/executor.rs`, CLI in `crates/nebula-cli/src/lib.rs` (`nebula game-mode`, `nebula resume`); config in `[game_mode]` |
 | Push notifications over Tailscale (ntfy) | `crates/nebula-daemon/src/notifications.rs`, CLI in `crates/nebula-cli/src/lib.rs` (`nebula notify`), config in `[notifications]` |
 | Terminal user interface (TUI) | `crates/nebula-cli/src/tui/` (`app.rs`, `ui.rs`, `event.rs`, `terminal.rs`), headless snapshot tests in `crates/nebula-cli/tests/tui.rs` |
+| Dedicated Language Modules & dynamic tools | `crates/nebula-daemon/src/language/` (`LanguageModule` trait, `LanguageRegistry`, `PolyglotModule`), task-scoped dynamic tools in `crates/nebula-tools/src/host.rs` (`call_builtin`), CLI in `crates/nebula-cli/src/lib.rs` (`nebula lang list`, `nebula lang info`) |
 
 ### Per-task worktree
 

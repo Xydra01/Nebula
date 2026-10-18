@@ -13,6 +13,7 @@ pub mod client;
 pub(crate) mod executor;
 pub mod game_mode;
 pub mod github;
+pub mod language;
 pub mod notifications;
 mod server;
 pub mod win;
@@ -114,6 +115,7 @@ pub(crate) struct Shared {
     pub(crate) task_events: tokio::sync::broadcast::Sender<nebula_proto::Event>,
     pub(crate) approval_responses:
         tokio::sync::broadcast::Sender<nebula_proto::ApprovalRespondParams>,
+    pub(crate) languages: Arc<language::LanguageRegistry>,
 }
 
 impl Shared {
@@ -242,6 +244,7 @@ pub fn start(config: NebulaConfig, deps: Deps) -> Result<Daemon, DaemonError> {
         approvals: Arc::clone(&approvals),
         task_events,
         approval_responses,
+        languages: Arc::new(language::LanguageRegistry::with_defaults()),
     });
 
     // Background monitor for game mode detection and GPU yielding
@@ -343,6 +346,12 @@ impl Daemon {
     /// Asks the daemon to shut down (same as `daemon.shutdown`).
     pub fn request_shutdown(&self) {
         self.shared.shutdown.cancel();
+    }
+
+    /// Reference to the daemon's language module registry.
+    #[must_use]
+    pub fn languages(&self) -> &Arc<language::LanguageRegistry> {
+        &self.shared.languages
     }
 
     /// Resolves once shutdown has been requested.

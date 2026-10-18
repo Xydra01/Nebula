@@ -308,3 +308,60 @@ pub fn notify_status(s: &NotifyStatusResponse, style: Style) -> String {
     }
     out
 }
+
+/// The lines printed for language list.
+#[must_use]
+pub fn language_list(res: &nebula_proto::LanguageListResponse, style: Style) -> String {
+    if res.languages.is_empty() {
+        return "No language modules registered.\n".to_owned();
+    }
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "{:<12} {:<24} {}",
+        style.bold("ID"),
+        style.bold("NAME"),
+        style.bold("DESCRIPTION")
+    );
+    for lang in &res.languages {
+        let _ = writeln!(
+            out,
+            "{:<12} {:<24} {}",
+            lang.id, lang.display_name, lang.description
+        );
+    }
+    out
+}
+
+/// The lines printed for language info.
+#[must_use]
+pub fn language_info(res: &nebula_proto::LanguageInfoResponse, style: Style) -> String {
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "Language:     {}",
+        style.bold(&res.metadata.display_name)
+    );
+    let _ = writeln!(out, "ID:           {}", res.metadata.id);
+    let _ = writeln!(out, "Description:  {}", res.metadata.description);
+    if let Some(default_ver) = &res.metadata.default_version {
+        let _ = writeln!(out, "Default Ver:  {default_ver}");
+    }
+    if !res.metadata.supported_versions.is_empty() {
+        let _ = writeln!(
+            out,
+            "Supported:    {}",
+            res.metadata.supported_versions.join(", ")
+        );
+    }
+    let _ = writeln!(out, "\nTools ({}):", res.tools.len());
+    if res.tools.is_empty() {
+        let _ = writeln!(out, "  (none)");
+    } else {
+        for tool in &res.tools {
+            let desc = tool.description.as_deref().unwrap_or("(no description)");
+            let _ = writeln!(out, "  - {:<20} {}", style.bold(&tool.name), desc);
+        }
+    }
+    out
+}

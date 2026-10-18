@@ -25,7 +25,8 @@ pub use events::{
 pub use ids::{ChatId, SpanId, StepId, TaskId, TraceId};
 pub use methods::{
     ApprovalRespondParams, ApprovalRespondResponse, ChatCancelParams, ChatStartParams, ChatStarted,
-    DaemonStatus, Empty, GameModeSetParams, GameModeStatusResponse, LogsSubscribeParams, Method,
+    DaemonStatus, Empty, GameModeSetParams, GameModeStatusResponse, LanguageInfoParams,
+    LanguageInfoResponse, LanguageListResponse, LanguageMetadata, LogsSubscribeParams, Method,
     ModelSetProfileParams, NotifyStatusResponse, NotifyTestParams, NotifyTestResponse,
     TaskCancelParams, TaskCreateParams, TaskStarted, TaskStopAllParams, TaskStopAllResponse,
     ToolCallOutcome, ToolInfo, ToolList, ToolsCallParams,

@@ -76,11 +76,17 @@ pub enum Method {
     /// Respond to an approval request (approve or deny). Result: [`ApprovalRespondResponse`].
     #[serde(rename = "approval.respond")]
     ApprovalRespond(ApprovalRespondParams),
+    /// List all registered language modules. Result: [`LanguageListResponse`].
+    #[serde(rename = "language.list")]
+    LanguageList(Empty),
+    /// Get metadata and tools for a specific language module. Result: [`LanguageInfoResponse`].
+    #[serde(rename = "language.info")]
+    LanguageInfo(LanguageInfoParams),
 }
 
 impl Method {
     /// Every method name, in declaration order.
-    pub const NAMES: [&'static str; 19] = [
+    pub const NAMES: [&'static str; 21] = [
         "daemon.status",
         "daemon.shutdown",
         "chat.start",
@@ -100,6 +106,8 @@ impl Method {
         "notify.status",
         "notify.test",
         "approval.respond",
+        "language.list",
+        "language.info",
     ];
 
     /// The JSON-RPC method name, e.g. `chat.start`.
@@ -125,6 +133,8 @@ impl Method {
             Self::NotifyStatus(_) => "notify.status",
             Self::NotifyTest(_) => "notify.test",
             Self::ApprovalRespond(_) => "approval.respond",
+            Self::LanguageList(_) => "language.list",
+            Self::LanguageInfo(_) => "language.info",
         }
     }
 }
@@ -255,7 +265,7 @@ pub struct ToolCallOutcome {
 }
 
 /// Parameters of `task.create`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskCreateParams {
     /// What the executor should accomplish.
@@ -280,6 +290,12 @@ pub struct TaskCreateParams {
     /// Whether to open a GitHub PR upon task completion; defaults to config if None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub create_pr: Option<bool>,
+    /// Target language module identifier (e.g. "python", "cpp", "sql").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    /// Optional language-specific configuration options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language_config: Option<Value>,
 }
 
 /// Initial response to `task.create`, returned before any `task.*` events stream.
@@ -400,4 +416,48 @@ pub struct ApprovalRespondResponse {
     pub success: bool,
     /// Status message.
     pub message: String,
+}
+
+/// Metadata describing a registered language module.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LanguageMetadata {
+    /// Unique identifier (e.g. "python", "cpp", "sql", "rust").
+    pub id: String,
+    /// Human-readable display name.
+    pub display_name: String,
+    /// Short summary of module capabilities.
+    pub description: String,
+    /// Supported runtime versions (e.g. ["3.10", "3.11", "3.12"]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supported_versions: Vec<String>,
+    /// Default version if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_version: Option<String>,
+}
+
+/// Result of `language.list`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LanguageListResponse {
+    /// Every registered language module, sorted by ID.
+    pub languages: Vec<LanguageMetadata>,
+}
+
+/// Parameters of `language.info`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LanguageInfoParams {
+    /// Language module ID (e.g. "python").
+    pub language: String,
+}
+
+/// Result of `language.info`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LanguageInfoResponse {
+    /// Metadata for the language module.
+    pub metadata: LanguageMetadata,
+    /// Tools exposed by this language module.
+    pub tools: Vec<ToolInfo>,
 }
