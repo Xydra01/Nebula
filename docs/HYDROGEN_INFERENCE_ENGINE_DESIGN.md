@@ -367,21 +367,29 @@ When an agent invokes a long-running command (e.g., `cargo test`, which takes 5�
            throw std::runtime_error("WDDM pinned memory allocation failed: insufficient physically lockable RAM");
        }
        ```
-     - *Uniform Page Slot Addressing*: The slabs are partitioned into $3,355,440$ uniform 1,280-byte slots (`UniformPageBlock`) and managed via a lock-free bitmask allocator (`std::atomic<uint64_t> bitmap[]`). For multi-slab layouts, virtual addresses are resolved via a two-level index:
-       ```cpp
-       inline void* get_slot_ptr(uint32_t slot_id) {
-           uint32_t slab_idx = slot_id / SLOTS_PER_SLAB;
-           uint32_t slot_offset = slot_id % SLOTS_PER_SLAB;
-           return static_cast<uint8_t*>(pinned_slabs[slab_idx]) + (slot_offset * sizeof(UniformPageBlock));
-       }
-       ```
-       Because division and modulo by compile-time integer constants are compiled by MSVC into single multiplication-by-reciprocal operations (`imul`), address translation executes in **$< 1\text{ ns}$**, incurring zero runtime overhead relative to a single contiguous pointer offset.
+     - *Uniform Page Slot Addressing & L3 Cache-Line Alignment*:
+       - The slabs are partitioned into $3,355,440$ uniform 1,280-byte slots (`UniformPageBlock`) and managed via a lock-free bitmask allocator (`std::atomic<uint64_t> bitmap[]`).
+       - *L3 Cache Bouncing Protection*: In multi-slab configurations (`16 x 256 MB`), concurrent agent threads executing atomic bitmask operations (`fetch_or`, `fetch_and`) across adjacent slab indices could trigger CPU L3 cache-line false sharing, degrading allocation latency from $<1\text{ ns}$ to $>200\text{ ns}$. To prevent false sharing, each slab's bitmap is aligned to 64-byte hardware cache lines (`alignas(64)`), and streams use stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$).
+       - For multi-slab layouts, virtual addresses are resolved via a two-level index:
+         ```cpp
+         inline void* get_slot_ptr(uint32_t slot_id) {
+             uint32_t slab_idx = slot_id / SLOTS_PER_SLAB;
+             uint32_t slot_offset = slot_id % SLOTS_PER_SLAB;
+             return static_cast<uint8_t*>(pinned_slabs[slab_idx]) + (slot_offset * sizeof(UniformPageBlock));
+         }
+         ```
+         Because division and modulo by compile-time integer constants are compiled by MSVC into single multiplication-by-reciprocal operations (`imul`), address translation executes in **$< 1\text{ ns}$**, incurring zero runtime overhead relative to a single contiguous pointer offset.
    - *3.5 GB High-Water Mark Pause Queue & Zombie Tool Process Deadlock Prevention*:
      - *Risk Addressed (NVMe Spilling & Zombie Tool Deadlock)*: If $>25$ concurrent agent streams enter `AWAITING_TOOL`, swapped KV memory exceeds the 4 GB pinned ceiling. Spilling excess pages to cold NVMe storage introduces random write latencies ($15–50\text{ ms}$) that stall the stream restoration pipeline. Furthermore, if a stream enters `VRAM_RESIDENT_PAUSED` because swapped host memory is at 3.5 GB, and an active tool process hangs indefinitely in a child Job Object without exiting, the paused stream could remain frozen in VRAM, starving active decoding streams of physical VRAM pages.
      - *Mitigation & Hard Watermark Auto-Reclaim Timeout*:
        - The swapper enforces a **3.5 GB high-water mark queue** (3,584 MiB / 87.5% of pool capacity). When active swapped pages hit 3.5 GB, new incoming tool wait states transition to a `VRAM_RESIDENT_PAUSED` queue rather than spilling leaf pages to NVMe disk. Paused streams hold their VRAM pages in place until a swapped stream completes and restores its pages, keeping all page traffic strictly bounded within high-speed PCIe DMA bandwidth.
-       - *Hard Timeout on Paused Streams*: The engine enforces a hard timeout tied to `limits.call_timeout_seconds` (default: 60s in `crates/nebula-tools/src/config.rs`). If the 3.5 GB high-water mark does not clear within **30 seconds** (`watermark_clear_timeout_ms = 30000`, 50% of call timeout), the engine signals the Nebula daemon supervisor to terminate the oldest `AWAITING_TOOL` process via its Windows Job Object (`TerminateJobObject`) and immediately reclaims its swapped host memory. The oldest `VRAM_RESIDENT_PAUSED` stream is then DMA-swapped into the freed host slab slots, breaking the deadlock and restoring active GPU token generation.
-   - *Strict 4 GB Hard Ceiling*: Enforced in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), guaranteeing that at least **20 GB of uncommitted RAM** remains permanently free for the OS and build tools.
+       - *Hard Timeout on Paused Streams & In-Flight DMA Quiescence*:
+         - The engine enforces a hard timeout tied to `limits.call_timeout_seconds` (default: 60s in `crates/nebula-tools/src/config.rs`). If the 3.5 GB high-water mark does not clear within **30 seconds** (`watermark_clear_timeout_ms = 30000`, 50% of call timeout), the engine signals the Nebula daemon supervisor to terminate the oldest `AWAITING_TOOL` process via its Windows Job Object (`TerminateJobObject`).
+         - *In-Flight DMA Quiescence Invariant*: If the terminated process had an active DMA transfer queued on `swap_stream`, immediately clearing its slab slots in the bitmask would create a race where another paused stream could be assigned those slots while the PCIe controller is still executing the prior DMA operation. The memory reclamation routine must explicitly issue `cudaStreamSynchronize(swap_stream)` before clearing the slab bitmap words, guaranteeing hardware quiescence before slot re-allocation ($<6.25\text{ ms}$ overhead).
+         - The oldest `VRAM_RESIDENT_PAUSED` stream is then DMA-swapped into the freed host slab slots, breaking the deadlock and restoring active GPU token generation.
+   - *Strict 4 GB Hard Ceiling & WDDM Commit Charge Protection*:
+     - *Risk Addressed*: On Windows machines configured with small pagefiles or constrained commit limits, calling `cudaHostAlloc` with `cudaHostAllocMapped` requires both physical RAM pinning and virtual address space reservation in the system commit pool. If uncommitted headroom is exhausted, either `cudaHostAlloc` or background child processes (`rustc.exe`, `cargo.exe`) fail with Windows Error 1455 (`ERROR_COMMITMENT_LIMIT`).
+     - *Mitigation*: Hard ceiling enforced in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), capping pinned host memory to strictly 4 GB (12.5% of total 32 GB RAM). This guarantees that at least **23.5 GB of uncommitted RAM** remains permanently free for the OS, pagefile backing, and parallel build tools.
 4. The VRAM physical pages are marked free and reassigned to active streams.
 5. When the tool execution signals completion, the pages are DMA-restored into VRAM in another **$6.25\text{ ms}$**, resuming decoding without ever stalling the GPU.
 
@@ -462,7 +470,7 @@ To avoid the multi-year trap of building a tensor compiler from scratch (Flaw #3
 
 ## 7. Adversarial Self-Review: Critical Failure Modes & Engineering Risks
 
-Reviewing this architecture from an adversarial, zero-assumption perspective, the following eight failure modes must be explicitly planned for during implementation:
+Reviewing this architecture from an adversarial, zero-assumption perspective, the following nine failure modes must be explicitly planned for during implementation:
 
 1. **Windows WDDM Preemption Jitter, CPU Spin Lag & Memory Ordering Barriers**:
    - *Risk*: Windows Display Driver Model (WDDM) enforces GPU quantum scheduling, causing 15–40 ms latency spikes if compute kernels exceed the scheduling quantum. Conversely, initializing CUDA with `cudaDeviceScheduleSpin` forces host CPU threads to busy-wait, pinning 1–2 cores at 100% utilization. Relying strictly on a 2,000 ms periodic metric sample means that if a massive compiler job (`cargo build -j 16`) bursts onto CPU cores, the engine could spin-wait for up to 1,999 ms before switching to `cudaDeviceScheduleYield`. Furthermore, relaxed atomic reads of `active_tool_processes` across the engine dispatch loop could be reordered by the MSVC compiler (`/O2`) across GPU kernel dispatches.
@@ -488,6 +496,9 @@ Reviewing this architecture from an adversarial, zero-assumption perspective, th
 8. **Cache-Line Contention on Multi-Slab Bitmap Allocator**:
    - *Risk*: High-frequency atomic bitmask operations (`fetch_or` / `fetch_and`) on a shared `bitmap[]` across 8 parallel CUDA streams can cause L3 cache false sharing (cache-line bouncing), degrading slot allocation latency.
    - *Mitigation*: Align bitmap words to 64-byte CPU cache boundaries (`alignas(64) std::atomic<uint64_t> bitmap[]`) and assign stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$), eliminating false sharing across concurrent threads.
+9. **WDDM Virtual Address Ceiling vs. Physical Commit Space**:
+   - *Risk*: On Windows developer workstations configured with small or disabled pagefiles, calling `cudaHostAlloc` with `cudaHostAllocMapped` creates a virtual address space reservation that locks physical RAM while consuming from the system commit limit. If parallel build workloads (`cargo build -j 16`, `cl.exe`, `rustc.exe`) burst simultaneously, total system commit charge can exhaust available commit space, triggering Windows Error 1455 (`ERROR_COMMITMENT_LIMIT`) and crashing active processes.
+   - *Mitigation (Section 3.6)*: Strictly enforce the 4 GB pinned ceiling in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), capping pinned host memory to 12.5% of total 32 GB RAM. This guarantees at least **23.5 GB of uncommitted RAM** permanently remains available for OS pagefile backing and compiler processes.
 
 ---
 
