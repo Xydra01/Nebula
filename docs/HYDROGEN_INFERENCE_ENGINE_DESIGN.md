@@ -261,7 +261,7 @@ Hydrogen implements **Cascade Attention**:
 3. **Log-Sum-Exp (LSE) Rescaling**: The intermediate attention outputs and softmax normalizers from Stage 1 and Stage 2 are merged in shared memory using online softmax rescaling:
    $$m_{\text{total}} = \max(m_{\text{prefix}}, m_{\text{leaf}})$$
    $$O_{\text{total}} = \frac{O_{\text{prefix}} e^{m_{\text{prefix}} - m_{\text{total}}} + O_{\text{leaf}} e^{m_{\text{leaf}} - m_{\text{total}}}}{e^{m_{\text{prefix}} - m_{\text{total}}} + e^{m_{\text{leaf}} - m_{\text{total}}}}$$
-4. **Specialized Templated Kernel Dispatch (Eliminating Intra-Warp Branch Divergence)**:
+4. **Specialized Templated Kernel Dispatch & Binary Size Protection**:
    - *Risk Addressed*: Mixed FP8 and Q8_0 pages in the same Radix tree could force the inner warp GEMM loop to branch on quantization format, causing warp divergence and cutting Tensor Core throughput in half.
    - *Mitigation*: The forward scheduler sorts active attention requests by `quant_type` during batch assembly and dispatches to specialized C++ template instantiations:
      ```cpp
@@ -272,6 +272,9 @@ Hydrogen implements **Cascade Attention**:
      }
      ```
      This completely eliminates runtime branching inside the warp, preserving peak Tensor Core execution speed.
+   - *Template Kernel Code Bloat Protection (Binary Footprint Ceiling)*:
+     - *Risk*: Combinatorially instantiating `cascade_attention_kernel<QuantType, HeadDim, GQARatio>` across multiple head dimensions ($d=64, 128$) and quantization variants causes CUDA binary (`.cubin`) size explosion ($>100\text{ MB}$), inflating driver initialization latency and memory overhead.
+     - *Mitigation*: Explicitly instantiate ONLY the exact architectural configuration of the target 9B GQA model ($d_{\text{head}} = 128$, Grouped-Query ratio 4:1 with $n_{\text{heads}}=32, n_{\text{kv}}=8$) for SM 8.9. Restricting template expansions strictly to `QuantType::FP8` and `QuantType::Q8_0` guarantees the compiled CUDA binary footprint remains strictly **$< 15.0\text{ MB}$**, enabling sub-200ms driver compilation and initialization.
 
 ### 3.3 Split-Fuse Continuous Batcher & WDDM Quantum Stabilization
 Instead of alternating strictly between prefill and decode phases, Hydrogen executes a **continuous mixed batch** on every forward pass:
@@ -282,6 +285,9 @@ Instead of alternating strictly between prefill and decode phases, Hydrogen exec
   - *Device Scheduling Flag & Dynamic CPU Spin/Yield Transition*:
     - The CUDA runtime context is initialized with `cudaDeviceScheduleSpin`, bypassing operating system thread sleep/wake context-switch penalties during active token generation.
     - *CPU Spin Burn Protection*: Because busy-spinning on GPU kernel completion can pin 1–2 CPU cores at 100% utilization, the engine monitors host CPU pressure. When an agent transitions to `AWAITING_TOOL`, or when the daemon detects high background CPU load ($>80\%$ non-engine utilization from `cargo build` or `pytest`), the engine dynamically transitions to `cudaDeviceScheduleYield` or event-driven completion (`cudaStreamWaitEvent`), releasing CPU time-slices back to compiler processes.
+    - *Zero-Overhead Supervisor Cache Integration (Eliminating Syscall Overhead)*:
+      - *Risk*: Continuously querying OS process metrics (via Win32 `GetSystemTimes` or Windows PDH counters) within the forward pass hot loop introduces microsecond-level syscall overhead on every single token step.
+      - *Mitigation*: Instead of executing Win32 system calls within the inference loop, the engine reads host CPU load from the existing `nebula-resources` supervisor thread via an atomic cache variable (`AtomicU8` updated every 2,000 ms, matching `sample_interval_ms = 2000` in `config/default.toml`). Reading this atomic variable in the forward loop requires only an un-fenced relaxed memory load ($<2\text{ ns}$), completely eliminating scheduling overhead.
   - *Sub-5ms Kernel Execution Ceiling*: Individual GEMM and attention kernel launches are strictly constrained to **$< 5.0\text{ ms}$** through micro-chunked tile sizing. At $M \le 64$, prefill compute is only $9.76\text{ ms}$ (tiled into two $4.88\text{ ms}$ kernel dispatches), guaranteeing that the GPU yields cleanly at OS scheduling boundaries without triggering WDDM compositor preemption penalties.
 
 ### 3.4 Pre-Compiled GPU-Fused FSM Bitmask Sampler
@@ -313,7 +319,15 @@ When an agent invokes a long-running command (e.g., `cargo test`, which takes 5�
      cudaStreamCreateWithPriority(&swap_stream, cudaStreamNonBlocking, -1); // Highest priority
      ```
    - *Empirical DMA Saturation Benchmark Protocol*: The benchmark suite introduces a dedicated diagnostic harness (`bench/dma_saturation_test.py`) that executes synthetic disk saturation workloads (`fio` high-queue-depth random I/O running concurrently on `F:`) while measuring bidirectional PCIe DMA latency.
-   - *Dynamic Staggering Fallback*: If root complex contention causes DMA transfer latency to exceed a strict **$10.0\text{ ms}$ threshold**, the engine automatically staggers page transfers across consecutive decode forward passes (e.g., evicting 80 MB per step across 2 steps) rather than dispatching 160 MB in a single monolithic PCIe burst.
+   - *Multi-Step PCIe Staggering Complexity & Atomic Cancellation Barrier*:
+     - *Risk*: Staggering 160 MB of KV pages across multiple forward passes leaves the stream in a partially-evicted state (`PARTIALLY_SWAPPED`). If a tool completes unexpectedly quickly ($<50\text{ ms}$), initiating restoration DMA while eviction is midway could trigger write-after-read races or memory corruption.
+     - *Mitigation*: The swapper implements an explicit three-phase state machine (`EVICTING`, `SWAPPED`, `RESTORING`) protected by an atomic cancellation barrier:
+       ```cpp
+       enum class SwapState : uint8_t { RUNNABLE, EVICTING, SWAPPED, RESTORING };
+       std::atomic<SwapState> state{SwapState::RUNNABLE};
+       std::atomic<bool> cancel_eviction{false};
+       ```
+       If a tool finishes while the stream is in `EVICTING`, the engine asserts `cancel_eviction = true`, synchronizes the active copy stream (`cudaStreamSynchronize(swap_stream)`), and executes reverse restoration *only* for pages that were successfully transferred to host RAM. Un-evicted pages remain resident in VRAM, returning the stream to `RUNNABLE` in $<1\text{ ms}$ with zero memory corruption risk.
 3. **Host RAM Commit Pressure Protection (Strict 4 GB Hard Ceiling)**:
    - *Risk Addressed*: Pinning 4–8 GB of host RAM (`cudaHostAlloc`) permanently reduces available memory for the OS, compiler (`cargo nextest`, MSVC), and background processes on a 32 GB machine, potentially re-triggering Windows Error 1455 (pagefile exhaustion).
    - *Mitigation*: Enforce a strict **4 GB hard ceiling** on pinned host swap memory in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`). This guarantees that at least **20 GB of uncommitted RAM** remains permanently free for the OS and build tools. If total swap demand exceeds 4 GB, the engine gracefully falls back to non-pinned paged memory or tiered eviction to cold NVMe storage.
@@ -400,17 +414,17 @@ To avoid the multi-year trap of building a tensor compiler from scratch (Flaw #3
 Reviewing this architecture from an adversarial, zero-assumption perspective, the following seven failure modes must be explicitly planned for during implementation:
 
 1. **Windows WDDM Preemption Jitter & CPU Spin Burn**:
-   - *Risk*: Windows Display Driver Model (WDDM) enforces GPU quantum scheduling, causing 15–40 ms latency spikes if compute kernels exceed the scheduling quantum. Conversely, initializing CUDA with `cudaDeviceScheduleSpin` forces host CPU threads to busy-wait, pinning 1–2 cores at 100% utilization and starving background tool processes (`cargo build`, `pytest`).
-   - *Mitigation (Section 3.3)*: Clamp Split-Fuse chunks to $\le 64$ tokens and constrain kernel launches strictly under $5.0\text{ ms}$. Dynamically transition synchronization mode: use `cudaDeviceScheduleSpin` during active generation, but drop to `cudaDeviceScheduleYield` or event-driven completion (`cudaStreamWaitEvent`) during `AWAITING_TOOL` phases or when host CPU load exceeds 80%.
+   - *Risk*: Windows Display Driver Model (WDDM) enforces GPU quantum scheduling, causing 15–40 ms latency spikes if compute kernels exceed the scheduling quantum. Conversely, initializing CUDA with `cudaDeviceScheduleSpin` forces host CPU threads to busy-wait, pinning 1–2 cores at 100% utilization and starving background tool processes (`cargo build`, `pytest`). Furthermore, polling OS CPU counters on every forward pass would introduce microsecond-level syscall overhead.
+   - *Mitigation (Section 3.3)*: Clamp Split-Fuse chunks to $\le 64$ tokens and constrain kernel launches strictly under $5.0\text{ ms}$. Dynamically transition synchronization mode: use `cudaDeviceScheduleSpin` during active generation, but drop to `cudaDeviceScheduleYield` or event-driven completion (`cudaStreamWaitEvent`) during `AWAITING_TOOL` phases or when host CPU load exceeds 80%. Read CPU utilization from the existing `nebula-resources` supervisor thread via an atomic cache variable (`AtomicU8` updated every 2,000 ms), eliminating hot-loop syscall overhead.
 2. **Speculative Side-Effect Disasters**:
    - *Risk*: Speculatively executing tools before token generation finishes is catastrophic for stateful operations (`fs.write`, `git.commit`, `shell.run`, `task.finish`). If the model hallucinates or rewrites its argument midway, irreversible disk corruption or unauthorized process spawning occurs.
    - *Mitigation (Section 3.5)*: Speculative execution is **strictly white-listed** to idempotent, read-only tools (`fs.read`, `fs.list`, `git.status`, `code.lookup`). Mutating tools (Tier 1+) execute strictly after turn finalization and executor approval.
-3. **FP8 Quantization Drift & Dynamic Scale Quantization Latency**:
-   - *Risk*: Naive FP8 (E4M3) causes outlier clipping on deep GQA layers, producing syntax errors in code. However, maintaining mixed FP8 and Q8_0 pages in the same Radix tree could force inner warp GEMM loops to branch across formats, causing warp divergence and destroying Tensor Core arithmetic intensity.
-   - *Mitigation (Section 3.1 & 3.2)*: Wrap both FP8 and Q8_0 pages in uniform `UniformPageBlock` containers with a 1-byte quantization tag. The forward scheduler pre-sorts active attention requests by `quant_type` and dispatches to specialized templated kernels (`cascade_attention_kernel<QuantType::FP8>` and `cascade_attention_kernel<QuantType::Q8_0>`), eliminating intra-warp branching completely.
-4. **PCIe Root Complex Arbitration Limits**:
-   - *Risk*: `cudaStreamCreateWithPriority` prioritizes streams within CUDA hardware queues, but consumer chipsets (B650/Z790) lack PCIe QoS bandwidth reservation. Simultaneous NVMe disk reads during builds can saturate the root complex, degrading DMA transfer bandwidth by 10–15%.
-   - *Mitigation (Section 3.6 & 8)*: Measure DMA transfer latency under artificial disk saturation (`bench/dma_saturation_test.py` running high-queue-depth `fio` on `F:`). If root-complex contention causes DMA transfers to exceed $10.0\text{ ms}$, the engine dynamically staggers page evictions across consecutive decode steps.
+3. **FP8 Quantization Drift, Warp Divergence & Template Binary Bloat**:
+   - *Risk*: Naive FP8 (E4M3) causes outlier clipping on deep GQA layers, producing syntax errors in code. Maintaining mixed FP8 and Q8_0 pages in the same Radix tree could force inner warp GEMM loops to branch across formats, causing warp divergence. Moreover, combinatorially instantiating kernels across arbitrary head dimensions would inflate the compiled CUDA binary (`.cubin`) beyond 100 MB.
+   - *Mitigation (Section 3.1 & 3.2)*: Wrap both FP8 and Q8_0 pages in uniform `UniformPageBlock` containers with a 1-byte quantization tag. The forward scheduler pre-sorts active attention requests by `quant_type` and dispatches to specialized templated kernels (`cascade_attention_kernel<QuantType::FP8>` and `cascade_attention_kernel<QuantType::Q8_0>`). Restricting template instantiations strictly to the target 9B model geometry ($d_{\text{head}}=128$, GQA 4:1) caps the compiled CUDA binary footprint under **$15.0\text{ MB}$**, preventing driver load delays.
+4. **PCIe Root Complex Arbitration Limits & Multi-Step Staggering Races**:
+   - *Risk*: `cudaStreamCreateWithPriority` prioritizes streams within CUDA hardware queues, but consumer chipsets (B650/Z790) lack PCIe QoS bandwidth reservation. Simultaneous NVMe disk reads during builds can degrade DMA transfer bandwidth by 10–15%. Staggering 160 MB of KV pages across multiple forward passes leaves the stream in a half-swapped state (`PARTIALLY_SWAPPED`), risking memory corruption if a tool completes unexpectedly quickly ($<50\text{ ms}$).
+   - *Mitigation (Section 3.6 & 8)*: Measure DMA transfer latency under artificial disk saturation (`bench/dma_saturation_test.py` running high-queue-depth `fio` on `F:`). If latency exceeds $10.0\text{ ms}$, the engine staggers page evictions across steps using an explicit three-phase state machine (`EVICTING`, `SWAPPED`, `RESTORING`) with an atomic cancellation barrier (`cancel_eviction`). If a tool completes early, eviction is safely synchronized and reversed only for transferred pages without write-after-read races.
 5. **Host RAM Commit Pressure on 32 GB Systems**:
    - *Risk*: Pinning 4–8 GB of RAM for KV swapping permanently reduces available memory for the OS and MSVC compiler, potentially re-triggering Windows Error 1455 (page file exhaustion).
    - *Mitigation (Section 3.6)*: Enforce a strict **4 GB hard ceiling** on pinned host swap memory in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), ensuring $>20\text{ GB}$ of uncommitted RAM remains available.
