@@ -1,0 +1,32 @@
+name: PR Dependency Gate
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'config/default.toml'
+      - 'rules.toml'
+      - 'crates/nebula-sandbox/src/tier.rs'
+      - 'crates/nebula-sandbox/src/classifier.rs'
+      - 'crates/nebula-sandbox/src/approval.rs'
+      - '.github/workflows/pr-dependency-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-dependencies:
+    name: Verify Protected Set Prerequisite Issues
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Dependency Gate Checker
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-pr-dependencies.ps1 -BaseBranch origin/main
