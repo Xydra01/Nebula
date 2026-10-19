@@ -367,9 +367,10 @@ When an agent invokes a long-running command (e.g., `cargo test`, which takes 5â
            throw std::runtime_error("WDDM pinned memory allocation failed: insufficient physically lockable RAM");
        }
        ```
-     - *Uniform Page Slot Addressing & L3 Cache-Line Alignment*:
+     - *Uniform Page Slot Addressing, L3 Cache-Line Alignment & Sub-Arena Partitioning*:
        - The slabs are partitioned into $3,355,440$ uniform 1,280-byte slots (`UniformPageBlock`) and managed via a lock-free bitmask allocator (`std::atomic<uint64_t> bitmap[]`).
        - *L3 Cache Bouncing Protection*: In multi-slab configurations (`16 x 256 MB`), concurrent agent threads executing atomic bitmask operations (`fetch_or`, `fetch_and`) across adjacent slab indices could trigger CPU L3 cache-line false sharing, degrading allocation latency from $<1\text{ ns}$ to $>200\text{ ns}$. To prevent false sharing, each slab's bitmap is aligned to 64-byte hardware cache lines (`alignas(64)`), and streams use stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$).
+       - *Degenerate Stream Sizing Protection (8 Sub-Arenas & Thread-Local Free-Lists)*: If an agent spawns up to 32 probe branches simultaneously (such as during multi-candidate evaluation in HarnessÂ²), concurrent worker threads hammering the same atomic bitmask word could induce hardware bus-lock contention and spin delays. Hydrogen partitions each 256 MB slab into **8 independent sub-arenas** ($26,214$ slots each) backed by 64-slot thread-local free-list caches. Allocations query the thread-local cache first, reducing atomic bus transactions by **98.4%** ($63/64$) and completely eliminating spin contention under high branching concurrency.
        - For multi-slab layouts, virtual addresses are resolved via a two-level index:
          ```cpp
          inline void* get_slot_ptr(uint32_t slot_id) {
@@ -385,7 +386,21 @@ When an agent invokes a long-running command (e.g., `cargo test`, which takes 5â
        - The swapper enforces a **3.5 GB high-water mark queue** (3,584 MiB / 87.5% of pool capacity). When active swapped pages hit 3.5 GB, new incoming tool wait states transition to a `VRAM_RESIDENT_PAUSED` queue rather than spilling leaf pages to NVMe disk. Paused streams hold their VRAM pages in place until a swapped stream completes and restores its pages, keeping all page traffic strictly bounded within high-speed PCIe DMA bandwidth.
        - *Hard Timeout on Paused Streams & In-Flight DMA Quiescence*:
          - The engine enforces a hard timeout tied to `limits.call_timeout_seconds` (default: 60s in `crates/nebula-tools/src/config.rs`). If the 3.5 GB high-water mark does not clear within **30 seconds** (`watermark_clear_timeout_ms = 30000`, 50% of call timeout), the engine signals the Nebula daemon supervisor to terminate the oldest `AWAITING_TOOL` process via its Windows Job Object (`TerminateJobObject`).
-         - *In-Flight DMA Quiescence Invariant*: If the terminated process had an active DMA transfer queued on `swap_stream`, immediately clearing its slab slots in the bitmask would create a race where another paused stream could be assigned those slots while the PCIe controller is still executing the prior DMA operation. The memory reclamation routine must explicitly issue `cudaStreamSynchronize(swap_stream)` before clearing the slab bitmap words, guaranteeing hardware quiescence before slot re-allocation ($<6.25\text{ ms}$ overhead).
+         - *In-Flight DMA Quiescence & WDDM TDR Guard*: If the terminated process had an active DMA transfer queued on `swap_stream`, immediately clearing its slab slots in the bitmask would create a race where another paused stream could be assigned those slots while the PCIe controller is still executing the prior DMA operation. Conversely, calling a blocking `cudaStreamSynchronize` risks triggering Windows WDDM's 2,000 ms Timeout Detection and Recovery (TDR) driver reset if the hardware or PCIe controller hangs. Hydrogen wraps DMA synchronization in a non-blocking `cudaStreamQuery` polling loop bounded by a **500 ms backstop**:
+           ```cpp
+           auto start = std::chrono::steady_clock::now();
+           while (cudaStreamQuery(swap_stream) == cudaErrorNotReady) {
+               auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   std::chrono::steady_clock::now() - start).count();
+               if (elapsed > 500) { // Well under Windows 2,000 ms WDDM TdrDelay
+                   log_error("PCIe DMA transfer hung (>500 ms); executing controlled engine restart");
+                   trigger_safe_engine_restart();
+                   return;
+               }
+               std::this_thread::sleep_for(std::chrono::microseconds(100));
+           }
+           ```
+           Once DMA completes cleanly (normally $<6.1\text{ ms}$), the slab bitmap words are safely freed, guaranteeing hardware quiescence before slot re-allocation without risking an OS driver reset.
          - The oldest `VRAM_RESIDENT_PAUSED` stream is then DMA-swapped into the freed host slab slots, breaking the deadlock and restoring active GPU token generation.
    - *Strict 4 GB Hard Ceiling & WDDM Commit Charge Protection*:
      - *Risk Addressed*: On Windows machines configured with small pagefiles or constrained commit limits, calling `cudaHostAlloc` with `cudaHostAllocMapped` requires both physical RAM pinning and virtual address space reservation in the system commit pool. If uncommitted headroom is exhausted, either `cudaHostAlloc` or background child processes (`rustc.exe`, `cargo.exe`) fail with Windows Error 1455 (`ERROR_COMMITMENT_LIMIT`).
@@ -490,12 +505,12 @@ Reviewing this architecture from an adversarial, zero-assumption perspective, th
 6. **Radix Tree Cache Fragmentation under Rapid Branch Pruning**:
    - *Risk*: Spawning and killing dozens of short-lived candidate probes can fragment physical 16-token page tables, resulting in allocation stalls.
    - *Mitigation*: Implement a segregated buddy allocator for physical pages and a background defragmentation sweep that runs during GPU idle cycles.
-7. **In-Flight DMA Synchronization Hazards during Job Object Process Termination**:
-   - *Risk*: If a zombie tool process is terminated via `TerminateJobObject` while its KV pages are actively being evicted or restored across PCIe, freeing the host slab slots immediately could cause write-after-free corruption if DMA transfers are still queued in the GPU command ring.
-   - *Mitigation*: The memory reclamation routine must explicitly issue `cudaStreamSynchronize(swap_stream)` on the dedicated swap stream before resetting the slot allocation bitmask, guaranteeing hardware quiescence before slot reassignment.
-8. **Cache-Line Contention on Multi-Slab Bitmap Allocator**:
-   - *Risk*: High-frequency atomic bitmask operations (`fetch_or` / `fetch_and`) on a shared `bitmap[]` across 8 parallel CUDA streams can cause L3 cache false sharing (cache-line bouncing), degrading slot allocation latency.
-   - *Mitigation*: Align bitmap words to 64-byte CPU cache boundaries (`alignas(64) std::atomic<uint64_t> bitmap[]`) and assign stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$), eliminating false sharing across concurrent threads.
+7. **In-Flight DMA Synchronization Hazards & WDDM TDR Driver Resets**:
+   - *Risk*: If a zombie tool process is terminated via `TerminateJobObject` while its KV pages are actively being evicted or restored across PCIe, freeing the host slab slots immediately could cause write-after-free corruption if DMA transfers are still queued in the GPU command ring. Furthermore, if `cudaStreamSynchronize(swap_stream)` hangs indefinitely due to a corrupted DMA queue or PCIe controller hang, Windows WDDM's 2,000 ms Timeout Detection and Recovery (TDR) watchdog will trigger, forcibly resetting the GPU driver (`TdrDelay`), destroying the CUDA context, and crashing active streams.
+   - *Mitigation (Section 3.6)*: Wrap DMA synchronization in a non-blocking `cudaStreamQuery` polling loop bounded by a **500 ms backstop**. If the DMA stream fails to reach quiescence within 500 ms (a $4\times$ safety margin before the 2,000 ms WDDM TDR threshold), the engine triggers an orderly, controlled restart, logging the bus stall and preserving workspace state rather than suffering an abrupt OS driver crash.
+8. **Multi-Slab Bitmap Contention, Degenerate Stream Sizing & L3 Cache Bouncing**:
+   - *Risk*: High-frequency atomic bitmask operations (`fetch_or` / `fetch_and`) on a shared `bitmap[]` across 8 parallel CUDA streams can cause L3 cache false sharing (cache-line bouncing), degrading slot allocation latency from $<1\text{ ns}$ to $>200\text{ ns}$. Moreover, if an agent spawns up to 32 probe branches simultaneously (such as during multi-candidate evaluation in HarnessÂ²), concurrent worker threads hammering the same atomic bitmask word could induce hardware bus-lock contention and spin delays.
+   - *Mitigation (Section 3.6)*: Align bitmap words to 64-byte CPU cache boundaries (`alignas(64) std::atomic<uint64_t> bitmap[]`) and assign stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$). Partition each 256 MB slab into **8 independent sub-arenas** ($26,214$ slots each) backed by 64-slot thread-local free-list caches, reducing atomic bus transactions by **98.4%** ($63/64$) and completely eliminating spin contention under high branching concurrency.
 9. **WDDM Virtual Address Ceiling vs. Physical Commit Space**:
    - *Risk*: On Windows developer workstations configured with small or disabled pagefiles, calling `cudaHostAlloc` with `cudaHostAllocMapped` creates a virtual address space reservation that locks physical RAM while consuming from the system commit limit. If parallel build workloads (`cargo build -j 16`, `cl.exe`, `rustc.exe`) burst simultaneously, total system commit charge can exhaust available commit space, triggering Windows Error 1455 (`ERROR_COMMITMENT_LIMIT`) and crashing active processes.
    - *Mitigation (Section 3.6)*: Strictly enforce the 4 GB pinned ceiling in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), capping pinned host memory to 12.5% of total 32 GB RAM. This guarantees at least **23.5 GB of uncommitted RAM** permanently remains available for OS pagefile backing and compiler processes.
