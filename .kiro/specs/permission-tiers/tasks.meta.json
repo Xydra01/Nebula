@@ -1,0 +1,727 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Scaffold the crate, workspace membership, dependencies, and module tree": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304944837
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304954577
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305063535
+      }
+    ],
+    "2.1 Move `Tier`, `NO_APPROVAL_THRESHOLD`, and `effective_tier` into `nebula-sandbox`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304944917
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305068998
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305162712
+      }
+    ],
+    "2.2 Move the `CommandClassifier` trait into `nebula-sandbox`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945003
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305070586
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305163499
+      }
+    ],
+    "2.3 Reduce `nebula-tools/src/permit.rs` to a thin re-export module": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945084
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305429205
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305752061
+      }
+    ],
+    "2.4 Property test — a second opinion never lowers the enforced tier": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945145
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305174852
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305348911
+      }
+    ],
+    "3. Checkpoint — relocation keeps issue #27 green": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945199
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309359507
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309418536
+      }
+    ],
+    "4.1 Implement `Approval`, `GrantId`, `ApprovalScope`, `ApprovalRequest`, `ApprovalRefusal`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945259
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305170489
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305353399
+      }
+    ],
+    "4.2 Implement `ApprovalStore` (interior-mutable, keyed by trace/task id)": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945321
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305764911
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305987530
+      }
+    ],
+    "4.3 Unit tests — approval fields and the grant constructor": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945388
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305766680
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305772591
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305996049
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306121292
+      }
+    ],
+    "4.4 Property test — only a scope-matching, unconsumed approval authorizes; a refusal emits a secret-free request": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945453
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306127455
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306257877
+      }
+    ],
+    "4.5 Property test — an approval cannot be forged to authorize": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945521
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306261216
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306339892
+      }
+    ],
+    "5.1 Define the rules-table serde structs and `LoadError`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945590
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305171885
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305351261
+      }
+    ],
+    "5.2 Implement `RulesTable::load` with validation and the command index": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945676
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305765835
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305988513
+      }
+    ],
+    "5.3 Author the embedded `data/rules.toml`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945740
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305172841
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305349857
+      }
+    ],
+    "5.4 Property test — load validation accepts well-formed tables and rejects malformed or duplicate-id ones": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945810
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305997197
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306122281
+      }
+    ],
+    "5.5 Unit test — the embedded table loads cleanly": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945883
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306128108
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306257040
+      }
+    ],
+    "6.1 Implement the classifier struct and `embedded` constructor": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304945950
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306546605
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307138564
+      }
+    ],
+    "6.2 Implement segmentation and encoded/indirection detection": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946050
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306597996
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307139788
+      }
+    ],
+    "6.3 Implement rule matching with highest-tier-wins, deterministic tie-break, and unknown→Tier 3": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946121
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306650188
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307140743
+      }
+    ],
+    "6.4 Implement path-condition evaluation via the Path_Resolver": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946195
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306678527
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307141788
+      }
+    ],
+    "6.5 Implement `classify` and `classify_with_magnitude`, wiring approval gating": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946254
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307147928
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307308762
+      }
+    ],
+    "6.6 Property test — monotonicity: adding or obscuring parts never lowers the tier": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946319
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307314567
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307687176
+      }
+    ],
+    "6.7 Property test — unknown or unevaluable parts force Tier 3": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946396
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307316016
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307688566
+      }
+    ],
+    "6.8 Property test — a segmented command's tier is the maximum over its segments": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946462
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307316967
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307689966
+      }
+    ],
+    "6.9 Property test — a resolved path maps to the correct tier floor": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946521
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307318359
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307690916
+      }
+    ],
+    "6.10 Property test — delete magnitude over the limit forces Tier 3": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946583
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308767255
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308888579
+      }
+    ],
+    "6.11 Property test — classification is deterministic and records a stable matched rule id": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946643
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307319307
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307691864
+      }
+    ],
+    "6.12 Unit tests — timing and representative tier-0/1 permits": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946717
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307320131
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307692975
+      }
+    ],
+    "7.1 Emit one `permit.decision` tracing event per classification": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946777
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307700032
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308100109
+      }
+    ],
+    "7.2 Property test — exactly one decision event per classification, with required fields and no secrets": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946836
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308899408
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309154912
+      }
+    ],
+    "8.1 Author `data/red_team.toml` and its loader": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946905
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305173795
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305352202
+      }
+    ],
+    "8.2 Implement the Red_Team_Test": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304946965
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307701421
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308556568
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308559402
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308762200
+      }
+    ],
+    "8.3 Property test — every red-team entry classifies at its recorded tier and Tier-3 entries refuse without approval": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947022
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791307702312
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308763172
+      }
+    ],
+    "9.1 Swap `DefaultClassifier` → `RulesClassifier::embedded` in the daemon": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947106
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308900357
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309156336
+      }
+    ],
+    "9.2 Add the optional `[sandbox] rules_table_path` config key": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947591
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308901431
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309157299
+      }
+    ],
+    "9.3 Unit tests — config parse and daemon startup failure on bad table": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947720
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309161854
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309346022
+      }
+    ],
+    "10. Checkpoint — sandbox, tools, and daemon build and all tests pass": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947817
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309421526
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309607375
+      }
+    ],
+    "11. Documentation and final gate (protected set — never merge)": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791304947939
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309614254
+      },
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791310150360
+      }
+    ],
+    "1. Create the `nebula-sandbox` crate and wire it into the workspace": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305063619
+      }
+    ],
+    "2. Relocate the permission vocabulary into `nebula-sandbox` and re-export from `nebula-tools`": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791305752140
+      }
+    ],
+    "5. Rules table: serde structs, loader, validation, and the embedded data": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306257110
+      }
+    ],
+    "4. Enrich the `Approval` grant contract": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791306339953
+      }
+    ],
+    "8. Red-team fixture and the Red_Team_Test": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308763224
+      }
+    ],
+    "6. The `RulesClassifier` engine": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791308888655
+      }
+    ],
+    "7. Decision logging": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309154970
+      }
+    ],
+    "9. Daemon wiring and the optional config key": [
+      {
+        "executionId": "6ae520c7-aa1e-4146-acc2-d53b0529c9a8",
+        "chatSessionId": "sess_074b203a-e50a-4be9-9c39-b1305f829d8a",
+        "timestamp": 1791309346092
+      }
+    ]
+  }
+}

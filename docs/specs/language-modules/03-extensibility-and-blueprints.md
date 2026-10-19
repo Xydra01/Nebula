@@ -89,6 +89,17 @@ Executes test suites via `ctest` or Catch2/GoogleTest binaries.
 - **Permission Tier**: Tier 1 (Sandbox)
 - **Output**: JSON report of test pass/fail counts and specific assertion failures.
 
+### 2.3 Architectural Boundary & Process Lifecycle (#65, #70, #73)
+- **MCP Server vs. Devtools Adapter Boundary**:
+  - `nebula-lang-cpp` (Issue #65) is the authoritative out-of-process MCP language server providing full CMake project introspection, toolchain detection, and MSVC/Clang diagnostic parsing.
+  - `crates/nebula-devtools::CppAdapter` (Issue #70) serves as the in-crate consumer implementing `BuildAdapter` and `TestAdapter`. It coordinates directly over MCP or via a shared toolchain discovery crate to prevent code duplication.
+- **Process Lifecycle & Lazy Post-Detection Pre-warming**:
+  - **Zero Idle Overhead**: `nebula-lang-cpp` is never spawned globally or for non-C++ tasks, keeping RAM and VRAM completely free for Python, Rust, or general tasks.
+  - **Post-Detection Trigger**: When `language.detected` identifies C++ or polyglot signatures, the daemon initiates lazy background pre-warming of `nebula-lang-cpp` during the model's initial prompt read phase (~1.5s).
+  - **Cold-Start Latency Budget**: Toolchain discovery (`vswhere`, MSVC environment initialization) must complete or be cached within `<2.0s`. Subsequent tool invocations execute in `<50ms` within the task's shared Windows Job Object.
+- **Hermetic Build Tree Standard**:
+  - All CMake build trees reside strictly at `<worktree_root>\build\`, ensuring that clean builds, cache invalidation, and Job Object cleanup operate within the task's isolated confinement root.
+
 ---
 
 ## 3. Blueprint 2: SQL & Database Language Module (`nebula-lang-sql`)

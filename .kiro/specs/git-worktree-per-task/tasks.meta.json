@@ -1,0 +1,693 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Scaffold the `worktree` module and declare the #28 approval dependency": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310516845
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310525770
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310752909
+      }
+    ],
+    "1.2 Define `WorktreeConfig` and add the `[worktree]` config keys": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310516917
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310756170
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311014869
+      }
+    ],
+    "1.3 Unit tests — config parse, defaults, and validation": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310516986
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311021009
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311358715
+      }
+    ],
+    "2.1 Define `WorktreeError` (thiserror)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517063
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310757116
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311016240
+      }
+    ],
+    "2.2 Implement the internal `run_git` helper": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517131
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311021891
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311356695
+      }
+    ],
+    "2.3 Unit tests — run_git over a real temp repo": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517183
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311366290
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311636386
+      }
+    ],
+    "3.1 Implement `WorktreeManager` struct and `new`": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517247
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311365342
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311637782
+      }
+    ],
+    "3.2 Implement `create` with branch naming, retired-drive rejection, and serialization": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517307
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311643106
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311877159
+      }
+    ],
+    "3.3 Implement partial-failure cleanup honoring the delete-limit": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517373
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311882210
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312184597
+      }
+    ],
+    "3.4 Unit tests — create happy path, specified/unresolvable ref, branch collision, retired-drive": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517435
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312193757
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313764615
+      }
+    ],
+    "4.1 Implement `CURRENT_WORKTREE`, `NO_TASK_SENTINEL`, and `TaskWorktreeProvider`": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517509
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310758299
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311017201
+      }
+    ],
+    "4.2 Property test — no task in scope yields a root the Path_Resolver rejects": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517574
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311022832
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311360475
+      }
+    ],
+    "4.3 Unit tests — provider resolves the scoped root; sentinel out of scope": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517630
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311024276
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311359078
+      }
+    ],
+    "5.1 Implement `finalize`": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517702
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311883159
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312185534
+      }
+    ],
+    "5.2 Implement `remove_worktree` with the dirty-tree safety net and prune": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517761
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311884561
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312186971
+      }
+    ],
+    "5.3 Unit tests — dirty-tree refusal, branch retained, prune": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517824
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312195151
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313765901
+      }
+    ],
+    "6.1 Implement delete-size measurement and the `Delete_Limit` gate": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517886
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311367270
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311638537
+      }
+    ],
+    "6.2 Property test — no single deletion exceeds the Delete_Limit without a recorded approval": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310517945
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311646254
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311875028
+      }
+    ],
+    "6.3 Property test — delete-size measurement equals the actual tree totals": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518027
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311645442
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311873601
+      }
+    ],
+    "6.4 Unit test — delete-limit via a #28 approval": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518088
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311644041
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311876431
+      }
+    ],
+    "7.1 Implement `RecoveryReport`, `StaleWorktree`, `Disposition`": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518148
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311025256
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311361361
+      }
+    ],
+    "7.2 Implement `recover_stale`": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518220
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311885264
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312187787
+      }
+    ],
+    "7.3 Property test — a worktree with uncommitted work is never deleted": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518280
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312196101
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313766857
+      }
+    ],
+    "7.4 Property test — crash recovery never touches worktrees outside Worktrees_Dir": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518342
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312197509
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313768302
+      }
+    ],
+    "7.5 Unit test — recovery with a dirty worktree retains and reports": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518406
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791312198296
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313769136
+      }
+    ],
+    "8.1 Replace `ConfigWorktreeRoot` with `TaskWorktreeProvider` and run recovery at start": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518469
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313772909
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314056698
+      }
+    ],
+    "8.2 Integration test — no-task-in-scope seam through the daemon": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518552
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314062196
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314257960
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315524024
+      }
+    ],
+    "9. Checkpoint — sandbox, tools, and daemon build and all tests pass": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518608
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315527930
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315824956
+      }
+    ],
+    "10.1 Property test — the main checkout is never modified": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518667
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314063087
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314250875
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315516673
+      }
+    ],
+    "10.2 Property test — worktree and branch assignments are unique and non-overlapping across live tasks": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518724
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314064509
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314252267
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315518008
+      }
+    ],
+    "10.3 Property test — every created worktree is placed under Worktrees_Dir, never on the retired drive": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518791
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314065934
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314253656
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315519403
+      }
+    ],
+    "10.4 Property test — finalize and remove retain the Task_Branch": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518899
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314066866
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314254640
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315520798
+      }
+    ],
+    "10.5 Property test — a failed create leaves no state blocking a retry": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310518969
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314068261
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314256008
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315521764
+      }
+    ],
+    "10.6 Integration tests — two concurrent tasks and main-checkout-untouched": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310519033
+      },
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314070255
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791314256987
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315523144
+      }
+    ],
+    "11. Documentation and final gate (protected set — never merge)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791310519092
+      },
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315839177
+      }
+    ],
+    "1. Add the `worktree` module to `nebula-sandbox` and its config": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311358778
+      }
+    ],
+    "4. Per-task confinement root (provider, task-local, sentinel)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311360561
+      }
+    ],
+    "2. Git-shelling helper and the single error type": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311636485
+      }
+    ],
+    "6. Delete-limit gate over the #28 approval contract": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791311876488
+      }
+    ],
+    "3. Worktree creation (`create`)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313764714
+      }
+    ],
+    "5. Completion lifecycle (`finalize`, `remove_worktree`)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313765965
+      }
+    ],
+    "7. Crash recovery at daemon start (`recover_stale`)": [
+      {
+        "executionId": "836d3451-032b-4ac1-a49a-79a7269767dc",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791313769212
+      }
+    ],
+    "10. Correctness property tests (main-checkout, uniqueness, placement, lifecycle, recoverability)": [
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315523205
+      }
+    ],
+    "8. Daemon wiring": [
+      {
+        "executionId": "0844cee7-fe67-41d1-848d-b813cca5d36f",
+        "chatSessionId": "sess_036ff3df-67e4-4b7d-aad2-abe1423cda7c",
+        "timestamp": 1791315524101
+      }
+    ]
+  }
+}

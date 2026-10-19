@@ -552,7 +552,62 @@ async fn test_phase1_exit_criterion_fixes_failing_test() {
 }
 
 #[tokio::test]
+async fn test_executor_voluntary_exit_directive_prevents_ceiling() {
+    let h = start_harness().await;
+
+    // Turn 1: Model inspects file
+    h.state
+        .push_turn(tool_call_turn("call_1", "fs.read", r#"{"path":"lib.rs"}"#));
+
+    // Turn 2: Model writes fix
+    h.state.push_turn(tool_call_turn(
+        "call_2",
+        "fs.write",
+        r#"{"path":"lib.rs","content":"pub fn ok() -> bool { true }"}"#,
+    ));
+
+    // Turn 3: Model executes test verification
+    h.state
+        .push_turn(tool_call_turn("call_3", "git.diff", r#"{}"#));
+
+    // Turn 4: Voluntary completion turn upon test passing satisfying DoD (plain-text summary without tool calls)
+    h.state.push_turn(completion_turn(
+        "Verification passed with 0 errors. Concluding immediately per Definition of Done.",
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Fix bug and exit when tests pass per Definition of Done".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(4), // Tight ceiling of 4 calls: 3 tools used, 1 remaining
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+            language: None,
+            language_config: None,
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+
+    // Must be Completed, NOT LimitReached
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert_eq!(
+        done.summary,
+        "Verification passed with 0 errors. Concluding immediately per Definition of Done."
+    );
+    assert_eq!(steps.len(), 3);
+}
+
+#[tokio::test]
 #[ignore = "requires real model server running locally"]
+
 async fn test_real_model_fixes_failing_test() {
     let repo = seed_repo();
     let math_lib_content = "def add(a, b):\n    return a - b\n";
