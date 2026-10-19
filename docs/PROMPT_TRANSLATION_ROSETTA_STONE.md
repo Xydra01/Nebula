@@ -243,13 +243,16 @@ To bridge the gap between prompt contract synthesis and runtime task execution, 
      - **Tier 1 (Exponential Backoff Retries)**: If `.git/index.lock` is held by a transient read scanner (Windows Search Indexer, antivirus), the auto-commit hook retries `remove_file` up to 5 times over 1.5s (25ms, 50ms, 100ms, 250ms, 500ms) to allow the handle to clear.
      - **Tier 2 (NTFS Atomic Quarantine Rename)**: If `remove_file` fails due to `ERROR_SHARING_VIOLATION` (access denied), the hook attempts `std::fs::rename` to `.git/index.lock.<timestamp>.stale`. On Windows NTFS, renaming an open file with delete-sharing permissions succeeds where deletion fails, instantly freeing the canonical `.git/index.lock` path for git operations.
      - **Tier 3 (Diagnostic Error Reporting & Propagation)**: If both deletion and quarantine rename fail, `task.finish` **must not** drop changes or silently finalize. It returns `ToolError::Unavailable` to the agent reporting Win32 error 32 (`ERROR_SHARING_VIOLATION`), the exact lock path, and actionable remediation (exclude `F:\Nebula\worktrees` from Windows Search Indexing / antivirus monitoring).
+  4. Subprocess Concurrency Barrier (Issue #79):
+     - If a model emits multiple tool calls in a single turn where one is `task.finish` alongside background child commands, active child processes in the task's Windows Job Object (`CURRENT_TASK_JOB` via `JobChild` in `crates/nebula-tools/src/builtins/task_job_seam.rs`) are terminated before worktree auto-commit executes.
 
-### Invariant 2: Security Ruleset Implementation Ordering & Dependency Enforcement (Issue #71, #74)
+### Invariant 2: Security Ruleset Implementation Ordering & Dependency Enforcement (Issue #71, #74, #75, #80)
 - **Problem:** Adding unanchored regex whitelists for build tools (`cargo`, `cmake`) to `rules.toml` without prior path validation can introduce sandbox escapes. GitHub does not natively enforce issue dependency DAGs on merge.
 - **System Contract:**
   1. Implementation Gate: Issue #71 is strictly blocked by Issue #74. No PR modifying `rules.toml` or `config/default.toml` may be merged until red-team property tests in `crates/nebula-sandbox/src/redteam.rs` are in place.
   2. PR Template Enforcement: `.github/pull_request_template.md` and `CONTRIBUTING.md` enforce an explicit human checklist requirement verifying that #74 is merged into `main` before reviewing #71.
   3. Strict Worktree Anchoring: Whitelist rules must enforce that working directories and file arguments resolve strictly within `<worktree_root>`, escalating any out-of-worktree or traversal (`..`) attempts to `Tier::System`.
+  4. Automated Dependency Gate & Rate-Limit Resilience (Issue #75, #80): `.github/workflows/pr-dependency-gate.yml` verifies prerequisite dependency issues automatically via `scripts/check-pr-dependencies.ps1` with path filters, exponential retry on API 403, and offline local bypass (`NEBULA_SKIP_DEPENDENCY_NETWORK_CHECK=1`).
 
 ### Invariant 3: MCP Process Lifecycle & Lazy Post-Detection Pre-warming (Issue #65, #70, #73)
 - **Problem:** External language servers (like `nebula-lang-cpp`) spawned unconditionally across all tasks waste RAM/VRAM on non-C++ workloads. If spawned on-demand, cold-start toolchain discovery (`vswhere`, MSVC environment probing) can exceed `call_timeout` (30s).
@@ -257,4 +260,5 @@ To bridge the gap between prompt contract synthesis and runtime task execution, 
   1. Zero Idle Overhead: `nebula-lang-cpp` is **never** spawned globally or for non-C++ tasks (e.g. pure Python or Rust).
   2. Lazy Post-Detection Pre-warming: The daemon inspects repository signatures during initial task setup (`nebula-daemon::executor::language.detected`). If `language == "cpp"` or `"polyglot"`, the daemon immediately spawns `nebula-lang-cpp` in the background during the initial prompt ingestion step (~1.5s).
   3. Cold-Start Bounds & Caching: Initial toolchain discovery completes in `<2.0s` while the model reads context. Once warm, subsequent tool invocations execute in `<50ms` within the task's shared Job Object.
+
 
