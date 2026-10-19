@@ -120,6 +120,8 @@ From [ADR-004](adr/ADR-004-model-profiles.md), [ADR-005](adr/ADR-005-fallback-mo
 | --- | --- |
 | [NEBULA_DESIGN.md](NEBULA_DESIGN.md) | You need the target architecture or the reasoning. It's long; use the table of contents. Section 4 is architecture, 5 the agent, 6 tools, 7 command-line access and security, 9 cloud escalation and Cursor, 10 logging, 11 self-improvement, 12 the roadmap |
 | [LANGUAGE_MODULES_DESIGN.md](LANGUAGE_MODULES_DESIGN.md) | Dedicated Language Modules (Language Packs) architecture: virtualenv enforcement via uv, task-scoped tool activation, structured diagnostics, and language blueprints (Python, C++, SQL) |
+| [RECURSIVE_SELF_IMPROVEMENT_HARNESS.md](RECURSIVE_SELF_IMPROVEMENT_HARNESS.md) | Post-Phase 1 recursive agent harnessing architecture: Google Research Harness² analysis, 8-component surface, two-level recursion, zero-label contrastive selection, and single-GPU local adaptation |
+| [PROMPT_TRANSLATION_ROSETTA_STONE.md](PROMPT_TRANSLATION_ROSETTA_STONE.md) | Prompt translation layer and execution invariants: exit directives, completion barriers, and dependency gate contracts |
 | [PHASE0_PLAN.md](PHASE0_PLAN.md) | You want what Phase 0 built and why. Look for the "As built" notes under each workstream; Section 9 has the exit criteria |
 | [adr/](adr/README.md) | You're about to change a decision: model profiles, fallback, MTP, IPC framing, Rust/Python split, MCP boundary |
 | [ops/setup.md](ops/setup.md) | You're rebuilding the machine, or need to know how something was installed |
