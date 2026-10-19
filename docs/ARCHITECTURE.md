@@ -123,6 +123,7 @@ From [ADR-004](adr/ADR-004-model-profiles.md), [ADR-005](adr/ADR-005-fallback-mo
 | [RECURSIVE_SELF_IMPROVEMENT_HARNESS.md](RECURSIVE_SELF_IMPROVEMENT_HARNESS.md) | Post-Phase 1 recursive agent harnessing architecture: Google Research Harness² analysis, 8-component surface, two-level recursion, zero-label contrastive selection, and single-GPU local adaptation |
 | [PROMPT_TRANSLATION_ROSETTA_STONE.md](PROMPT_TRANSLATION_ROSETTA_STONE.md) | Prompt translation layer and execution invariants: exit directives, completion barriers, and dependency gate contracts |
 | [HYDROGEN_INFERENCE_ENGINE_DESIGN.md](HYDROGEN_INFERENCE_ENGINE_DESIGN.md) | Project Hydrogen inference engine specification: agent-native Radix-Paged KV cache, Cascade Attention, Split-Fuse batching, in-engine tool dispatch, and host-pinned DMA swapping for single-GPU RTX 4070 |
+| [HYDROGEN_ELI5_EXPLAINER.md](HYDROGEN_ELI5_EXPLAINER.md) | Plain-English (ELI5) architectural guide to Project Hydrogen: intuitive analogies for Radix-Paged KV cache, Cascade Attention, Split-Fuse batching, host swapping, and Windows WDDM hardening |
 | [PHASE0_PLAN.md](PHASE0_PLAN.md) | You want what Phase 0 built and why. Look for the "As built" notes under each workstream; Section 9 has the exit criteria |
 | [adr/](adr/README.md) | You're about to change a decision: model profiles, fallback, MTP, IPC framing, Rust/Python split, MCP boundary |
 | [ops/setup.md](ops/setup.md) | You're rebuilding the machine, or need to know how something was installed |
