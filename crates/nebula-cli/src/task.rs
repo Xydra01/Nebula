@@ -42,6 +42,9 @@ pub struct TaskRunArgs {
     /// Target language module identifier (e.g. "python", "cpp", "sql").
     #[arg(long = "lang")]
     pub language: Option<String>,
+    /// Optional observable verification command target (e.g. "pytest" or "test.run").
+    #[arg(long)]
+    pub verification_target: Option<String>,
 }
 
 /// Run an autonomous task to completion, streaming steps.
@@ -71,6 +74,7 @@ pub(crate) async fn run(ctx: &Ctx, args: &TaskRunArgs, out: &mut dyn Write) -> a
         create_pr,
         language: args.language.clone(),
         language_config: None,
+        verification_target: args.verification_target.clone(),
     };
 
     let started: TaskStarted = c.call(Method::TaskCreate(params)).await?;

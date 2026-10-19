@@ -296,6 +296,9 @@ pub struct TaskCreateParams {
     /// Optional language-specific configuration options.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language_config: Option<Value>,
+    /// Optional observable verification command target (e.g. "test.run" or tagged "shell.run" command).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_target: Option<String>,
 }
 
 /// Initial response to `task.create`, returned before any `task.*` events stream.

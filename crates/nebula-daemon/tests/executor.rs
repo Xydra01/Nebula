@@ -282,6 +282,7 @@ async fn test_executor_completes_without_tools() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -318,6 +319,7 @@ async fn test_executor_tool_call_limit_reached() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -374,6 +376,7 @@ async fn test_executor_token_budget_exhausted() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -410,6 +413,7 @@ async fn test_executor_wall_clock_timeout() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -443,6 +447,7 @@ async fn test_executor_cancellation() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -517,6 +522,7 @@ async fn test_phase1_exit_criterion_fixes_failing_test() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -590,6 +596,7 @@ async fn test_executor_voluntary_exit_directive_prevents_ceiling() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -635,6 +642,7 @@ async fn test_real_model_fixes_failing_test() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -668,6 +676,7 @@ async fn test_circuit_breaker_repeated_tool_failure() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -712,6 +721,7 @@ async fn test_circuit_breaker_repeated_file_edits() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -772,6 +782,7 @@ async fn test_circuit_breaker_runaway_tokens() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -816,6 +827,7 @@ async fn test_global_stop_terminates_all_tasks_within_two_seconds() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -981,6 +993,7 @@ async fn test_disk_guard_trips_with_fake_low_space() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1027,6 +1040,7 @@ async fn test_refuse_writes_to_retired_drive() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1058,6 +1072,7 @@ async fn test_executor_events_broadcast_to_observer_client() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1114,6 +1129,7 @@ async fn test_executor_approval_pause_and_resume() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1185,6 +1201,7 @@ async fn test_executor_completion_summary_with_conversational_phrase() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1223,6 +1240,7 @@ async fn test_executor_nudge_exhaustion_completes_if_tools_executed() {
             create_pr: None,
             language: None,
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -1231,5 +1249,172 @@ async fn test_executor_nudge_exhaustion_completes_if_tools_executed() {
 
     // Because tool_calls_executed > 0, it finishes as Completed rather than LimitReached
     assert_eq!(done.status, TaskStatus::Completed);
+    assert_eq!(steps.len(), 1);
+}
+
+#[tokio::test]
+async fn test_lock_contention_tier1_stale_lock_cleared() {
+    let temp = tempfile::tempdir().unwrap();
+    let lock_path = temp.path().join("index.lock");
+    std::fs::write(&lock_path, b"stale lock content").unwrap();
+    assert!(lock_path.exists());
+
+    let res = nebula_daemon::executor::resolve_lock_contention(&lock_path).await;
+    assert!(res.is_ok());
+    assert!(!lock_path.exists());
+}
+
+#[tokio::test]
+async fn test_lock_contention_tier2_quarantine_rename() {
+    let temp = tempfile::tempdir().unwrap();
+    let lock_path = temp.path().join("index.lock");
+    std::fs::write(&lock_path, b"locked with sharing").unwrap();
+    assert!(lock_path.exists());
+
+    let stale = nebula_daemon::executor::quarantine_rename(&lock_path)
+        .expect("Tier 2 quarantine rename should succeed");
+
+    assert!(!lock_path.exists());
+    assert!(stale.exists());
+    assert!(stale.to_string_lossy().contains("index.lock"));
+    assert!(stale.to_string_lossy().ends_with(".stale"));
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn test_lock_contention_tier3_diagnostic_error_propagation() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let lock_path = temp.path().join("index.lock");
+    std::fs::write(&lock_path, b"locked exclusively").unwrap();
+
+    // Open handle with share_mode(1) (READ only, NO DELETE share):
+    // Delete and Rename both fail with ERROR_SHARING_VIOLATION (Win32 error 32)
+    let _file = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(&lock_path)
+        .unwrap();
+
+    let res = nebula_daemon::executor::resolve_lock_contention(&lock_path).await;
+    match res {
+        Err(nebula_daemon::executor::LockContentionError::SharingViolation { path }) => {
+            assert_eq!(path, lock_path);
+            let msg =
+                nebula_daemon::executor::LockContentionError::SharingViolation { path }.to_string();
+            assert!(msg.contains("Win32 ERROR_SHARING_VIOLATION (error code 32)"));
+            assert!(msg.contains("Remediation hint"));
+            assert!(msg.contains("Windows Search Indexing and antivirus real-time monitoring"));
+        }
+        other => panic!("expected SharingViolation, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_task_finish_triggers_auto_commit_and_halts_immediately() {
+    let h = start_harness().await;
+
+    // Turn 1: Write a file to dirty the worktree
+    h.state.push_turn(tool_call_turn(
+        "call_1",
+        "fs.write",
+        r#"{"path":"completed_file.txt","content":"all tests passing"}"#,
+    ));
+
+    // Turn 2: Call task.finish with summary and status
+    h.state.push_turn(tool_call_turn(
+        "call_2",
+        "task.finish",
+        r#"{"summary":"Delivered feature and verified test suite","status":"success"}"#,
+    ));
+
+    // Turn 3: Extra turns that should NEVER be called because task.finish halts immediately
+    h.state
+        .push_turn(tool_call_turn("call_3", "fs.list", r#"{"path":"."}"#));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Implement feature and finish".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(10),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+            language: None,
+            language_config: None,
+            verification_target: None,
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+
+    // Concludes as Completed with task.finish summary
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert_eq!(done.summary, "Delivered feature and verified test suite");
+
+    // Exactly 2 steps executed (fs.write and task.finish) - did NOT cycle to max_tool_calls or call Turn 3
+    assert_eq!(steps.len(), 2);
+    assert_eq!(steps[0].tool_calls, vec!["fs.write"]);
+    assert_eq!(steps[1].tool_calls, vec!["task.finish"]);
+
+    // Verify git branch contains the automated commit
+    let branch = format!("nebula/{}", started.task_id);
+    let log_out = std::process::Command::new("git")
+        .args(["log", "-n", "1", "--format=%s", &branch])
+        .current_dir(repo.path())
+        .output()
+        .expect("git log");
+    assert!(log_out.status.success());
+    let commit_subject = String::from_utf8_lossy(&log_out.stdout);
+    assert!(commit_subject.contains("feat: Implement feature and finish"));
+}
+
+#[tokio::test]
+async fn test_executor_verification_heuristic_nudges_and_completes() {
+    let h = start_harness().await;
+
+    // Turn 1: Run tool matching verification target
+    h.state.push_turn(tool_call_turn(
+        "call_1",
+        "fs.read",
+        r#"{"path":"seed.txt"}"#,
+    ));
+
+    // Turn 2: Model finishes with completion text
+    h.state.push_turn(completion_turn(
+        "Verification passed with 0 errors. All acceptance criteria satisfied.",
+    ));
+
+    let repo = seed_repo();
+    let mut c = h.ready_client().await;
+
+    let started: TaskStarted = c
+        .call(Method::TaskCreate(TaskCreateParams {
+            goal: "Run test and finish".into(),
+            repo: repo.path().to_path_buf(),
+            start_point: None,
+            profile: None,
+            max_tool_calls: Some(5),
+            max_tokens: None,
+            wall_time_secs: None,
+            create_pr: None,
+            language: None,
+            language_config: None,
+            verification_target: Some("fs.read".into()),
+        }))
+        .await
+        .unwrap();
+
+    let (steps, done) = collect_task_events(&mut c, started.task_id).await;
+
+    assert_eq!(done.status, TaskStatus::Completed);
+    assert!(done.summary.contains("Verification passed"));
     assert_eq!(steps.len(), 1);
 }

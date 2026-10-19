@@ -307,6 +307,7 @@ async fn test_executor_with_explicit_polyglot() {
             create_pr: None,
             language: Some("polyglot".into()),
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -334,6 +335,7 @@ async fn test_executor_unknown_language_fails_fast() {
             create_pr: None,
             language: Some("unknown_lang_42".into()),
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();
@@ -470,6 +472,7 @@ async fn test_executor_with_custom_module_and_tool() {
             create_pr: None,
             language: Some("custom_lang".into()),
             language_config: None,
+            verification_target: None,
         }))
         .await
         .unwrap();

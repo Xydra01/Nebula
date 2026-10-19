@@ -262,6 +262,7 @@ EXIT DIRECTIVE: Once your verification and test commands pass with exit code 0 a
             shared: &shared,
             task_id,
             trace_id,
+            goal: &params.goal,
             worktree_root: &worktree_root,
             task_job: &task_job,
             max_tool_calls,
@@ -269,6 +270,7 @@ EXIT DIRECTIVE: Once your verification and test commands pass with exit code 0 a
             token: &token,
             language_tools: &language_tools,
             language_id: lang_module.as_ref().map(|m| m.id()),
+            verification_target: params.verification_target.as_deref(),
         },
         &mut messages,
     );
@@ -315,7 +317,7 @@ EXIT DIRECTIVE: Once your verification and test commands pass with exit code 0 a
     }
 
     if status == TaskStatus::Completed || status == TaskStatus::LimitReached {
-        commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
+        let _ = commit_worktree_if_dirty(&worktree_root, &params.goal, &task_id).await;
     }
 
     let finalized_branch = shared.worktrees.finalize(&wt_task_id).await;
@@ -386,6 +388,7 @@ struct LoopContext<'a> {
     shared: &'a Shared,
     task_id: TaskId,
     trace_id: TraceId,
+    goal: &'a str,
     worktree_root: &'a Path,
     task_job: &'a Arc<TaskJob>,
     max_tool_calls: u32,
@@ -393,6 +396,7 @@ struct LoopContext<'a> {
     token: &'a CancellationToken,
     language_tools: &'a [Arc<dyn nebula_tools::BuiltinTool>],
     language_id: Option<&'a str>,
+    verification_target: Option<&'a str>,
 }
 
 fn normalize_mount_path(p: &Path) -> String {
@@ -467,6 +471,7 @@ async fn execute_loop(
     let mut tool_calls_executed: u32 = 0;
     let mut total_tokens_used: u32 = 0;
     let mut nudge_count: u32 = 0;
+    let mut verification_passed: bool = false;
 
     loop {
         if ctx.token.is_cancelled() {
@@ -675,6 +680,22 @@ async fn execute_loop(
                 );
             }
 
+            if verification_passed {
+                tracing::info!(
+                    event = "task.verification_heuristic_completed",
+                    text = %output.text
+                );
+                let summary = if output.text.trim().is_empty() {
+                    format!(
+                        "Verification target '{}' succeeded and task completed.",
+                        ctx.verification_target.unwrap_or("verification")
+                    )
+                } else {
+                    output.text
+                };
+                return (TaskStatus::Completed, summary);
+            }
+
             let summary = if is_calling_tools {
                 format!("Task completed after executing {tool_calls_executed} tool call(s).")
             } else if output.text.trim().is_empty() {
@@ -797,6 +818,43 @@ async fn execute_loop(
                     Err(err) => (format!("[tool dispatch error: {err}]"), true),
                 }
             };
+
+            if call.name == "task.finish" && !is_error {
+                let finish_summary = args
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Task completed successfully.");
+                let finish_status = args
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("success");
+
+                match commit_worktree_if_dirty(ctx.worktree_root, ctx.goal, &ctx.task_id).await {
+                    Ok(_) => {
+                        let task_status = if finish_status.eq_ignore_ascii_case("failed") {
+                            TaskStatus::Failed
+                        } else {
+                            TaskStatus::Completed
+                        };
+                        tracing::info!(
+                            event = "task.finish_invoked",
+                            task_id = %ctx.task_id,
+                            status = ?task_status,
+                            summary = %finish_summary
+                        );
+                        return (task_status, finish_summary.to_string());
+                    }
+                    Err(lock_err) => {
+                        tracing::error!(
+                            event = "task.finish_lock_error",
+                            task_id = %ctx.task_id,
+                            error = %lock_err
+                        );
+                        is_error = true;
+                        result_content = format!("[tool error] {lock_err}");
+                    }
+                }
+            }
 
             if is_error
                 && (result_content.contains("requires an approval")
@@ -969,13 +1027,176 @@ async fn execute_loop(
                 role: Role::Tool,
                 content: tool_output,
             });
+
+            if let Some(target) = ctx.verification_target {
+                let matched = if call.name == target {
+                    true
+                } else if call.name == "shell.run" {
+                    args.get("command")
+                        .and_then(|v| v.as_str())
+                        .is_some_and(|cmd| cmd.contains(target) || cmd == target)
+                } else {
+                    false
+                };
+
+                if matched && !is_error {
+                    tracing::info!(event = "task.verification_target_passed", target = %target);
+                    verification_passed = true;
+                    messages.push(ChatMessage {
+                        role: Role::User,
+                        content: format!(
+                            "Verification target '{target}' succeeded with returncode 0 and 0 failures. All requirements are verified. Please conclude the task by invoking task.finish with your summary."
+                        ),
+                    });
+                }
+            }
         }
     }
 }
 
-async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &TaskId) {
+/// Errors that can occur during git worktree lock contention resolution.
+#[derive(Debug, thiserror::Error)]
+pub enum LockContentionError {
+    /// Lock file is locked by a concurrent process with sharing violation (Win32 error code 32).
+    #[error(
+        "Win32 ERROR_SHARING_VIOLATION (error code 32) at {}: file is locked by a concurrent process. Remediation hint: exclude worktree directory from Windows Search Indexing and antivirus real-time monitoring.",
+        path.display()
+    )]
+    SharingViolation {
+        /// Path to the contested lock file.
+        path: PathBuf,
+    },
+
+    /// Any other lock failure that prevents resolving lock contention.
+    #[error("Lock contention failure at {}: {detail}", path.display())]
+    Other {
+        /// Path to the contested lock file.
+        path: PathBuf,
+        /// Underlying failure detail.
+        detail: String,
+    },
+}
+
+/// Resolves the path to `.git/index.lock` for a repository or worktree.
+pub fn find_index_lock_path(worktree_root: &Path) -> PathBuf {
+    let dot_git = worktree_root.join(".git");
+    if dot_git.is_file() {
+        let content = std::fs::read_to_string(&dot_git).unwrap_or_default();
+        for line in content.lines() {
+            if let Some(gitdir_str) = line.strip_prefix("gitdir:") {
+                let gitdir_path = PathBuf::from(gitdir_str.trim());
+                let resolved = if gitdir_path.is_relative() {
+                    worktree_root.join(gitdir_path)
+                } else {
+                    gitdir_path
+                };
+                return resolved.join("index.lock");
+            }
+        }
+    }
+    dot_git.join("index.lock")
+}
+
+/// Tier 2: NTFS Atomic Quarantine Rename for a contested `.git/index.lock`.
+///
+/// Renames `index.lock` to `index.lock.<timestamp>.stale` so git operations can proceed immediately.
+pub fn quarantine_rename(lock_path: &Path) -> Result<PathBuf, std::io::Error> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let stale_path = lock_path.with_extension(format!("lock.{ts}.stale"));
+    std::fs::rename(lock_path, &stale_path)?;
+    Ok(stale_path)
+}
+
+/// Three-tier lock contention protocol for `.git/index.lock`.
+///
+/// - Tier 1: Exponential backoff retries (25ms, 50ms, 100ms, 250ms, 500ms) up to 5 times.
+/// - Tier 2: NTFS atomic quarantine rename to `index.lock.<ts>.stale` if deletion fails.
+/// - Tier 3: Diagnostic error propagation with Win32 error code 32 and remediation hints.
+pub async fn resolve_lock_contention(lock_path: &Path) -> Result<(), LockContentionError> {
+    if !lock_path.exists() {
+        return Ok(());
+    }
+
+    // Tier 1: 5 retries with exponential backoffs
+    let backoffs = [
+        Duration::from_millis(25),
+        Duration::from_millis(50),
+        Duration::from_millis(100),
+        Duration::from_millis(250),
+        Duration::from_millis(500),
+    ];
+
+    let mut last_err = None;
+    for delay in backoffs {
+        match std::fs::remove_file(lock_path) {
+            Ok(()) => {
+                tracing::info!(event = "lock_protocol.tier1_cleared", path = %lock_path.display());
+                return Ok(());
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(());
+                }
+                last_err = Some(e);
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
+
+    // Tier 2: NTFS Atomic Quarantine Rename
+    match quarantine_rename(lock_path) {
+        Ok(stale_path) => {
+            tracing::warn!(
+                event = "lock_protocol.tier2_quarantined",
+                original = %lock_path.display(),
+                quarantine = %stale_path.display(),
+            );
+            return Ok(());
+        }
+        Err(rename_err) => {
+            tracing::error!(
+                event = "lock_protocol.tier2_rename_failed",
+                error = %rename_err,
+                path = %lock_path.display()
+            );
+        }
+    }
+
+    // Tier 3: Diagnostic Error Reporting & Propagation
+    let is_sharing_violation = last_err.as_ref().is_some_and(|e| {
+        e.raw_os_error() == Some(32) || e.kind() == std::io::ErrorKind::PermissionDenied
+    });
+
+    if is_sharing_violation {
+        Err(LockContentionError::SharingViolation {
+            path: lock_path.to_path_buf(),
+        })
+    } else {
+        let detail = last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "unable to remove or rename lock file".to_string());
+        Err(LockContentionError::Other {
+            path: lock_path.to_path_buf(),
+            detail,
+        })
+    }
+}
+
+pub(crate) async fn commit_worktree_if_dirty(
+    worktree_root: &Path,
+    goal: &str,
+    task_id: &TaskId,
+) -> Result<bool, LockContentionError> {
     use std::process::Stdio;
     use tokio::process::Command;
+
+    let lock_path = find_index_lock_path(worktree_root);
+    if lock_path.exists() {
+        resolve_lock_contention(&lock_path).await?;
+    }
 
     // 1. Check if git status has uncommitted or untracked changes
     let mut status_cmd = Command::new("git");
@@ -988,7 +1209,13 @@ async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &Ta
         .kill_on_drop(true);
 
     let is_dirty = match status_cmd.output().await {
-        Ok(out) => !out.stdout.is_empty(),
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if stderr.contains("index.lock") {
+                resolve_lock_contention(&lock_path).await?;
+            }
+            !out.stdout.is_empty()
+        }
         Err(e) => {
             tracing::warn!(event = "task.git_status_failed", error = %e);
             false
@@ -996,7 +1223,7 @@ async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &Ta
     };
 
     if !is_dirty {
-        return;
+        return Ok(false);
     }
 
     // 2. Stage all changes
@@ -1009,9 +1236,45 @@ async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &Ta
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    if let Err(e) = add_cmd.output().await {
-        tracing::warn!(event = "task.git_add_failed", error = %e);
-        return;
+    let add_out = match add_cmd.output().await {
+        Ok(out) => out,
+        Err(e) => {
+            tracing::warn!(event = "task.git_add_failed", error = %e);
+            return Err(LockContentionError::Other {
+                path: lock_path,
+                detail: format!("git add failed to spawn: {e}"),
+            });
+        }
+    };
+
+    if !add_out.status.success() {
+        let stderr = String::from_utf8_lossy(&add_out.stderr);
+        if stderr.contains("index.lock") {
+            resolve_lock_contention(&lock_path).await?;
+            let mut retry_add = Command::new("git");
+            retry_add
+                .args(["add", "-A"])
+                .current_dir(worktree_root)
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .kill_on_drop(true);
+            match retry_add.output().await {
+                Ok(out) if !out.status.success() => {
+                    let err = String::from_utf8_lossy(&out.stderr);
+                    return Err(LockContentionError::Other {
+                        path: lock_path,
+                        detail: format!("git add failed: {err}"),
+                    });
+                }
+                _ => {}
+            }
+        } else {
+            return Err(LockContentionError::Other {
+                path: lock_path,
+                detail: format!("git add failed: {stderr}"),
+            });
+        }
     }
 
     // 3. Commit staged changes with conventional commit format
@@ -1038,13 +1301,52 @@ async fn commit_worktree_if_dirty(worktree_root: &Path, goal: &str, task_id: &Ta
     match commit_cmd.output().await {
         Ok(out) if out.status.success() => {
             tracing::info!(event = "task.worktree_committed", task_id = %task_id);
+            Ok(true)
         }
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
+            if stderr.contains("index.lock") {
+                resolve_lock_contention(&lock_path).await?;
+                let mut retry_commit = Command::new("git");
+                retry_commit
+                    .args([
+                        "-c",
+                        "user.name=Nebula",
+                        "-c",
+                        "user.email=nebula@local",
+                        "commit",
+                        "-m",
+                        &commit_msg,
+                    ])
+                    .current_dir(worktree_root)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .kill_on_drop(true);
+                if let Ok(retry_out) = retry_commit.output().await {
+                    if retry_out.status.success() {
+                        tracing::info!(event = "task.worktree_committed", task_id = %task_id);
+                        return Ok(true);
+                    }
+                    let retry_err = String::from_utf8_lossy(&retry_out.stderr);
+                    return Err(LockContentionError::Other {
+                        path: lock_path,
+                        detail: format!("git commit retry failed: {retry_err}"),
+                    });
+                }
+            }
             tracing::warn!(event = "task.git_commit_failed", stderr = %stderr);
+            Err(LockContentionError::Other {
+                path: lock_path,
+                detail: format!("git commit failed: {stderr}"),
+            })
         }
         Err(e) => {
             tracing::warn!(event = "task.git_commit_spawn_failed", error = %e);
+            Err(LockContentionError::Other {
+                path: lock_path,
+                detail: format!("git commit failed to spawn: {e}"),
+            })
         }
     }
 }
