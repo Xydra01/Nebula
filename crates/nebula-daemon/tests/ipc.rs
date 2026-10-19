@@ -470,6 +470,7 @@ async fn tools_list_call_and_log_reach_clients() {
         "git.branch",
         "shell.run",
         "system.resources",
+        "task.finish",
     ] {
         let builtin = list
             .tools
@@ -478,7 +479,11 @@ async fn tools_list_call_and_log_reach_clients() {
             .unwrap_or_else(|| panic!("built-in {name} is listed"));
         assert_eq!(builtin.server, "builtin", "built-in {name} server label");
     }
-    assert_eq!(list.tools.len(), 11, "ten built-ins plus the external echo");
+    assert_eq!(
+        list.tools.len(),
+        12,
+        "eleven built-ins plus the external echo"
+    );
 
     let trace = TraceId::new();
     let out: ToolCallOutcome = c

@@ -126,6 +126,7 @@ fn parses_every_command() {
                 pr,
                 no_pr,
                 language,
+                verification_target,
             }),
     } = parse(&[
         "task",
@@ -158,6 +159,26 @@ fn parses_every_command() {
     assert!(!pr);
     assert!(!no_pr);
     assert_eq!(language, None);
+    assert_eq!(verification_target, None);
+
+    let Command::Task {
+        action:
+            TaskAction::Run(TaskRunArgs {
+                verification_target,
+                ..
+            }),
+    } = parse(&[
+        "task",
+        "run",
+        "verified task",
+        "--verification-target",
+        "pytest",
+    ])
+    .command
+    else {
+        panic!("not task run with verification-target");
+    };
+    assert_eq!(verification_target.as_deref(), Some("pytest"));
 
     let Command::Task {
         action: TaskAction::Run(TaskRunArgs { language, .. }),

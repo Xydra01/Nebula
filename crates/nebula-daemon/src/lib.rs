@@ -10,7 +10,7 @@ mod builtin_providers;
 pub mod checks;
 pub mod circuit_breaker;
 pub mod client;
-pub(crate) mod executor;
+pub mod executor;
 pub mod game_mode;
 pub mod github;
 pub mod language;

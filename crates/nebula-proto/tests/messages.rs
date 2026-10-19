@@ -184,6 +184,7 @@ fn requests() {
                     create_pr: None,
                     language: None,
                     language_config: None,
+                    verification_target: None,
                 }),
             ),
         ),

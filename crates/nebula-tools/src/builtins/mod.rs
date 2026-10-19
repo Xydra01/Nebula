@@ -22,6 +22,7 @@ mod fs;
 mod git;
 mod resources;
 mod shell;
+mod task_finish;
 mod task_job_seam;
 mod worktree_provider;
 
@@ -31,6 +32,7 @@ pub use resources::SystemResources;
 #[cfg(windows)]
 pub(crate) use shell::resolve_executable;
 pub use shell::{ShellRun, scrub_env};
+pub use task_finish::TaskFinish;
 pub use task_job_seam::CURRENT_TASK_JOB;
 #[cfg(windows)]
 pub use task_job_seam::{JobChild, spawn_in_task_job};
@@ -226,6 +228,7 @@ pub fn register_all(host: &mut crate::ToolHost, ctx: ToolContext) -> Result<(), 
     host.register_builtin(Arc::new(GitBranch))?;
     host.register_builtin(Arc::new(ShellRun))?;
     host.register_builtin(Arc::new(SystemResources))?;
+    host.register_builtin(Arc::new(TaskFinish))?;
     Ok(())
 }
 
@@ -272,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    fn register_all_registers_the_ten_builtins_with_declared_tiers() {
+    fn register_all_registers_the_eleven_builtins_with_declared_tiers() {
         let mut host = ToolHost::empty();
         register_all(&mut host, test_ctx()).expect("registering all built-ins should succeed");
 
@@ -288,9 +291,10 @@ mod tests {
             "git.status",
             "shell.run",
             "system.resources",
+            "task.finish",
         ];
         // `list_tools` sorts by name, so comparing against the sorted expected set checks both the
-        // full membership (all ten) and that no extras slipped in.
+        // full membership (all eleven) and that no extras slipped in.
         assert_eq!(names, expected);
     }
 
@@ -298,7 +302,7 @@ mod tests {
     fn each_builtin_declares_the_tier_from_the_design() {
         use super::{
             BuiltinTool, FsList, FsRead, FsSearch, FsWrite, GitBranch, GitCommit, GitDiff,
-            GitStatus, ShellRun, SystemResources,
+            GitStatus, ShellRun, SystemResources, TaskFinish,
         };
         assert_eq!(FsRead.tier(), Tier::Read);
         assert_eq!(FsWrite.tier(), Tier::Sandbox);
@@ -310,6 +314,7 @@ mod tests {
         assert_eq!(GitBranch.tier(), Tier::Sandbox);
         assert_eq!(ShellRun.tier(), Tier::Workspace);
         assert_eq!(SystemResources.tier(), Tier::Read);
+        assert_eq!(TaskFinish.tier(), Tier::Read);
     }
 
     #[test]
