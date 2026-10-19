@@ -285,15 +285,24 @@ Instead of alternating strictly between prefill and decode phases, Hydrogen exec
   - *Device Scheduling Flag & Dynamic CPU Spin/Yield Transition*:
     - The CUDA runtime context is initialized with `cudaDeviceScheduleSpin`, bypassing operating system thread sleep/wake context-switch penalties during active token generation.
     - *CPU Spin Burn Protection*: Because busy-spinning on GPU kernel completion can pin 1–2 CPU cores at 100% utilization, the engine monitors host CPU pressure. When an agent transitions to `AWAITING_TOOL`, or when the daemon detects high background CPU load ($>80\%$ non-engine utilization from `cargo build` or `pytest`), the engine dynamically transitions to `cudaDeviceScheduleYield` or event-driven completion (`cudaStreamWaitEvent`), releasing CPU time-slices back to compiler processes.
-    - *Zero-Overhead Supervisor Cache Integration & Immediate Spawn Hook*:
-      - *Risk*: Continuously querying OS process metrics (via Win32 `GetSystemTimes` or Windows PDH counters) within the forward pass hot loop introduces microsecond-level syscall overhead on every single token step. Conversely, relying strictly on a 2,000 ms periodic atomic sample means that if a massive compiler job (`cargo build -j 16`) bursts onto CPU cores, the engine could spin-wait for up to 1,999 ms before detecting the spike and switching to `cudaDeviceScheduleYield`.
-      - *Mitigation*: The engine implements a two-tier synchronization trigger:
+    - *Zero-Overhead Supervisor Cache Integration, Immediate Spawn Hook & Memory Ordering Barrier*:
+      - *Risk*: Continuously querying OS process metrics (via Win32 `GetSystemTimes` or Windows PDH counters) within the forward pass hot loop introduces microsecond-level syscall overhead on every single token step. Conversely, relying strictly on a 2,000 ms periodic atomic sample means that if a massive compiler job (`cargo build -j 16`) bursts onto CPU cores, the engine could spin-wait for up to 1,999 ms before detecting the spike and switching to `cudaDeviceScheduleYield`. Furthermore, if `active_tool_processes.fetch_add` uses `std::memory_order_release` in the daemon and relaxed loads in the engine, aggressive MSVC compiler optimization (`/O2`) or memory-reordering architectures could reorder the read across the GPU kernel dispatch loop, launching kernels under spin mode even after a tool process has spawned.
+      - *Mitigation*: The engine implements a two-tier synchronization trigger with explicit memory ordering barriers:
         1. *Periodic Baseline*: Reads host CPU load from the `nebula-resources` supervisor thread via an atomic cache variable (`AtomicU8` updated every 2,000 ms, matching `sample_interval_ms = 2000` in `config/default.toml`) using an un-fenced relaxed memory load ($<2\text{ ns}$), eliminating polling syscall overhead.
-        2. *Immediate Process Spawn Hook*: When the Nebula executor launches a child process within a Windows Job Object (`crates/nebula-tools/src/builtins/task_job_seam.rs`), it asserts an immediate notification counter across shared memory:
+        2. *Immediate Process Spawn Hook & Acquire Barrier*: When the Nebula executor launches a child process within a Windows Job Object (`crates/nebula-tools/src/builtins/task_job_seam.rs`), it asserts an immediate notification counter across shared memory:
            ```cpp
            engine_ctrl->active_tool_processes.fetch_add(1, std::memory_order_release);
            ```
-           Whenever `active_tool_processes > 0`, the engine immediately transitions from `cudaDeviceScheduleSpin` to `cudaDeviceScheduleYield` on the very next token iteration ($<14\text{ ms}$), completely eliminating bursty scheduling lag.
+           Before each batch dispatch boundary, the inference engine loads this counter with **`std::memory_order_acquire`**:
+           ```cpp
+           uint32_t active_tools = engine_ctrl->active_tool_processes.load(std::memory_order_acquire);
+           if (active_tools > 0) {
+               set_schedule_mode(cudaDeviceScheduleYield);
+           } else if (cached_cpu_load.load(std::memory_order_relaxed) < 80) {
+               set_schedule_mode(cudaDeviceScheduleSpin);
+           }
+           ```
+           The acquire barrier guarantees that the load cannot be hoisted across subsequent kernel dispatches, ensuring that the engine switches to `cudaDeviceScheduleYield` on the very next token iteration ($<14\text{ ms}$) whenever a tool is active, completely eliminating bursty scheduling lag and compiler instruction reordering.
   - *Sub-5ms Kernel Execution Ceiling*: Individual GEMM and attention kernel launches are strictly constrained to **$< 5.0\text{ ms}$** through micro-chunked tile sizing. At $M \le 64$, prefill compute is only $9.76\text{ ms}$ (tiled into two $4.88\text{ ms}$ kernel dispatches), guaranteeing that the GPU yields cleanly at OS scheduling boundaries without triggering WDDM compositor preemption penalties.
 
 ### 3.4 Pre-Compiled GPU-Fused FSM Bitmask Sampler
@@ -334,17 +343,44 @@ When an agent invokes a long-running command (e.g., `cargo test`, which takes 5�
        std::atomic<bool> cancel_eviction{false};
        ```
        If a tool finishes while the stream is in `EVICTING`, the engine asserts `cancel_eviction = true`, synchronizes the active copy stream (`cudaStreamSynchronize(swap_stream)`), and executes reverse restoration *only* for pages that were successfully transferred to host RAM. Un-evicted pages remain resident in VRAM, returning the stream to `RUNNABLE` in $<1\text{ ms}$ with zero memory corruption risk.
-3. **Host RAM Commit Pressure & Pre-Allocated Contiguous Slab Protection**:
+3. **Host RAM Commit Pressure, Multi-Slab Fallback Allocation & Zombie Deadlock Prevention**:
    - *Risk Addressed (Fragmentation & Commit Pressure)*: Repeatedly allocating and freeing 160 MiB leaf chunks inside the 4 GB `cudaHostAlloc` pool across long-running daemon sessions causes heap fragmentation, leading to allocation failures even when free memory is $>500\text{ MiB}$. Furthermore, pinning 4–8 GB permanently reduces available memory for the OS and MSVC compiler on a 32 GB machine, potentially re-triggering Windows Error 1455 (pagefile exhaustion).
-   - *Pre-Allocated Contiguous Slab & Lock-Free Page Allocator*:
-     - The entire 4 GB pinned buffer is pre-allocated **once** at startup as a single contiguous mapped slab:
+   - *Contiguous 4 GB Host Allocation Failure at Startup & Tiered Multi-Slab Fallback*:
+     - *Risk*: On a Windows machine that has been running for weeks with high memory fragmentation from complex workloads, requesting a single contiguous 4 GB pinned block (`cudaHostAlloc`) at startup can fail if 4 GB of physically contiguous RAM cannot be locked by WDDM.
+     - *Mitigation*: The host memory manager implements a tiered fallback:
+       1. Attempt single 4 GB contiguous pinned allocation (`1 x 4 GB`).
+       2. If rejected by WDDM (`cudaErrorMemoryAllocation`), fall back gracefully to an array of four 1 GB pinned slabs (`4 x 1 GB`).
+       3. If 1 GB blocks cannot be locked, fall back to sixteen 256 MB slabs (`16 x 256 MB`).
        ```cpp
-       cudaHostAlloc(&pinned_slab, 4ULL * 1024 * 1024 * 1024, cudaHostAllocMapped | cudaHostAllocWriteCombined);
+       void* pinned_slabs[16];
+       size_t num_slabs = 0;
+       size_t slab_size = 0;
+       const unsigned int flags = cudaHostAllocMapped | cudaHostAllocWriteCombined;
+
+       if (cudaHostAlloc(&pinned_slabs[0], 4ULL * 1024 * 1024 * 1024, flags) == cudaSuccess) {
+           num_slabs = 1; slab_size = 4ULL * 1024 * 1024 * 1024;
+       } else if (allocate_slabs(pinned_slabs, 4, 1ULL * 1024 * 1024 * 1024, flags)) {
+           num_slabs = 4; slab_size = 1ULL * 1024 * 1024 * 1024;
+       } else if (allocate_slabs(pinned_slabs, 16, 256ULL * 1024 * 1024, flags)) {
+           num_slabs = 16; slab_size = 256ULL * 1024 * 1024;
+       } else {
+           throw std::runtime_error("WDDM pinned memory allocation failed: insufficient physically lockable RAM");
+       }
        ```
-     - The slab is partitioned into $3,276,800$ uniform 1,280-byte slots (`UniformPageBlock`) and managed via a lock-free bitmask allocator (`std::atomic<uint64_t> bitmap[]`). This eliminates runtime OS memory allocations and page fragmentation entirely.
-   - *3.5 GB High-Water Mark Pause Queue (Eliminating NVMe Spilling Latency)*:
-     - *Risk Addressed*: If more than 25 concurrent agent streams enter `AWAITING_TOOL` simultaneously, total swapped KV memory exceeds the 4 GB pinned RAM hard ceiling. Spilling excess pages to cold NVMe storage introduces random write latencies ($15–50\text{ ms}$) that stall the stream restoration pipeline.
-     - *Mitigation*: The swapper enforces a **3.5 GB high-water mark queue** (3,584 MiB / 87.5% of pool capacity). When active swapped pages hit 3.5 GB, new incoming tool wait states transition to a `VRAM_RESIDENT_PAUSED` queue rather than spilling leaf pages to NVMe disk. Paused streams hold their VRAM pages in place until a swapped stream completes and restores its pages, keeping all page traffic strictly bounded within high-speed PCIe DMA bandwidth.
+     - *Uniform Page Slot Addressing*: The slabs are partitioned into $3,355,440$ uniform 1,280-byte slots (`UniformPageBlock`) and managed via a lock-free bitmask allocator (`std::atomic<uint64_t> bitmap[]`). For multi-slab layouts, virtual addresses are resolved via a two-level index:
+       ```cpp
+       inline void* get_slot_ptr(uint32_t slot_id) {
+           uint32_t slab_idx = slot_id / SLOTS_PER_SLAB;
+           uint32_t slot_offset = slot_id % SLOTS_PER_SLAB;
+           return static_cast<uint8_t*>(pinned_slabs[slab_idx]) + (slot_offset * sizeof(UniformPageBlock));
+       }
+       ```
+       Because division and modulo by compile-time integer constants are compiled by MSVC into single multiplication-by-reciprocal operations (`imul`), address translation executes in **$< 1\text{ ns}$**, incurring zero runtime overhead relative to a single contiguous pointer offset.
+   - *3.5 GB High-Water Mark Pause Queue & Zombie Tool Process Deadlock Prevention*:
+     - *Risk Addressed (NVMe Spilling & Zombie Tool Deadlock)*: If $>25$ concurrent agent streams enter `AWAITING_TOOL`, swapped KV memory exceeds the 4 GB pinned ceiling. Spilling excess pages to cold NVMe storage introduces random write latencies ($15–50\text{ ms}$) that stall the stream restoration pipeline. Furthermore, if a stream enters `VRAM_RESIDENT_PAUSED` because swapped host memory is at 3.5 GB, and an active tool process hangs indefinitely in a child Job Object without exiting, the paused stream could remain frozen in VRAM, starving active decoding streams of physical VRAM pages.
+     - *Mitigation & Hard Watermark Auto-Reclaim Timeout*:
+       - The swapper enforces a **3.5 GB high-water mark queue** (3,584 MiB / 87.5% of pool capacity). When active swapped pages hit 3.5 GB, new incoming tool wait states transition to a `VRAM_RESIDENT_PAUSED` queue rather than spilling leaf pages to NVMe disk. Paused streams hold their VRAM pages in place until a swapped stream completes and restores its pages, keeping all page traffic strictly bounded within high-speed PCIe DMA bandwidth.
+       - *Hard Timeout on Paused Streams*: The engine enforces a hard timeout tied to `limits.call_timeout_seconds` (default: 60s in `crates/nebula-tools/src/config.rs`). If the 3.5 GB high-water mark does not clear within **30 seconds** (`watermark_clear_timeout_ms = 30000`, 50% of call timeout), the engine signals the Nebula daemon supervisor to terminate the oldest `AWAITING_TOOL` process via its Windows Job Object (`TerminateJobObject`) and immediately reclaims its swapped host memory. The oldest `VRAM_RESIDENT_PAUSED` stream is then DMA-swapped into the freed host slab slots, breaking the deadlock and restoring active GPU token generation.
    - *Strict 4 GB Hard Ceiling*: Enforced in `config/default.toml` (`[engine.swap] max_pinned_bytes = 4_294_967_296`), guaranteeing that at least **20 GB of uncommitted RAM** remains permanently free for the OS and build tools.
 4. The VRAM physical pages are marked free and reassigned to active streams.
 5. When the tool execution signals completion, the pages are DMA-restored into VRAM in another **$6.25\text{ ms}$**, resuming decoding without ever stalling the GPU.
@@ -426,11 +462,11 @@ To avoid the multi-year trap of building a tensor compiler from scratch (Flaw #3
 
 ## 7. Adversarial Self-Review: Critical Failure Modes & Engineering Risks
 
-Reviewing this architecture from an adversarial, zero-assumption perspective, the following seven failure modes must be explicitly planned for during implementation:
+Reviewing this architecture from an adversarial, zero-assumption perspective, the following eight failure modes must be explicitly planned for during implementation:
 
-1. **Windows WDDM Preemption Jitter & CPU Spin Lag**:
-   - *Risk*: Windows Display Driver Model (WDDM) enforces GPU quantum scheduling, causing 15–40 ms latency spikes if compute kernels exceed the scheduling quantum. Conversely, initializing CUDA with `cudaDeviceScheduleSpin` forces host CPU threads to busy-wait, pinning 1–2 cores at 100% utilization. Relying strictly on a 2,000 ms periodic metric sample means that if a massive compiler job (`cargo build -j 16`) bursts onto CPU cores, the engine could spin-wait for up to 1,999 ms before switching to `cudaDeviceScheduleYield`.
-   - *Mitigation (Section 3.3)*: Clamp Split-Fuse chunks to $\le 64$ tokens and constrain kernel launches strictly under $5.0\text{ ms}$. Expose an immediate explicit notification hook from the Nebula executor when spawning child processes in Windows Job Objects (`active_tool_processes.fetch_add(1)`), transitioning to `cudaDeviceScheduleYield` immediately at process spawn ($<14\text{ ms}$) rather than waiting for the 2,000 ms background sample.
+1. **Windows WDDM Preemption Jitter, CPU Spin Lag & Memory Ordering Barriers**:
+   - *Risk*: Windows Display Driver Model (WDDM) enforces GPU quantum scheduling, causing 15–40 ms latency spikes if compute kernels exceed the scheduling quantum. Conversely, initializing CUDA with `cudaDeviceScheduleSpin` forces host CPU threads to busy-wait, pinning 1–2 cores at 100% utilization. Relying strictly on a 2,000 ms periodic metric sample means that if a massive compiler job (`cargo build -j 16`) bursts onto CPU cores, the engine could spin-wait for up to 1,999 ms before switching to `cudaDeviceScheduleYield`. Furthermore, relaxed atomic reads of `active_tool_processes` across the engine dispatch loop could be reordered by the MSVC compiler (`/O2`) across GPU kernel dispatches.
+   - *Mitigation (Section 3.3)*: Clamp Split-Fuse chunks to $\le 64$ tokens and constrain kernel launches strictly under $5.0\text{ ms}$. Expose an immediate explicit notification hook from the Nebula executor when spawning child processes in Windows Job Objects (`active_tool_processes.fetch_add(1, std::memory_order_release)`). The engine loads this counter with **`std::memory_order_acquire`** before every batch dispatch boundary, ensuring immediate, non-reordered transitions to `cudaDeviceScheduleYield` ($<14\text{ ms}$).
 2. **Speculative Side-Effect Disasters**:
    - *Risk*: Speculatively executing tools before token generation finishes is catastrophic for stateful operations (`fs.write`, `git.commit`, `shell.run`, `task.finish`). If the model hallucinates or rewrites its argument midway, irreversible disk corruption or unauthorized process spawning occurs.
    - *Mitigation (Section 3.5)*: Speculative execution is **strictly white-listed** to idempotent, read-only tools (`fs.read`, `fs.list`, `git.status`, `code.lookup`). Mutating tools (Tier 1+) execute strictly after turn finalization and executor approval.
@@ -440,12 +476,18 @@ Reviewing this architecture from an adversarial, zero-assumption perspective, th
 4. **PCIe Root Complex Arbitration Limits & Multi-Step Staggering Races**:
    - *Risk*: `cudaStreamCreateWithPriority` prioritizes streams within CUDA hardware queues, but consumer chipsets (B650/Z790) lack PCIe QoS bandwidth reservation. Simultaneous NVMe disk reads during builds can degrade DMA transfer bandwidth by 10–15%. Staggering 160 MB of KV pages across multiple forward passes leaves the stream in a half-swapped state (`PARTIALLY_SWAPPED`), risking memory corruption if a tool completes unexpectedly quickly ($<50\text{ ms}$).
    - *Mitigation (Section 3.6 & 8)*: Measure DMA transfer latency under artificial disk saturation (`bench/dma_saturation_test.py` running high-queue-depth `fio` on `F:`). If latency exceeds $10.0\text{ ms}$, the engine staggers page evictions across steps using an explicit three-phase state machine (`EVICTING`, `SWAPPED`, `RESTORING`) with an atomic cancellation barrier (`cancel_eviction`). If a tool completes early, eviction is safely synchronized and reversed only for transferred pages without write-after-read races.
-5. **Host-Pinned RAM Fragmentation & NVMe Spilling Latency**:
-   - *Risk*: Repeatedly allocating and freeing 160 MiB leaf chunks inside the 4 GB `cudaHostAlloc` pool causes heap fragmentation, leading to allocation failures even when free memory is $>500\text{ MiB}$. If $>25$ concurrent agent streams enter `AWAITING_TOOL`, swapped memory exceeds the 4 GB pinned RAM hard ceiling, spilling pages to cold NVMe storage where random write latencies ($15–50\text{ ms}$) stall the stream restoration pipeline.
-   - *Mitigation (Section 3.6)*: Pre-allocate the entire 4 GB pinned pool at startup as a single contiguous slab managed by a lock-free uniform page slot allocator, eliminating heap fragmentation. Enforce a **3.5 GB high-water mark queue**: when swapped memory reaches 3.5 GB, new incoming tool wait states pause generation in VRAM rather than spilling to NVMe disk, bounding all swap operations strictly within high-speed PCIe DMA bandwidth.
+5. **Host-Pinned RAM Fragmentation, NVMe Spilling Latency, Multi-Slab Fallbacks & Zombie Tool Deadlocks**:
+   - *Risk*: On a Windows machine running for weeks with high memory fragmentation, requesting a single contiguous 4 GB pinned block (`cudaHostAlloc`) at startup can fail if 4 GB of physically contiguous RAM cannot be locked by WDDM. If $>25$ concurrent agent streams enter `AWAITING_TOOL`, swapped memory exceeds the 4 GB pinned RAM hard ceiling, spilling pages to cold NVMe storage where random write latencies ($15–50\text{ ms}$) stall the stream restoration pipeline. Furthermore, if a stream enters `VRAM_RESIDENT_PAUSED` at the 3.5 GB high-water mark and an active tool process hangs indefinitely in a child Job Object, paused streams remain frozen in VRAM, starving active decoding streams of physical VRAM pages and deadlocking the engine.
+   - *Mitigation (Section 3.6)*: Implement a tiered slab fallback: attempt a single 4 GB contiguous block; if rejected, fall back to four 1 GB pinned slabs or sixteen 256 MB slabs indexed via a compile-time two-level pointer table ($<1\text{ ns}$ lookup). Enforce a **3.5 GB high-water mark queue** keeping swapped traffic strictly within PCIe DMA bandwidth. Enforce a **30-second hard watermark timeout** tied to `limits.call_timeout_seconds` (default: 60s): if the high-water mark fails to clear within 30 seconds, terminate the oldest `AWAITING_TOOL` process via `TerminateJobObject`, reclaim its host pinned memory, and drain the `VRAM_RESIDENT_PAUSED` queue into host RAM.
 6. **Radix Tree Cache Fragmentation under Rapid Branch Pruning**:
    - *Risk*: Spawning and killing dozens of short-lived candidate probes can fragment physical 16-token page tables, resulting in allocation stalls.
    - *Mitigation*: Implement a segregated buddy allocator for physical pages and a background defragmentation sweep that runs during GPU idle cycles.
+7. **In-Flight DMA Synchronization Hazards during Job Object Process Termination**:
+   - *Risk*: If a zombie tool process is terminated via `TerminateJobObject` while its KV pages are actively being evicted or restored across PCIe, freeing the host slab slots immediately could cause write-after-free corruption if DMA transfers are still queued in the GPU command ring.
+   - *Mitigation*: The memory reclamation routine must explicitly issue `cudaStreamSynchronize(swap_stream)` on the dedicated swap stream before resetting the slot allocation bitmask, guaranteeing hardware quiescence before slot reassignment.
+8. **Cache-Line Contention on Multi-Slab Bitmap Allocator**:
+   - *Risk*: High-frequency atomic bitmask operations (`fetch_or` / `fetch_and`) on a shared `bitmap[]` across 8 parallel CUDA streams can cause L3 cache false sharing (cache-line bouncing), degrading slot allocation latency.
+   - *Mitigation*: Align bitmap words to 64-byte CPU cache boundaries (`alignas(64) std::atomic<uint64_t> bitmap[]`) and assign stream-striped slab affinities (Stream $i$ prioritizes Slab $i \pmod S$), eliminating false sharing across concurrent threads.
 
 ---
 
