@@ -28,6 +28,8 @@ mod worktree_provider;
 pub use fs::{FsList, FsRead, FsSearch, FsWrite};
 pub use git::{GitBranch, GitCommit, GitDiff, GitStatus};
 pub use resources::SystemResources;
+#[cfg(windows)]
+pub(crate) use shell::resolve_executable;
 pub use shell::{ShellRun, scrub_env};
 pub use task_job_seam::CURRENT_TASK_JOB;
 #[cfg(windows)]
