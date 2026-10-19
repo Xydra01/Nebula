@@ -221,8 +221,8 @@ Environment & Tools: \
 - System drives: The active repository/worktree is on drive F:. Never touch or reference drive C:. \
 - Available tools: Standard environment tools such as python, git, uv, cargo, and pytest are available in PATH. Run them directly without hardcoded absolute paths. \
 - Filesystem: Always use built-in tools (such as fs.list, fs.read, fs.write) to examine or modify files in the repository rather than shell commands like dir or cat. \
-CRITICAL: You MUST execute tool calls on every step to make progress. Do NOT output conversational plans, status updates, or thoughts without tool calls. If you need to inspect files or run commands, invoke the tools directly. \
-Only provide a final plain-text response without tool calls when the entire task has been fully implemented, verified, and completed.",
+EXECUTION RULE: Execute tool calls while work is in progress. Do NOT output conversational plans, status updates, or thoughts without tool calls. If you need to inspect files or run commands, invoke the tools directly. \
+EXIT DIRECTIVE: Once your verification and test commands pass with exit code 0 and satisfy the Definition of Done, the task is complete. You MUST immediately stop calling tools. Output your final completion summary in plain text without invoking any further tools to conclude the task.",
     );
 
     if let Some(ref module) = lang_module {

@@ -35,3 +35,11 @@
   - [x] 6.4 Pass `cargo nextest run --workspace --locked`.
   - [x] 6.5 Pass bench tests in `bench/`.
   - [x] 6.6 Update `docs/ARCHITECTURE.md`.
+
+- [ ] 7. False Positive Elimination & Host Workstation Tuning (Issue #54 Integration)
+  - [ ] 7.1 Add `dwm.exe` to `default_game_mode_desktop_allowlist` in `crates/nebula-config/src/lib.rs` and `config/default.toml`.
+  - [ ] 7.2 Remove background tray launcher helpers (`steamwebhelper.exe`, `steamservice.exe`, `epicgameslauncher.exe`) from static `known_processes` trigger list.
+  - [ ] 7.3 Correlate high VRAM detection with active GPU compute utilization (`gpu_util_pct > 15%`) or foreground focus in `GameModeCoordinator::detect_game_condition`.
+  - [ ] 7.4 Add unit and integration tests verifying `dwm.exe` holding 3000 MiB does not trip game mode.
+  - [ ] 7.5 Add integration test verifying background tray launcher does not trip game mode until a 3D game launches.
+

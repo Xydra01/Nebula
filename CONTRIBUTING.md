@@ -47,6 +47,7 @@ This lets `git log --grep "Nebula-Task"` and GitHub's co-author display show exa
 - **Review:** `CODEOWNERS` requires an approving review from @Xydra01, and the approval must come after the latest push. Bot PRs are approved by the owner, and the bot never approves anything. The owner's own PRs are merged using the repository-admin bypass.
 - **Merging:** use merge or squash. Rebase-merge is disabled.
 - **Self-modification:** PRs that touch the protected set (core crates, policy, permission tiers, the benchmark harness) are always human-reviewed and never auto-merged, whatever the repo's `trust_level`. See the design doc, Section 11.
+- **Protected Set Dependency Ordering Gate:** Any PR modifying permission rules (`rules.toml`, `config/default.toml`, or `Tier` mappings, e.g. Issue #71) must verify that prerequisite security red-team property tests (e.g. Issue #74) are merged into `main` **before** introducing whitelist expansions. All whitelist regexes must strictly anchor to `<worktree_root>`. For offline development detached from the GitHub API, pass `-SkipNetworkCheck` or set `$env:NEBULA_SKIP_DEPENDENCY_NETWORK_CHECK = '1'`.
 
 ## Rust conventions
 
@@ -64,6 +65,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs these on every 
 
 ```powershell
 gitleaks git --redact
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-pr-dependencies.ps1
 cd bench; uv run ruff check .; uv run ruff format --check .; uv run pytest -q; cd ..
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
