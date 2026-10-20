@@ -98,6 +98,7 @@ inline std::string ggml_type_name(uint32_t type) {
         case GGMLType::TQ1_0: return "TQ1_0";
         case GGMLType::TQ2_0: return "TQ2_0";
         default: {
+            if (type == 142) return "PQ2_0";
             if (type == 143) return "TQ1_0";
             if (type == 144) return "TQ2_0";
             return "UNKNOWN(" + std::to_string(type) + ")";
@@ -131,9 +132,11 @@ inline void ggml_type_traits(uint32_t type, size_t& block_size, size_t& block_by
         case GGMLType::Q6_K: block_size = 256; block_bytes = 210; break;
         case GGMLType::Q8_K: block_size = 256; block_bytes = 292; break;
         case GGMLType::IQ4_NL: block_size = 32; block_bytes = 18; break;
-        case GGMLType::TQ1_0: block_size = 256; block_bytes = 54; break;
+        case GGMLType::TQ1_0: block_size = 256; block_bytes = 56; break;
         case GGMLType::TQ2_0: block_size = 256; block_bytes = 70; break;
         default:
+            if (type == 142) { block_size = 256; block_bytes = 70; break; }
+            if (type == 143) { block_size = 256; block_bytes = 56; break; }
             // Fallback for unlisted quantization types
             block_size = 1;
             block_bytes = 1;
