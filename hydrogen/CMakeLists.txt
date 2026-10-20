@@ -107,10 +107,11 @@ target_link_libraries(hydrogen_smoke_test PRIVATE
     hydrogen_model
 )
 
-# Memory Subsystem Library (Issues H04, H05)
+# Memory Subsystem Library (Issues H04, H05, H06)
 add_library(hydrogen_memory STATIC
     src/memory/page_allocator.cpp
     src/memory/radix_tree.cpp
+    src/memory/page_pool.cpp
 )
 
 target_include_directories(hydrogen_memory PUBLIC
@@ -145,5 +146,20 @@ target_include_directories(hydrogen_test_radix_tree PRIVATE
 target_link_libraries(hydrogen_test_radix_tree PRIVATE
     hydrogen_memory
 )
+
+# Lock-Free Page Pool Stress Test Target (Issue H06)
+add_executable(hydrogen_stress_test_page_pool
+    src/tools/stress_test_page_pool.cpp
+)
+
+target_include_directories(hydrogen_stress_test_page_pool PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_stress_test_page_pool PRIVATE
+    hydrogen_memory
+)
+
 
 
