@@ -74,9 +74,10 @@ target_link_libraries(hydrogen_inspect_model PRIVATE
     hydrogen_model
 )
 
-# Forward Baseline Engine Library (Issue H03)
+# Forward Baseline Engine Library (Issues H03, H07)
 add_library(hydrogen_engine STATIC
     src/model/forward_baseline.cu
+    src/attention/cascade_attention.cu
 )
 
 target_include_directories(hydrogen_engine PUBLIC
@@ -160,6 +161,22 @@ target_include_directories(hydrogen_stress_test_page_pool PRIVATE
 target_link_libraries(hydrogen_stress_test_page_pool PRIVATE
     hydrogen_memory
 )
+
+# FlashInfer Cascade Attention Benchmark Target (Issue H07)
+add_executable(hydrogen_bench_cascade_attention
+    src/tools/bench_cascade_attention.cpp
+)
+
+target_include_directories(hydrogen_bench_cascade_attention PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_cascade_attention PRIVATE
+    hydrogen_engine
+    hydrogen_memory
+)
+
 
 
 
