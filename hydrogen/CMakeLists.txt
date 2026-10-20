@@ -281,3 +281,33 @@ target_link_libraries(hydrogen_bench_fsm_sampler PRIVATE
     CUDA::cudart
 )
 
+# Speculative Tool Dispatcher & Safety Barrier Library (Issue H12)
+add_library(hydrogen_tools STATIC
+    src/tools/speculative_dispatcher.cpp
+)
+
+target_include_directories(hydrogen_tools PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_tools PUBLIC
+    CUDA::cudart
+)
+
+# Speculative Safety Verification Test Target (Issue H12)
+add_executable(hydrogen_test_speculative_safety
+    src/tools/test_speculative_safety.cpp
+)
+
+target_include_directories(hydrogen_test_speculative_safety PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_test_speculative_safety PRIVATE
+    hydrogen_tools
+    CUDA::cudart
+)
+
+
