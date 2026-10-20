@@ -214,3 +214,35 @@ target_link_libraries(hydrogen_bench_dispatch_tiler PRIVATE
     hydrogen_memory
     hydrogen_model
 )
+
+# Split-Fuse Continuous Batcher Library (Issue H10)
+add_library(hydrogen_batcher STATIC
+    src/batcher/split_fuse.cpp
+)
+
+target_include_directories(hydrogen_batcher PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_batcher PUBLIC
+    CUDA::cudart
+)
+
+# Split-Fuse Continuous Batching Benchmark Target (Issue H10)
+add_executable(hydrogen_bench_split_fuse_batcher
+    src/tools/bench_split_fuse_batcher.cpp
+)
+
+target_include_directories(hydrogen_bench_split_fuse_batcher PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_split_fuse_batcher PRIVATE
+    hydrogen_batcher
+    hydrogen_engine
+    hydrogen_memory
+    hydrogen_model
+    CUDA::cudart
+)
