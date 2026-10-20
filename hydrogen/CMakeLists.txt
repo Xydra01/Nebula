@@ -74,10 +74,11 @@ target_link_libraries(hydrogen_inspect_model PRIVATE
     hydrogen_model
 )
 
-# Forward Baseline Engine Library (Issues H03, H07)
+# Forward Baseline Engine Library (Issues H03, H07, H08)
 add_library(hydrogen_engine STATIC
     src/model/forward_baseline.cu
     src/attention/cascade_attention.cu
+    src/model/marlin_gemm.cu
 )
 
 target_include_directories(hydrogen_engine PUBLIC
@@ -177,6 +178,18 @@ target_link_libraries(hydrogen_bench_cascade_attention PRIVATE
     hydrogen_memory
 )
 
+# Marlin / CUTLASS Quantized GEMM Benchmark Target (Issue H08)
+add_executable(hydrogen_bench_marlin_gemm
+    src/tools/bench_marlin_gemm.cpp
+)
 
+target_include_directories(hydrogen_bench_marlin_gemm PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
-
+target_link_libraries(hydrogen_bench_marlin_gemm PRIVATE
+    hydrogen_engine
+    hydrogen_memory
+    hydrogen_model
+)

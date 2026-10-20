@@ -170,7 +170,7 @@ async fn test_game_mode_manual_override_unloads_and_reloads() {
 async fn test_game_mode_event_broadcast() {
     let h = start_harness(10, 10).await;
     let mut c = h.ready_client().await;
-    let mut sub_client = h.client().await;
+    let mut sub_client = h.ready_client().await;
 
     // Turn ON manually
     let _: GameModeStatusResponse = c
