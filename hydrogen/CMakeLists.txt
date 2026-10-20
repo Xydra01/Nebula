@@ -54,3 +54,23 @@ target_include_directories(hydrogen_sanity_test PRIVATE
 set_target_properties(hydrogen_sanity_test PROPERTIES
     CUDA_SEPARABLE_COMPILATION OFF
 )
+
+# Model Subsystem Library (Issue H02)
+add_library(hydrogen_model STATIC
+    src/model/tensor_loader.cpp
+)
+
+target_include_directories(hydrogen_model PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Model Inspection Utility (Issue H02)
+add_executable(hydrogen_inspect_model
+    src/tools/inspect_model.cpp
+)
+
+target_link_libraries(hydrogen_inspect_model PRIVATE
+    hydrogen_model
+)
+
