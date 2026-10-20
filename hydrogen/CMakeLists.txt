@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 project(hydrogen LANGUAGES CXX CUDA)
 
+find_package(CUDAToolkit REQUIRED)
+
 # Enforce ISO C++20 for host and device compilation
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -74,11 +76,13 @@ target_link_libraries(hydrogen_inspect_model PRIVATE
     hydrogen_model
 )
 
-# Forward Baseline Engine Library (Issues H03, H07, H08)
+# Forward Baseline Engine Library (Issues H03, H07, H08, H09)
 add_library(hydrogen_engine STATIC
     src/model/forward_baseline.cu
     src/attention/cascade_attention.cu
     src/model/marlin_gemm.cu
+    src/attention/dispatch.cpp
+    src/model/kernel_tiler.cu
 )
 
 target_include_directories(hydrogen_engine PUBLIC
@@ -88,6 +92,7 @@ target_include_directories(hydrogen_engine PUBLIC
 
 target_link_libraries(hydrogen_engine PUBLIC
     hydrogen_model
+    CUDA::cudart
 )
 
 set_target_properties(hydrogen_engine PROPERTIES
@@ -189,6 +194,22 @@ target_include_directories(hydrogen_bench_marlin_gemm PRIVATE
 )
 
 target_link_libraries(hydrogen_bench_marlin_gemm PRIVATE
+    hydrogen_engine
+    hydrogen_memory
+    hydrogen_model
+)
+
+# Templated Dispatch & WDDM Clamping Benchmark Target (Issue H09)
+add_executable(hydrogen_bench_dispatch_tiler
+    src/tools/bench_dispatch_tiler.cpp
+)
+
+target_include_directories(hydrogen_bench_dispatch_tiler PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_dispatch_tiler PRIVATE
     hydrogen_engine
     hydrogen_memory
     hydrogen_model
