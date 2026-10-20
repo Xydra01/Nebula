@@ -4,7 +4,7 @@
 param(
     [Parameter(Mandatory)] [string] $Title,
     [Parameter(Mandatory)] [string] $Body,
-    [string] $Repo = 'Xydra01/Nebula',
+    [string] $Repo = 'Xydra01/Nebula-Hydrogen',
     [string] $Base = 'main'
 )
 $ErrorActionPreference = 'Stop'
