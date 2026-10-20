@@ -112,7 +112,17 @@ int main(int argc, char* argv[]) {
     }
 
     hydrogen::ForwardBaseline baseline;
-    hydrogen::ForwardResult result = baseline.run(config);
+    hydrogen::ForwardResult result;
+    try {
+        result = baseline.run(config);
+    } catch (const std::exception& e) {
+        if (config.json_output) {
+            std::cout << "{\n  \"status\": \"FAIL\",\n  \"error\": \"" << escape_json(e.what()) << "\"\n}\n";
+        } else {
+            std::cerr << "Forward baseline exception: " << e.what() << "\n";
+        }
+        return 1;
+    }
 
     if (!result.success) {
         if (config.json_output) {

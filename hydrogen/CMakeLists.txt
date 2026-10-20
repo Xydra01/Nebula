@@ -119,11 +119,16 @@ add_library(hydrogen_memory STATIC
     src/memory/page_allocator.cpp
     src/memory/radix_tree.cpp
     src/memory/page_pool.cpp
+    src/memory/host_slab.cpp
 )
 
 target_include_directories(hydrogen_memory PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_memory PUBLIC
+    CUDA::cudart
 )
 
 # Page Block Test Target (Issue H04)
@@ -307,6 +312,21 @@ target_include_directories(hydrogen_test_speculative_safety PRIVATE
 
 target_link_libraries(hydrogen_test_speculative_safety PRIVATE
     hydrogen_tools
+    CUDA::cudart
+)
+
+# Tiered Host Pinned Slab Allocator Benchmark Target (Issue H13)
+add_executable(hydrogen_bench_host_slab
+    src/memory/bench_host_slab.cpp
+)
+
+target_include_directories(hydrogen_bench_host_slab PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_host_slab PRIVATE
+    hydrogen_memory
     CUDA::cudart
 )
 
