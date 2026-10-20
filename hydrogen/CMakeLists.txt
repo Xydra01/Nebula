@@ -114,13 +114,15 @@ target_link_libraries(hydrogen_smoke_test PRIVATE
     hydrogen_model
 )
 
-# Memory Subsystem Library (Issues H04, H05, H06, H13, H14)
+# Memory Subsystem Library (Issues H04, H05, H06, H13, H14, H15)
 add_library(hydrogen_memory STATIC
     src/memory/page_allocator.cpp
     src/memory/radix_tree.cpp
     src/memory/page_pool.cpp
     src/memory/host_slab.cpp
     src/memory/dma_swapper.cu
+    src/memory/dma_guard.cpp
+    src/memory/watermark_supervisor.cpp
 )
 
 target_include_directories(hydrogen_memory PUBLIC
@@ -349,6 +351,22 @@ target_link_libraries(hydrogen_bench_dma_swapper PRIVATE
     hydrogen_memory
     CUDA::cudart
 )
+
+# 30s Zombie Process Auto-Reclaim & 500ms WDDM TDR Guard Test Target (Issue H15)
+add_executable(hydrogen_test_deadlock_and_tdr
+    src/tools/test_deadlock_and_tdr.cpp
+)
+
+target_include_directories(hydrogen_test_deadlock_and_tdr PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_test_deadlock_and_tdr PRIVATE
+    hydrogen_memory
+    CUDA::cudart
+)
+
 
 
 
