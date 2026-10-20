@@ -74,3 +74,36 @@ target_link_libraries(hydrogen_inspect_model PRIVATE
     hydrogen_model
 )
 
+# Forward Baseline Engine Library (Issue H03)
+add_library(hydrogen_engine STATIC
+    src/model/forward_baseline.cu
+)
+
+target_include_directories(hydrogen_engine PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_engine PUBLIC
+    hydrogen_model
+)
+
+set_target_properties(hydrogen_engine PROPERTIES
+    CUDA_SEPARABLE_COMPILATION OFF
+)
+
+# Forward Baseline Smoke Test Target (Issue H03)
+add_executable(hydrogen_smoke_test
+    src/smoke_test.cpp
+)
+
+target_include_directories(hydrogen_smoke_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_smoke_test PRIVATE
+    hydrogen_engine
+    hydrogen_model
+)
+
