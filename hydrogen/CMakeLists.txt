@@ -114,12 +114,13 @@ target_link_libraries(hydrogen_smoke_test PRIVATE
     hydrogen_model
 )
 
-# Memory Subsystem Library (Issues H04, H05, H06)
+# Memory Subsystem Library (Issues H04, H05, H06, H13, H14)
 add_library(hydrogen_memory STATIC
     src/memory/page_allocator.cpp
     src/memory/radix_tree.cpp
     src/memory/page_pool.cpp
     src/memory/host_slab.cpp
+    src/memory/dma_swapper.cu
 )
 
 target_include_directories(hydrogen_memory PUBLIC
@@ -129,6 +130,10 @@ target_include_directories(hydrogen_memory PUBLIC
 
 target_link_libraries(hydrogen_memory PUBLIC
     CUDA::cudart
+)
+
+set_target_properties(hydrogen_memory PROPERTIES
+    CUDA_SEPARABLE_COMPILATION OFF
 )
 
 # Page Block Test Target (Issue H04)
@@ -329,5 +334,21 @@ target_link_libraries(hydrogen_bench_host_slab PRIVATE
     hydrogen_memory
     CUDA::cudart
 )
+
+# PCIe 4.0 DMA Swap Stream Benchmark Target (Issue H14)
+add_executable(hydrogen_bench_dma_swapper
+    src/memory/bench_dma_swapper.cu
+)
+
+target_include_directories(hydrogen_bench_dma_swapper PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_dma_swapper PRIVATE
+    hydrogen_memory
+    CUDA::cudart
+)
+
 
 
