@@ -246,3 +246,38 @@ target_link_libraries(hydrogen_bench_split_fuse_batcher PRIVATE
     hydrogen_model
     CUDA::cudart
 )
+
+# GPU-Fused FSM Tool Grammar Bitmask Sampler Library (Issue H11)
+add_library(hydrogen_grammar STATIC
+    src/grammar/fsm_compiler.cpp
+    src/grammar/fsm_sampler.cu
+)
+
+target_include_directories(hydrogen_grammar PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_grammar PUBLIC
+    CUDA::cudart
+)
+
+set_target_properties(hydrogen_grammar PROPERTIES
+    CUDA_SEPARABLE_COMPILATION OFF
+)
+
+# GPU-Fused FSM Tool Grammar Sampler Benchmark Target (Issue H11)
+add_executable(hydrogen_bench_fsm_sampler
+    src/tools/bench_fsm_sampler.cpp
+)
+
+target_include_directories(hydrogen_bench_fsm_sampler PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_fsm_sampler PRIVATE
+    hydrogen_grammar
+    CUDA::cudart
+)
+
