@@ -4,6 +4,7 @@
 import json
 import subprocess
 from pathlib import Path
+
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -14,13 +15,7 @@ EMBEDDING_MODEL = Path(r"F:\Nebula\models\embedding\Qwen3-Embedding-0.6B-Q8_0.gg
 
 def run_smoke_test(args: list[str]) -> subprocess.CompletedProcess:
     cmd = [str(SMOKE_EXE)] + args
-    return subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-        timeout=60
-    )
+    return subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=60)
 
 
 def test_smoke_test_binary_exists():
@@ -55,7 +50,8 @@ def test_smoke_test_qwen3_embedding_forward():
 @pytest.mark.skipif(not BONSAI_MODEL.exists(), reason="Bonsai 27B model not found on F:")
 def test_smoke_test_bonsai27b_forward_fast():
     """Test Bonsai 27B forward pass with active tensors only."""
-    proc = run_smoke_test(["-m", str(BONSAI_MODEL), "-p", "The capital of France is", "--no-alloc-full", "--json"])
+    args = ["-m", str(BONSAI_MODEL), "-p", "The capital of France is", "--no-alloc-full", "--json"]
+    proc = run_smoke_test(args)
     assert proc.returncode == 0, f"Process failed: {proc.stderr}\n{proc.stdout}"
 
     data = json.loads(proc.stdout)
@@ -73,7 +69,8 @@ def test_smoke_test_bonsai27b_forward_fast():
 @pytest.mark.skipif(not BONSAI_MODEL.exists(), reason="Bonsai 27B model not found on F:")
 def test_smoke_test_bonsai27b_full_vram_allocation():
     """Verify full weight allocation (5,660 MiB) into VRAM conforming to Proof A bounds."""
-    proc = run_smoke_test(["-m", str(BONSAI_MODEL), "-p", "The capital of France is", "--alloc-full", "--json"])
+    args = ["-m", str(BONSAI_MODEL), "-p", "The capital of France is", "--alloc-full", "--json"]
+    proc = run_smoke_test(args)
     assert proc.returncode == 0, f"Process failed: {proc.stderr}\n{proc.stdout}"
 
     data = json.loads(proc.stdout)
@@ -93,7 +90,8 @@ def test_smoke_test_missing_model_failure():
 
 @pytest.mark.skipif(not EMBEDDING_MODEL.exists(), reason="Qwen3 embedding model not found on F:")
 def test_smoke_test_custom_prompt():
-    proc = run_smoke_test(["-m", str(EMBEDDING_MODEL), "-p", "Hello world", "--no-alloc-full", "--json"])
+    args = ["-m", str(EMBEDDING_MODEL), "-p", "Hello world", "--no-alloc-full", "--json"]
+    proc = run_smoke_test(args)
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
     assert data["status"] == "PASS"
