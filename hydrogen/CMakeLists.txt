@@ -107,3 +107,27 @@ target_link_libraries(hydrogen_smoke_test PRIVATE
     hydrogen_model
 )
 
+# Memory Subsystem Library (Issue H04)
+add_library(hydrogen_memory STATIC
+    src/memory/page_allocator.cpp
+)
+
+target_include_directories(hydrogen_memory PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Page Block Test Target (Issue H04)
+add_executable(hydrogen_test_page_block
+    src/tools/test_page_block.cpp
+)
+
+target_include_directories(hydrogen_test_page_block PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_test_page_block PRIVATE
+    hydrogen_memory
+)
+
