@@ -1,0 +1,33 @@
+# Issue Plan: H05 — Radix-Tree Paged KV Cache & Copy-on-Write Branching
+
+| Field | Value |
+| :--- | :--- |
+| Issue ID | H05 |
+| Title | `[hydrogen] feat(memory): Radix-tree paged KV cache manager and atomic Copy-on-Write branching` |
+| Phase | Phase 1: Memory Subsystem |
+| Labels | `hydrogen`, `phase-1`, `core` |
+| Target Files | `hydrogen/include/radix_tree.hpp`, `hydrogen/src/memory/radix_tree.cpp` |
+
+---
+
+## 1. Problem Statement
+When running multi-agent tasks, each conversation shares a common 4,096-token system prompt and tool schema. Standard slot allocation duplicates this prompt across every stream ($8 \times 4\text{K} = 32\text{K}$ tokens), causing premature VRAM OOM crashes. Hydrogen requires a thread-safe Radix Tree where common prefix nodes are shared via atomic reference counting, and branches allocate physical pages only upon divergence (Copy-on-Write).
+
+## 2. Implementation Plan
+1. Implement `RadixTreeNode` in C++20 with token key vector, array of page block indices, and child node map.
+2. Implement atomic reference counting (`std::atomic<uint32_t> ref_count`) on each node.
+3. Implement `insert_prefix()`, `match_longest_prefix()`, and `fork_branch(stream_id)`.
+4. When a branch forks or emits a new token, apply Copy-on-Write: shared prefix pages increment reference counts; new private pages are appended to the leaf branch.
+
+## 3. Verification & Proof Plan
+- Write `test_radix_tree.cpp`.
+- Simulate 8 agent streams diverging from a common 4,096-token root:
+  - Verify root node `ref_count == 8`.
+  - Verify total physical pages allocated for the 8 streams is $256\text{ (root)} + (8 \times 128)\text{ (leaves)} = 1,280\text{ pages}$.
+  - Naive allocation would require $8 \times 384 = 3,072\text{ pages}$.
+  - Calculated savings: $\frac{3072 - 1280}{3072} = \mathbf{58.3\%}$ at 2K tokens, scaling to $\mathbf{79.2\%}$ at 6K tokens.
+
+## 4. Acceptance Criteria
+- [ ] Prefix sharing verified: root node pages are physically resident once in memory.
+- [ ] Concurrent branch fork operations are thread-safe and lock-free on reads.
+- [ ] Page reference counts match active stream owners accurately.
