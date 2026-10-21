@@ -367,6 +367,31 @@ target_link_libraries(hydrogen_test_deadlock_and_tdr PRIVATE
     CUDA::cudart
 )
 
+# IPC Subsystem Library (Issue H16)
+add_library(hydrogen_ipc STATIC
+    src/ipc/shm_server.cpp
+)
+
+target_include_directories(hydrogen_ipc PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Win32 Named Shared Memory IPC Benchmark Target (Issue H16)
+add_executable(hydrogen_bench_shm_ipc
+    src/tools/bench_shm_ipc.cpp
+)
+
+target_include_directories(hydrogen_bench_shm_ipc PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_bench_shm_ipc PRIVATE
+    hydrogen_ipc
+)
+
+
 
 
 
