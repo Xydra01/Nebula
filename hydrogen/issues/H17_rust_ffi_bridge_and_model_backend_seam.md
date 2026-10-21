@@ -34,6 +34,6 @@ The Nebula daemon supervises local models through the `ModelBackend` trait defin
 - Verify memory barrier correctness: test that spawning a tool process switches CUDA scheduling to `Yield` on the very next token iteration ($<14\text{ ms}$).
 
 ## 4. Acceptance Criteria
-- [ ] `ModelBackend` trait passes all existing backend mock and integration tests.
-- [ ] Safe Rust wrapper contains zero unsafe code outside documented `// SAFETY:` FFI blocks.
-- [ ] Memory ordering barriers prevent MSVC `/O2` instruction reordering across kernel dispatches.
+- [x] `ModelBackend` trait passes all existing backend mock and integration tests.
+- [x] Safe Rust wrapper contains zero unsafe code outside documented `// SAFETY:` FFI blocks.
+- [x] Memory ordering barriers prevent MSVC `/O2` instruction reordering across kernel dispatches.
