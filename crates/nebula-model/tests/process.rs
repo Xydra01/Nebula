@@ -7,8 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nebula_model::{
-    ChatRequest, LaunchSpec, Launcher, ModelBackend, ModelConfig, ModelManager, ProcessLauncher,
-    SupervisorConfig,
+    ChatRequest, LaunchSpec, Launcher, ModelConfig, ModelManager, ProcessLauncher, SupervisorConfig,
 };
 use nebula_proto::{ChatMessage, ModelState, Role};
 

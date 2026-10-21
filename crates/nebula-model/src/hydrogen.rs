@@ -59,12 +59,13 @@ impl HydrogenBackend {
     /// # Errors
     /// [`ModelError::Transport`] on Win32 API failure or protocol mismatch.
     pub fn open(create: bool) -> Result<Self, ModelError> {
-        Self::open_named(
-            DEFAULT_SHM_NAME,
-            DEFAULT_ENGINE_EVENT_NAME,
-            DEFAULT_DAEMON_EVENT_NAME,
-            create,
-        )
+        let shm_name = std::env::var("NEBULA_HYDROGEN_SHM_NAME")
+            .unwrap_or_else(|_| DEFAULT_SHM_NAME.to_string());
+        let eng_evt = std::env::var("NEBULA_HYDROGEN_ENGINE_EVENT")
+            .unwrap_or_else(|_| DEFAULT_ENGINE_EVENT_NAME.to_string());
+        let dae_evt = std::env::var("NEBULA_HYDROGEN_DAEMON_EVENT")
+            .unwrap_or_else(|_| DEFAULT_DAEMON_EVENT_NAME.to_string());
+        Self::open_named(&shm_name, &eng_evt, &dae_evt, create)
     }
 
     /// Opens with custom shared memory and event names (useful for testing).
@@ -219,7 +220,8 @@ impl HydrogenBackend {
                                     .to_owned(),
                                 arguments: tc
                                     .get("arguments")
-                                    .map(ToString::to_string)
+                                    .and_then(|v| v.as_str().map(str::to_owned))
+                                    .or_else(|| tc.get("arguments").map(ToString::to_string))
                                     .unwrap_or_default(),
                             };
                             if tx.send(Ok(StreamItem::ToolCall(tool_call))).await.is_err() {
@@ -259,6 +261,10 @@ impl Drop for HydrogenBackend {
 
 #[async_trait]
 impl ModelBackend for HydrogenBackend {
+    fn activity(&self) -> &Activity {
+        &self.activity
+    }
+
     #[tracing::instrument(level = "debug", skip_all)]
     async fn chat(&self, req: ChatRequest) -> Result<ChatStream, ModelError> {
         if self.activity.is_cancelled() {

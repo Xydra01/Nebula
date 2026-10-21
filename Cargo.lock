@@ -1462,6 +1462,7 @@ dependencies = [
  "futures-util",
  "hex",
  "nebula-config",
+ "nebula-hydrogen",
  "nebula-model",
  "nebula-proto",
  "nebula-resources",

@@ -21,7 +21,7 @@ use crate::{ModelError, truncate};
 
 /// A model server Nebula can talk to.
 #[async_trait]
-pub trait ModelBackend: Send + Sync {
+pub trait ModelBackend: Send + Sync + std::fmt::Debug {
     /// Starts a streaming chat completion.
     async fn chat(&self, req: ChatRequest) -> Result<ChatStream, ModelError>;
     /// Embeds each input.
@@ -30,6 +30,8 @@ pub trait ModelBackend: Send + Sync {
     async fn tokenize(&self, text: &str) -> Result<Vec<u32>, ModelError>;
     /// Probes the server.
     async fn health(&self) -> Result<BackendHealth, ModelError>;
+    /// Activity tracker for in-flight requests.
+    fn activity(&self) -> &Activity;
 }
 
 /// Requests in flight on one server, plus the token that cancels them all.
@@ -190,6 +192,10 @@ fn transport(e: &reqwest::Error) -> ModelError {
 
 #[async_trait]
 impl ModelBackend for LlamaServerBackend {
+    fn activity(&self) -> &Activity {
+        &self.activity
+    }
+
     #[tracing::instrument(level = "debug", skip_all, fields(profile = %self.profile_name))]
     async fn chat(&self, req: ChatRequest) -> Result<ChatStream, ModelError> {
         if self.profile.embedding {

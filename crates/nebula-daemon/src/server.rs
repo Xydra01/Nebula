@@ -4,7 +4,7 @@ use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use nebula_model::{ChatRequest, ModelBackend, ModelError, StreamItem};
+use nebula_model::{ChatRequest, ModelError, StreamItem};
 use nebula_proto::{
     ChatCancelParams, ChatDone, ChatError, ChatId, ChatStartParams, ChatStarted, ChatToken,
     DaemonStatus, DoctorReport, Empty, Event, LogEvent, LogsSubscribeParams, Message, Method,
