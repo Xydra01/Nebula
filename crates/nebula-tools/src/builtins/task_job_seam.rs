@@ -62,6 +62,9 @@ pub struct JobChild {
     child: tokio::process::Child,
     // Keeps the task's job referenced for the child's lifetime; dropped with the `JobChild`.
     _job: Arc<TaskJob>,
+    // Immediate process spawn hook: asserts active_tool_processes across shared memory
+    // with release ordering (Issue H17); decremented on drop.
+    _spawn_guard: nebula_hydrogen::ToolSpawnGuard,
 }
 
 #[cfg(windows)]
@@ -154,7 +157,14 @@ pub fn spawn_in_task_job(cmd: &mut tokio::process::Command) -> Result<JobChild, 
         detail: format!("resume failed after assignment: {e}"),
     })?;
 
-    Ok(JobChild { child, _job: job })
+    // Immediate process spawn hook: assert active_tool_processes across shared memory (Issue H17).
+    let _spawn_guard = nebula_hydrogen::ToolSpawnGuard::new();
+
+    Ok(JobChild {
+        child,
+        _job: job,
+        _spawn_guard,
+    })
 }
 
 /// The child's raw process handle, or [`JobError::ExitedBeforeAssign`] if it has already exited
@@ -202,6 +212,42 @@ mod tests {
                 panic!("expected NoTaskInScope with no task in scope, but a child was spawned")
             }
         }
+    }
+
+    /// Issue H17: Spawning a task child asserts active_tool_processes across shared memory,
+    /// decremented when the child is dropped.
+    #[tokio::test]
+    async fn spawn_in_task_job_increments_active_tool_processes() {
+        let test_id = format!("test_job_atp_{}", ulid::Ulid::generate());
+        let shm_name = format!(r"Local\Nebula_Hydrogen_Test_Shm_{test_id}");
+        let eng_evt = format!(r"Local\Nebula_Hydrogen_Test_Eng_{test_id}");
+        let dae_evt = format!(r"Local\Nebula_Hydrogen_Test_Dae_{test_id}");
+
+        let shm = Arc::new(
+            nebula_hydrogen::ShmHandle::open(&shm_name, &eng_evt, &dae_evt, true)
+                .expect("open shm"),
+        );
+        nebula_hydrogen::register_global_shm(Arc::clone(&shm));
+
+        assert_eq!(shm.active_tool_processes(), 0);
+
+        let job = Arc::new(TaskJob::new("task-atp", JobLimits::default()).unwrap());
+        CURRENT_TASK_JOB
+            .scope(Some(Arc::clone(&job)), async {
+                let mut cmd = Command::new("cmd");
+                cmd.args(["/C", "echo", "test"]);
+                let child = spawn_in_task_job(&mut cmd).expect("spawn into task job");
+
+                // While child is held, active_tool_processes is 1
+                assert_eq!(shm.active_tool_processes(), 1);
+
+                drop(child);
+                // When child is dropped, active_tool_processes decrements to 0
+                assert_eq!(shm.active_tool_processes(), 0);
+            })
+            .await;
+
+        nebula_hydrogen::unregister_global_shm();
     }
 
     /// Feature: job-objects-for-tasks, Property 1: no survivors after a Task_Job closes.

@@ -1,0 +1,28 @@
+[package]
+name = "nebula-hydrogen"
+description = "Safe Rust FFI bindings to the Hydrogen inference engine's Win32 shared memory IPC"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_Security",
+] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+ulid.workspace = true
+
+[lints]
+workspace = true

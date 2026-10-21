@@ -10,12 +10,35 @@ use serde_json::{Map, Value};
 
 use crate::ModelError;
 
+/// The inference backend used to communicate with the model server.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModelBackendKind {
+    /// Standard llama-server HTTP backend (default).
+    #[default]
+    LlamaServer,
+    /// Fast Win32 shared memory Hydrogen backend.
+    Hydrogen,
+}
+
+impl std::fmt::Display for ModelBackendKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LlamaServer => write!(f, "llama-server"),
+            Self::Hydrogen => write!(f, "hydrogen"),
+        }
+    }
+}
+
 /// The `[model]` config section.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelConfig {
     /// Profile loaded at startup.
     pub default_profile: String,
+    /// The inference backend kind (`llama-server` or `hydrogen`). Defaults to `llama-server`.
+    #[serde(default)]
+    pub backend: ModelBackendKind,
     /// llama-server executable per runtime name (`llama-prism`, `llama-stock`).
     pub runtimes: BTreeMap<String, PathBuf>,
     /// Profiles by name.
@@ -110,6 +133,9 @@ pub struct ModelProfile {
     /// llama-server commits about as much system memory as it uses in VRAM.
     #[serde(default)]
     pub commit_estimate_mib: Option<u64>,
+    /// Override inference backend kind for this profile, if any.
+    #[serde(default)]
+    pub backend: Option<ModelBackendKind>,
 }
 
 impl ModelProfile {

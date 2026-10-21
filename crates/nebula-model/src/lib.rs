@@ -3,6 +3,8 @@
 //! - [`backend::LlamaServerBackend`] talks to llama-server (`/v1/chat/completions` with SSE,
 //!   `/v1/embeddings`, `/tokenize`, `/health`) and logs a `model.call` event per chat, with the
 //!   full request and output in the blob store.
+//! - [`hydrogen::HydrogenBackend`] (Windows only) talks to the Hydrogen inference engine via
+//!   a 64 MiB Win32 named shared memory ring buffer for sub-50 µs token delivery.
 //! - [`supervisor::ModelManager`] keeps one server running per profile: launch inside a Job
 //!   Object, health loop, restart with backoff, `Failed` after repeated crashes, profile
 //!   switches that drain in-flight requests.
@@ -12,6 +14,8 @@
 
 pub mod backend;
 pub mod config;
+#[cfg(windows)]
+pub mod hydrogen;
 pub mod launcher;
 pub mod sse;
 pub mod supervisor;
@@ -20,7 +24,9 @@ pub mod testing;
 pub mod types;
 
 pub use backend::{Activity, LlamaServerBackend, ModelBackend};
-pub use config::{ModelConfig, ModelProfile, ReasoningStyle, Sampling};
+pub use config::{ModelBackendKind, ModelConfig, ModelProfile, ReasoningStyle, Sampling};
+#[cfg(windows)]
+pub use hydrogen::HydrogenBackend;
 pub use launcher::{LaunchSpec, Launcher, ProcessLauncher, ServerProcess};
 pub use supervisor::{ModelManager, Preflight, SupervisorConfig};
 pub use types::{BackendHealth, ChatOutput, ChatRequest, ChatStream, StreamItem, ToolCall};

@@ -63,13 +63,19 @@ impl Activity {
         self.cancel.is_cancelled()
     }
 
-    fn enter(&self) -> ActivityGuard {
+    pub(crate) fn enter(&self) -> ActivityGuard {
         self.in_flight.fetch_add(1, Ordering::SeqCst);
         ActivityGuard(Arc::clone(&self.in_flight))
     }
+
+    /// A clone of the inner cancellation token, for passing into spawned tasks.
+    #[must_use]
+    pub(crate) fn cancel_token(&self) -> CancellationToken {
+        self.cancel.clone()
+    }
 }
 
-struct ActivityGuard(Arc<AtomicUsize>);
+pub(crate) struct ActivityGuard(Arc<AtomicUsize>);
 
 impl Drop for ActivityGuard {
     fn drop(&mut self) {

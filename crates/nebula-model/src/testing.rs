@@ -345,6 +345,7 @@ pub fn profile(model: &str) -> ModelProfile {
         sampling: Sampling { thinking, instruct },
         embedding: false,
         commit_estimate_mib: None,
+        backend: None,
     }
 }
 
@@ -353,6 +354,7 @@ pub fn profile(model: &str) -> ModelProfile {
 pub fn config() -> ModelConfig {
     ModelConfig {
         default_profile: "a".into(),
+        backend: crate::config::ModelBackendKind::default(),
         runtimes: BTreeMap::from([("fake".into(), "fake-llama-server.exe".into())]),
         profiles: BTreeMap::from([
             ("a".into(), profile("a.gguf")),
