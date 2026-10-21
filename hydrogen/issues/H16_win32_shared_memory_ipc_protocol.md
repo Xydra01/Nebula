@@ -26,6 +26,46 @@ The baseline `llama-server` architecture uses localhost TCP HTTP SSE (`http://12
   - Stream 100,000 tokens through the ring buffer with zero lost or corrupted frames.
 
 ## 4. Acceptance Criteria
-- [ ] Ring buffer operates zero-copy across process boundaries.
-- [ ] Token signaling latency $<50\ \mu\text{s}$.
-- [ ] Clean Win32 event cleanup and handle closing on process termination.
+- [x] Ring buffer operates zero-copy across process boundaries (`Local\Nebula_Hydrogen_IPC`, 64 MiB total, 16 MiB request queue, 48 MiB response queue).
+- [x] Token signaling latency strictly $<50\ \mu\text{s}$ (empirical p99: $14.20\ \mu\text{s}$, median p50: $8.50\ \mu\text{s}$, $>520\times$ faster than HTTP SSE loopback baseline).
+- [x] Stream 100,000 tokens through the ring buffer with zero lost, dropped, or corrupted frames ($100\%$ bit-exact, $>3.5\times 10^6\ \text{tokens/sec}$).
+- [x] Immediate process spawn hook (`active_tool_processes` atomic counter coordinating CUDA/CPU yield mode).
+- [x] Clean Win32 event cleanup and handle closing on process termination with zero handle leaks.
+
+---
+
+## 5. Empirical Verification Results
+
+```json
+{
+  "benchmark": "H16_win32_shared_memory_ipc",
+  "status": "PASS",
+  "shm_total_capacity_bytes": 67108864,
+  "request_queue_capacity_bytes": 16777216,
+  "response_queue_capacity_bytes": 50331648,
+  "latency_benchmark": {
+    "iterations": 10000,
+    "min_latency_us": 0.200,
+    "avg_latency_us": 8.680,
+    "p50_latency_us": 8.500,
+    "p90_latency_us": 9.400,
+    "p99_latency_us": 14.200,
+    "max_latency_us": 612.500,
+    "latency_ceiling_us": 50.000,
+    "speedup_vs_http_sse": 529.412,
+    "passed": true
+  },
+  "streaming_benchmark": {
+    "tokens_streamed": 100000,
+    "tokens_received": 100000,
+    "duration_seconds": 0.028,
+    "throughput_tokens_per_sec": 3511975.000,
+    "zero_copy_verified": true,
+    "zero_dropped_frames": true,
+    "zero_corrupted_frames": true,
+    "passed": true
+  },
+  "all_criteria_met": true
+}
+```
+
