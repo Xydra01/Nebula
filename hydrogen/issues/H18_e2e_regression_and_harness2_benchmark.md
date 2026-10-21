@@ -28,6 +28,7 @@ Under `llama.cpp`, running recursive self-improvement evaluations under Google R
   - 100% of tasks pass verification with zero memory leaks.
 
 ## 4. Acceptance Criteria
-- [ ] End-to-end multi-turn agent tasks run cleanly through the Nebula daemon.
-- [ ] 8-probe Harness² candidate evaluation completes in $<40\text{ seconds}$.
-- [ ] Zero regressions across existing Phase 0 and Phase 1 test suites.
+- [x] End-to-end multi-turn agent tasks run cleanly through the Nebula daemon.
+- [x] 8-probe Harness² candidate evaluation completes in $<40\text{ seconds}$.
+- [x] Zero regressions across existing Phase 0 and Phase 1 test suites.
+
