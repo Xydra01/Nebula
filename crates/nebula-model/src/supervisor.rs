@@ -75,7 +75,7 @@ enum Command {
 pub struct ModelManager {
     cmd: mpsc::Sender<Command>,
     status: watch::Receiver<ModelStatus>,
-    backend: watch::Receiver<Option<Arc<LlamaServerBackend>>>,
+    backend: watch::Receiver<Option<Arc<dyn ModelBackend>>>,
     pid: watch::Receiver<Option<u32>>,
     events: broadcast::Sender<ModelStateChanged>,
 }
@@ -170,7 +170,7 @@ impl ModelManager {
     ///
     /// # Errors
     /// [`ModelError::Unavailable`] in any other state.
-    pub fn backend(&self) -> Result<Arc<LlamaServerBackend>, ModelError> {
+    pub fn backend(&self) -> Result<Arc<dyn ModelBackend>, ModelError> {
         self.backend.borrow().clone().ok_or_else(|| {
             let s = self.status();
             ModelError::Unavailable(format!("model {} is {:?}", s.profile, s.state))
@@ -257,7 +257,7 @@ struct Actor {
     since: OffsetDateTime,
     last_error: Option<String>,
     proc: Option<Box<dyn ServerProcess>>,
-    backend: Option<Arc<LlamaServerBackend>>,
+    backend: Option<Arc<dyn ModelBackend>>,
     started_at: Instant,
     health_fails: u32,
     failures: VecDeque<Instant>,
@@ -265,7 +265,7 @@ struct Actor {
     restart_at: Option<Instant>,
     waiters: Vec<Reply>,
     status_tx: watch::Sender<ModelStatus>,
-    backend_tx: watch::Sender<Option<Arc<LlamaServerBackend>>>,
+    backend_tx: watch::Sender<Option<Arc<dyn ModelBackend>>>,
     pid_tx: watch::Sender<Option<u32>>,
     events: broadcast::Sender<ModelStateChanged>,
 }
@@ -442,18 +442,30 @@ impl Actor {
             port,
         };
         let proc = self.launcher.launch(spec).await?;
-        tracing::info!(event = "model.launch", profile = %self.profile, port, pid = proc.pid());
-        let backend = LlamaServerBackend::new(
-            format!("http://127.0.0.1:{port}"),
-            Some(key),
-            self.profile.clone(),
-            profile,
-            self.blobs.clone(),
-            Activity::new(),
-        )?;
+        let is_hydrogen = match profile.backend {
+            Some(crate::config::ModelBackendKind::Hydrogen) => true,
+            Some(crate::config::ModelBackendKind::LlamaServer) => false,
+            None => self.config.backend == crate::config::ModelBackendKind::Hydrogen,
+        };
+        let backend: Arc<dyn ModelBackend> = if is_hydrogen {
+            tracing::info!(event = "model.launch_hydrogen", profile = %self.profile, pid = proc.pid());
+            let b = crate::hydrogen::HydrogenBackend::open(true)?;
+            Arc::new(b)
+        } else {
+            tracing::info!(event = "model.launch", profile = %self.profile, port, pid = proc.pid());
+            let b = LlamaServerBackend::new(
+                format!("http://127.0.0.1:{port}"),
+                Some(key),
+                self.profile.clone(),
+                profile,
+                self.blobs.clone(),
+                Activity::new(),
+            )?;
+            Arc::new(b)
+        };
         self.pid_tx.send_replace(proc.pid());
         self.proc = Some(proc);
-        self.backend = Some(Arc::new(backend));
+        self.backend = Some(backend);
         Ok(())
     }
 

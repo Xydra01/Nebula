@@ -10,8 +10,8 @@ use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use nebula_model::ModelError;
 use nebula_model::types::{ChatOutput, ChatRequest, StreamItem};
-use nebula_model::{ModelBackend, ModelError};
 use nebula_proto::{
     ChatId, ChatMessage, ChatToken, Event, Role, StepId, TaskCreateParams, TaskDone, TaskId,
     TaskStatus, TaskStep, TraceId,

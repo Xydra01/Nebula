@@ -52,6 +52,7 @@ windows = { workspace = true, features = [
 
 [dev-dependencies]
 axum.workspace = true
+nebula-hydrogen.workspace = true
 nebula-model = { workspace = true, features = ["test-support"] }
 nebula-tools = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true
