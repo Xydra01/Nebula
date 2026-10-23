@@ -33,6 +33,43 @@ fn test_shm_init_and_geometry() {
 }
 
 #[test]
+fn test_struct_layout_offsets() {
+    use nebula_hydrogen::{ShmGlobalHeader, ShmQueueHeader};
+    use std::mem::size_of;
+
+    assert_eq!(size_of::<ShmQueueHeader>(), 192);
+    assert_eq!(size_of::<ShmGlobalHeader>(), 576);
+
+    // Verify queue offsets
+    let dummy_gh = std::mem::MaybeUninit::<ShmGlobalHeader>::uninit();
+    let base = dummy_gh.as_ptr() as usize;
+
+    unsafe {
+        let p_atp = &(*dummy_gh.as_ptr()).active_tool_processes as *const _ as usize;
+        let p_cym = &(*dummy_gh.as_ptr()).cuda_yield_mode as *const _ as usize;
+        let p_req_off = &(*dummy_gh.as_ptr()).request_queue_offset as *const _ as usize;
+        let p_resp_off = &(*dummy_gh.as_ptr()).response_queue_offset as *const _ as usize;
+        let p_rq = &(*dummy_gh.as_ptr()).request_queue as *const _ as usize;
+        let p_rsq = &(*dummy_gh.as_ptr()).response_queue as *const _ as usize;
+
+        assert_eq!(p_atp - base, 64);
+        assert_eq!(p_cym - base, 128);
+        assert_eq!(p_req_off - base, 136);
+        assert_eq!(p_resp_off - base, 144);
+        assert_eq!(p_rq - base, 192);
+        assert_eq!(p_rsq - base, 384);
+
+        let p_head = &(*dummy_gh.as_ptr()).request_queue.head as *const _ as usize;
+        let p_tail = &(*dummy_gh.as_ptr()).request_queue.tail as *const _ as usize;
+        let p_bw = &(*dummy_gh.as_ptr()).request_queue.total_bytes_written as *const _ as usize;
+
+        assert_eq!(p_head - p_rq, 64);
+        assert_eq!(p_tail - p_rq, 128);
+        assert_eq!(p_bw - p_rq, 136);
+    }
+}
+
+#[test]
 fn test_active_tool_processes_barrier() {
     let test_id = format!("test_atp_{}", ulid::Ulid::generate());
     let shm_name = format!(r"Local\Nebula_Hydrogen_Test_Shm_{test_id}");
