@@ -348,6 +348,7 @@ bool ShmServer::send_response(MessageType msg_type,
                               uint32_t payload_size,
                               uint64_t sequence_num) {
     if (!is_initialized_) return false;
+    std::lock_guard<std::mutex> lock(response_mutex_);
     const bool ok = response_ring_.write_frame(msg_type, stream_id, flags, payload, payload_size, sequence_num);
     if (ok) {
 #ifdef _WIN32
@@ -397,6 +398,7 @@ bool ShmServer::poll_request(IpcFrameHeader& out_header,
                              void* out_payload,
                              size_t max_payload_len) {
     if (!is_initialized_) return false;
+    std::lock_guard<std::mutex> lock(request_mutex_);
     return request_ring_.read_frame(out_header, out_payload, max_payload_len);
 }
 

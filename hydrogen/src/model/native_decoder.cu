@@ -273,7 +273,13 @@ __global__ void kernel_attention_decode(
     uint32_t num_q_heads,
     uint32_t num_kv_heads,
     uint32_t head_dim,
-    uint32_t stream_slot
+    uint32_t stream_slot,
+    bool is_paged_enabled,
+    const uint32_t* __restrict__ d_block_table,
+    uint32_t block_size,
+    uint32_t max_blocks_per_stream,
+    float* __restrict__ d_paged_k,
+    float* __restrict__ d_paged_v
 ) {
     uint32_t q_head = blockIdx.x;
     if (q_head >= num_q_heads) return;
@@ -281,49 +287,95 @@ __global__ void kernel_attention_decode(
     uint32_t kv_head = q_head / (num_q_heads / num_kv_heads);
     uint32_t tid = threadIdx.x;
 
-    size_t layer_kv_stride = static_cast<size_t>(max_seq_len) * num_kv_heads * head_dim;
-    size_t stream_kv_stride = 16ULL * layer_kv_stride;
-    size_t stream_base = static_cast<size_t>(stream_slot) * stream_kv_stride;
+    if (is_paged_enabled && d_block_table && d_paged_k && d_paged_v) {
+        // Paged Radix KV Cache Path (Dynamic Scaling to 32K/262K context)
+        uint32_t write_block = pos / block_size;
+        uint32_t write_offset = pos % block_size;
+        uint32_t write_page = d_block_table[stream_slot * max_blocks_per_stream + write_block];
+        size_t page_stride = static_cast<size_t>(block_size) * num_kv_heads * head_dim;
+        size_t write_kv_off = static_cast<size_t>(write_page) * page_stride +
+                              static_cast<size_t>(write_offset) * num_kv_heads * head_dim +
+                              static_cast<size_t>(kv_head) * head_dim;
 
-    size_t pos_kv_offset = stream_base +
-                           static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
-                           static_cast<size_t>(pos) * num_kv_heads * head_dim +
-                           static_cast<size_t>(kv_head) * head_dim;
-
-    for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
-        d_k_cache[pos_kv_offset + i] = d_k_new[kv_head * head_dim + i];
-        d_v_cache[pos_kv_offset + i] = d_v_new[kv_head * head_dim + i];
-    }
-    __syncthreads();
-
-    const float* q_vec = d_q + (q_head * head_dim);
-    float q_scale = 1.0f / sqrtf(static_cast<float>(head_dim));
-
-    float max_score = -1e20f;
-    for (uint32_t p = 0; p <= pos; ++p) {
-        size_t k_offset = stream_base +
-                          static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
-                          static_cast<size_t>(p) * num_kv_heads * head_dim +
-                          static_cast<size_t>(kv_head) * head_dim;
-        const float* k_vec = d_k_cache + k_offset;
-
-        float score = 0.0f;
         for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
-            score += q_vec[i] * k_vec[i];
+            d_paged_k[write_kv_off + i] = d_k_new[kv_head * head_dim + i];
+            d_paged_v[write_kv_off + i] = d_v_new[kv_head * head_dim + i];
         }
-        score = warp_reduce_sum(score);
-        if (tid == 0) {
-            score *= q_scale;
-            if (score > max_score) max_score = score;
-        }
-    }
+        __syncthreads();
 
-    for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
-        size_t v_offset = stream_base +
-                          static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
-                          static_cast<size_t>(pos) * num_kv_heads * head_dim +
-                          static_cast<size_t>(kv_head) * head_dim;
-        d_out[q_head * head_dim + i] = d_v_cache[v_offset + i];
+        const float* q_vec = d_q + (q_head * head_dim);
+        float q_scale = 1.0f / sqrtf(static_cast<float>(head_dim));
+
+        float max_score = -1e20f;
+        for (uint32_t p = 0; p <= pos; ++p) {
+            uint32_t p_block = p / block_size;
+            uint32_t p_offset = p % block_size;
+            uint32_t p_page = d_block_table[stream_slot * max_blocks_per_stream + p_block];
+            size_t k_offset = static_cast<size_t>(p_page) * page_stride +
+                              static_cast<size_t>(p_offset) * num_kv_heads * head_dim +
+                              static_cast<size_t>(kv_head) * head_dim;
+            const float* k_vec = d_paged_k + k_offset;
+
+            float score = 0.0f;
+            for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
+                score += q_vec[i] * k_vec[i];
+            }
+            score = warp_reduce_sum(score);
+            if (tid == 0) {
+                score *= q_scale;
+                if (score > max_score) max_score = score;
+            }
+        }
+
+        for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
+            d_out[q_head * head_dim + i] = d_paged_v[write_kv_off + i];
+        }
+    } else {
+        // Contiguous Static KV Cache Path
+        size_t layer_kv_stride = static_cast<size_t>(max_seq_len) * num_kv_heads * head_dim;
+        size_t stream_kv_stride = 16ULL * layer_kv_stride;
+        size_t stream_base = static_cast<size_t>(stream_slot) * stream_kv_stride;
+
+        size_t pos_kv_offset = stream_base +
+                               static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+                               static_cast<size_t>(pos) * num_kv_heads * head_dim +
+                               static_cast<size_t>(kv_head) * head_dim;
+
+        for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
+            d_k_cache[pos_kv_offset + i] = d_k_new[kv_head * head_dim + i];
+            d_v_cache[pos_kv_offset + i] = d_v_new[kv_head * head_dim + i];
+        }
+        __syncthreads();
+
+        const float* q_vec = d_q + (q_head * head_dim);
+        float q_scale = 1.0f / sqrtf(static_cast<float>(head_dim));
+
+        float max_score = -1e20f;
+        for (uint32_t p = 0; p <= pos; ++p) {
+            size_t k_offset = stream_base +
+                              static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+                              static_cast<size_t>(p) * num_kv_heads * head_dim +
+                              static_cast<size_t>(kv_head) * head_dim;
+            const float* k_vec = d_k_cache + k_offset;
+
+            float score = 0.0f;
+            for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
+                score += q_vec[i] * k_vec[i];
+            }
+            score = warp_reduce_sum(score);
+            if (tid == 0) {
+                score *= q_scale;
+                if (score > max_score) max_score = score;
+            }
+        }
+
+        for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
+            size_t v_offset = stream_base +
+                              static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+                              static_cast<size_t>(pos) * num_kv_heads * head_dim +
+                              static_cast<size_t>(kv_head) * head_dim;
+            d_out[q_head * head_dim + i] = d_v_cache[v_offset + i];
+        }
     }
 }
 
@@ -518,6 +570,49 @@ void NativeDecoder::test_apply_grammar_mask(float* d_logits, const uint32_t* d_b
 void NativeDecoder::test_extract_top_candidates(const float* d_logits, uint32_t* d_top_tokens, float* d_top_logits, uint32_t max_candidates) {
     kernel_extract_top_candidates<<<1, 256>>>(d_logits, vocab_size_, d_top_tokens, d_top_logits, max_candidates);
     cudaDeviceSynchronize();
+}
+
+void NativeDecoder::bind_paged_kv(
+    const uint32_t* d_block_table,
+    float* d_paged_k,
+    float* d_paged_v,
+    uint32_t block_size,
+    uint32_t max_blocks_per_stream
+) {
+    paged_kv_.d_block_table = d_block_table;
+    paged_kv_.d_paged_k = d_paged_k;
+    paged_kv_.d_paged_v = d_paged_v;
+    paged_kv_.block_size = block_size;
+    paged_kv_.max_blocks_per_stream = max_blocks_per_stream;
+    paged_kv_.is_paged_enabled = (d_block_table != nullptr && d_paged_k != nullptr && d_paged_v != nullptr);
+}
+
+void NativeDecoder::unbind_paged_kv() {
+    paged_kv_.is_paged_enabled = false;
+    paged_kv_.d_block_table = nullptr;
+    paged_kv_.d_paged_k = nullptr;
+    paged_kv_.d_paged_v = nullptr;
+}
+
+void NativeDecoder::set_grammar_schema(const grammar::ToolSchema& schema) {
+    grammar::FsmCompiler compiler;
+    compiler.register_tool(schema);
+    active_fsm_table_ = std::make_shared<grammar::FsmCompiledTable>(compiler.compile());
+    current_fsm_state_ = active_fsm_table_->start_state;
+}
+
+void NativeDecoder::set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable> table) {
+    active_fsm_table_ = std::move(table);
+    if (active_fsm_table_) {
+        current_fsm_state_ = active_fsm_table_->start_state;
+    } else {
+        current_fsm_state_ = 0;
+    }
+}
+
+void NativeDecoder::clear_grammar() {
+    active_fsm_table_ = nullptr;
+    current_fsm_state_ = 0;
 }
 
 NativeDecoder::NativeDecoder() = default;
@@ -864,7 +959,13 @@ void NativeDecoder::forward_token(
                 head_count_,
                 head_count_kv_,
                 head_dim_,
-                stream_slot
+                stream_slot,
+                paged_kv_.is_paged_enabled,
+                paged_kv_.d_block_table,
+                paged_kv_.block_size,
+                paged_kv_.max_blocks_per_stream,
+                paged_kv_.d_paged_k,
+                paged_kv_.d_paged_v
             );
 
             kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_q_, lay.attn_output, d_res_, 6144, embedding_dim_);
@@ -986,10 +1087,28 @@ void NativeDecoder::generate(
 
     uint32_t seq_pos = stream_seq_pos_[stream_slot];
 
-    // 1. Prefill Phase
+    // 1. Dynamic Grammar Bitmask Initial State Sync
+    const uint32_t* active_bitmask = d_grammar_bitmask;
+    if (active_fsm_table_ && !active_fsm_table_->states.empty()) {
+        if (current_fsm_state_ >= 0 && static_cast<size_t>(current_fsm_state_) < active_fsm_table_->states.size()) {
+            const auto& desc = active_fsm_table_->states[current_fsm_state_];
+            size_t mask_words = (vocab_size_ + 31) / 32;
+            size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
+            CUDA_CHECK(cudaMemcpyAsync(
+                d_grammar_mask_,
+                &active_fsm_table_->bitmasks[desc.mask_offset_words],
+                copy_words * sizeof(uint32_t),
+                cudaMemcpyHostToDevice,
+                stream
+            ));
+            active_bitmask = d_grammar_mask_;
+        }
+    }
+
+    // Prefill Phase
     for (size_t i = 0; i < prompt_tokens.size(); ++i) {
         bool is_last = (i + 1 == prompt_tokens.size());
-        forward_token(prompt_tokens[i], seq_pos, is_last, stream_slot, d_grammar_bitmask);
+        forward_token(prompt_tokens[i], seq_pos, is_last, stream_slot, active_bitmask);
         seq_pos++;
         if (seq_pos >= MAX_SEQ_LEN - 1) break;
     }
@@ -1000,13 +1119,24 @@ void NativeDecoder::generate(
     int generated_count = 0;
     std::vector<uint32_t> generated_tokens;
     generated_tokens.reserve(max_tokens);
+
+    // Determine ChatML turn boundaries to guard tool call detection.
+    // Tool calls MUST only be intercepted if emitted within an assistant turn.
+    // If a user prompt contains <tool_call> in non-assistant text, ignore it.
+    std::string assistant_marker = "<|im_start|>assistant";
+    size_t last_asst_idx = formatted_prompt.rfind(assistant_marker);
+
     std::string accumulated_text;
-    size_t prompt_tc = formatted_prompt.rfind("<tool_call>");
-    if (prompt_tc != std::string::npos) {
-        accumulated_text = formatted_prompt.substr(prompt_tc);
+    // Only accumulate prefill text that strictly follows the last assistant turn marker
+    if (last_asst_idx != std::string::npos) {
+        std::string asst_prefill = formatted_prompt.substr(last_asst_idx + assistant_marker.size());
+        size_t prompt_tc = asst_prefill.rfind("<tool_call>");
+        if (prompt_tc != std::string::npos) {
+            accumulated_text = asst_prefill.substr(prompt_tc);
+        }
     }
 
-    // Check if prefilled prompt already contains a completed tool call
+    // Check if assistant prefill already contains a completed tool call
     if (on_tool_call && accumulated_text.find("</tool_call>") != std::string::npos) {
         size_t start_tag = accumulated_text.find("<tool_call>");
         size_t end_tag = accumulated_text.find("</tool_call>");
@@ -1049,6 +1179,11 @@ void NativeDecoder::generate(
         std::string token_str = tokenizer_.decode_token(next_token);
         accumulated_text += token_str;
 
+        // Advance dynamic grammar FSM if active
+        if (active_fsm_table_) {
+            current_fsm_state_ = active_fsm_table_->get_next_state(current_fsm_state_, next_token);
+        }
+
         // Check for completed tool call before EOS
         if (on_tool_call && accumulated_text.find("</tool_call>") != std::string::npos) {
             size_t start_tag = accumulated_text.find("<tool_call>");
@@ -1078,8 +1213,25 @@ void NativeDecoder::generate(
             return;
         }
 
+        // Dynamically synchronize next step grammar bitmask
+        if (active_fsm_table_ && !active_fsm_table_->states.empty()) {
+            if (current_fsm_state_ >= 0 && static_cast<size_t>(current_fsm_state_) < active_fsm_table_->states.size()) {
+                const auto& desc = active_fsm_table_->states[current_fsm_state_];
+                size_t mask_words = (vocab_size_ + 31) / 32;
+                size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
+                CUDA_CHECK(cudaMemcpyAsync(
+                    d_grammar_mask_,
+                    &active_fsm_table_->bitmasks[desc.mask_offset_words],
+                    copy_words * sizeof(uint32_t),
+                    cudaMemcpyHostToDevice,
+                    stream
+                ));
+                active_bitmask = d_grammar_mask_;
+            }
+        }
+
         // Compute next token forward step with stream slot and grammar mask
-        forward_token(next_token, seq_pos, true, stream_slot, d_grammar_bitmask);
+        forward_token(next_token, seq_pos, true, stream_slot, active_bitmask);
         seq_pos++;
         generated_count++;
 

@@ -7,6 +7,7 @@
 #include "tensor_loader.hpp"
 #include "shm_ring_buffer.hpp"
 #include "tokenizer.hpp"
+#include "fsm_grammar.hpp"
 
 #include <string>
 #include <vector>
@@ -17,6 +18,23 @@
 #include <functional>
 
 namespace hydrogen {
+
+enum class TurnRole {
+    None,
+    System,
+    User,
+    Assistant,
+    Tool
+};
+
+struct PagedKvTable {
+    const uint32_t* d_block_table = nullptr;
+    uint32_t block_size = 16;
+    uint32_t max_blocks_per_stream = 2048;
+    float* d_paged_k = nullptr;
+    float* d_paged_v = nullptr;
+    bool is_paged_enabled = false;
+};
 
 struct SamplingConfig {
     float temperature = 0.7f;
@@ -115,6 +133,25 @@ public:
         return (stream_slot < MAX_STREAMS) ? stream_seq_pos_[stream_slot] : 0;
     }
 
+    // Dynamic Radix Page Pool KV Binding (Issue H21 / H15)
+    void bind_paged_kv(
+        const uint32_t* d_block_table,
+        float* d_paged_k,
+        float* d_paged_v,
+        uint32_t block_size = 16,
+        uint32_t max_blocks_per_stream = 2048
+    );
+    void unbind_paged_kv();
+    [[nodiscard]] bool is_paged_kv_enabled() const noexcept { return paged_kv_.is_paged_enabled; }
+    [[nodiscard]] const PagedKvTable& paged_kv_table() const noexcept { return paged_kv_; }
+
+    // Dynamic FSM Tool Grammar Bitmask Compiler & Step Synchronizer
+    void set_grammar_schema(const grammar::ToolSchema& schema);
+    void set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable> table);
+    void clear_grammar();
+    [[nodiscard]] bool has_active_grammar() const noexcept { return active_fsm_table_ != nullptr; }
+    [[nodiscard]] int current_grammar_state() const noexcept { return current_fsm_state_; }
+
     // Test hooks for standalone verification of GPU kernels and parser
     void test_apply_grammar_mask(float* d_logits, const uint32_t* d_bitmask);
     void test_extract_top_candidates(const float* d_logits, uint32_t* d_top_tokens, float* d_top_logits, uint32_t max_candidates);
@@ -172,6 +209,13 @@ private:
 
     // Grammar Mask Buffer (Device)
     uint32_t* d_grammar_mask_ = nullptr; // [(vocab_size + 31) / 32]
+
+    // Dynamic Radix Paged KV Table
+    PagedKvTable paged_kv_;
+
+    // Dynamic FSM Tool Grammar State
+    std::shared_ptr<grammar::FsmCompiledTable> active_fsm_table_;
+    int current_fsm_state_ = 0;
 
     // Pinned Sampling Buffers (Top-K extraction)
     static constexpr size_t TOP_CANDIDATES = 128;
