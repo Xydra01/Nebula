@@ -57,20 +57,39 @@ struct LayerTensors {
     const uint8_t* ssm_out = nullptr;
 };
 
+struct ToolCall {
+    std::string id;
+    std::string name;
+    std::string arguments;
+};
+
+// Tool call JSON parser (<tool_call>{"name": ..., "arguments": ...}</tool_call>)
+ToolCall parse_tool_call_json(const std::string& raw_json, uint32_t stream_id);
+
 class NativeDecoder {
 public:
+    static constexpr uint32_t MAX_STREAMS = 8;
+    static constexpr uint32_t MAX_SEQ_LEN = 8192;
+
+    using TokenCallback = std::function<bool(uint32_t token_id, float logit, const std::string& text, bool is_final)>;
+    using ToolCallCallback = std::function<bool(const ToolCall& tool_call)>;
+
     NativeDecoder();
     ~NativeDecoder();
 
     // Initialize decoder, allocate VRAM, load weights and pre-allocate activation buffers
     bool initialize(const std::filesystem::path& model_path);
 
-    // Autoregressively generate tokens with streaming callback
+    // Autoregressively generate tokens with streaming callback and optional tool call detection
     void generate(
         const std::string& prompt,
         int max_tokens,
-        const std::function<bool(uint32_t token_id, float logit, const std::string& text, bool is_final)>& on_token,
-        const SamplingConfig& sampling = SamplingConfig{}
+        const TokenCallback& on_token,
+        const SamplingConfig& sampling = SamplingConfig{},
+        uint32_t stream_id = 0,
+        bool reset_state = true,
+        const uint32_t* d_grammar_bitmask = nullptr,
+        const ToolCallCallback& on_tool_call = nullptr
     );
 
     // Autoregressively generate tokens and stream to daemon over Win32 Shared Memory IPC
@@ -79,7 +98,9 @@ public:
         int max_tokens,
         ipc::ShmServer& server,
         uint32_t stream_id,
-        const SamplingConfig& sampling = SamplingConfig{}
+        const SamplingConfig& sampling = SamplingConfig{},
+        bool reset_state = true,
+        const uint32_t* d_grammar_bitmask = nullptr
     );
 
     // Tokenizer & Detokenizer access
@@ -90,6 +111,13 @@ public:
     [[nodiscard]] uint32_t vocab_size() const noexcept { return vocab_size_; }
     [[nodiscard]] uint32_t layer_count() const noexcept { return layer_count_; }
     [[nodiscard]] uint32_t embedding_dim() const noexcept { return embedding_dim_; }
+    [[nodiscard]] uint32_t current_seq_pos(uint32_t stream_slot) const noexcept {
+        return (stream_slot < MAX_STREAMS) ? stream_seq_pos_[stream_slot] : 0;
+    }
+
+    // Test hooks for standalone verification of GPU kernels and parser
+    void test_apply_grammar_mask(float* d_logits, const uint32_t* d_bitmask);
+    void test_extract_top_candidates(const float* d_logits, uint32_t* d_top_tokens, float* d_top_logits, uint32_t max_candidates);
 
 private:
     bool initialized_ = false;
@@ -136,11 +164,14 @@ private:
     float* d_ffn_out_ = nullptr;       // [5120]
     float* d_logits_ = nullptr;        // [248320]
 
-    // KV Cache & SSM States
-    static constexpr uint32_t MAX_SEQ_LEN = 2048;
-    float* d_k_cache_ = nullptr;       // [16 * MAX_SEQ_LEN * 4 * 256]
-    float* d_v_cache_ = nullptr;       // [16 * MAX_SEQ_LEN * 4 * 256]
-    float* d_ssm_state_ = nullptr;     // [48 * 128 * 6144]
+    // Multi-Stream KV Cache & SSM States
+    float* d_k_cache_ = nullptr;       // [MAX_STREAMS * 16 * MAX_SEQ_LEN * 4 * 256]
+    float* d_v_cache_ = nullptr;       // [MAX_STREAMS * 16 * MAX_SEQ_LEN * 4 * 256]
+    float* d_ssm_state_ = nullptr;     // [MAX_STREAMS * 48 * ssm_inner_]
+    uint32_t stream_seq_pos_[MAX_STREAMS] = {0};
+
+    // Grammar Mask Buffer (Device)
+    uint32_t* d_grammar_mask_ = nullptr; // [(vocab_size + 31) / 32]
 
     // Pinned Sampling Buffers (Top-K extraction)
     static constexpr size_t TOP_CANDIDATES = 128;
@@ -153,7 +184,14 @@ private:
     void* cuda_stream_ = nullptr;
 
     // Internal Compute Steps
-    void forward_token(uint32_t token_id, uint32_t pos, bool compute_logits);
+    void forward_token(
+        uint32_t token_id,
+        uint32_t pos,
+        bool compute_logits,
+        uint32_t stream_slot = 0,
+        const uint32_t* d_bitmask = nullptr
+    );
+
     uint32_t sample_next_token(
         const SamplingConfig& sampling,
         const std::vector<uint32_t>& generated_tokens

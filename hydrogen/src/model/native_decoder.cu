@@ -257,6 +257,9 @@ __global__ void kernel_split_and_gate_query(
 // ----------------------------------------------------------------------------
 // Causal Self-Attention Decoding Kernel (GQA 24:4 heads, head_dim 256)
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Causal Self-Attention Decoding Kernel (GQA 24:4 heads, head_dim 256, multi-stream)
+// ----------------------------------------------------------------------------
 __global__ void kernel_attention_decode(
     const float* __restrict__ d_q,
     const float* __restrict__ d_k_new,
@@ -269,7 +272,8 @@ __global__ void kernel_attention_decode(
     uint32_t max_seq_len,
     uint32_t num_q_heads,
     uint32_t num_kv_heads,
-    uint32_t head_dim
+    uint32_t head_dim,
+    uint32_t stream_slot
 ) {
     uint32_t q_head = blockIdx.x;
     if (q_head >= num_q_heads) return;
@@ -278,7 +282,11 @@ __global__ void kernel_attention_decode(
     uint32_t tid = threadIdx.x;
 
     size_t layer_kv_stride = static_cast<size_t>(max_seq_len) * num_kv_heads * head_dim;
-    size_t pos_kv_offset = static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+    size_t stream_kv_stride = 16ULL * layer_kv_stride;
+    size_t stream_base = static_cast<size_t>(stream_slot) * stream_kv_stride;
+
+    size_t pos_kv_offset = stream_base +
+                           static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
                            static_cast<size_t>(pos) * num_kv_heads * head_dim +
                            static_cast<size_t>(kv_head) * head_dim;
 
@@ -293,7 +301,8 @@ __global__ void kernel_attention_decode(
 
     float max_score = -1e20f;
     for (uint32_t p = 0; p <= pos; ++p) {
-        size_t k_offset = static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+        size_t k_offset = stream_base +
+                          static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
                           static_cast<size_t>(p) * num_kv_heads * head_dim +
                           static_cast<size_t>(kv_head) * head_dim;
         const float* k_vec = d_k_cache + k_offset;
@@ -310,7 +319,8 @@ __global__ void kernel_attention_decode(
     }
 
     for (uint32_t i = tid; i < head_dim; i += blockDim.x) {
-        size_t v_offset = static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
+        size_t v_offset = stream_base +
+                          static_cast<size_t>(attn_layer_idx) * layer_kv_stride +
                           static_cast<size_t>(pos) * num_kv_heads * head_dim +
                           static_cast<size_t>(kv_head) * head_dim;
         d_out[q_head * head_dim + i] = d_v_cache[v_offset + i];
@@ -318,7 +328,7 @@ __global__ void kernel_attention_decode(
 }
 
 // ----------------------------------------------------------------------------
-// SSM Linear Recurrence Step Kernel
+// SSM Linear Recurrence Step Kernel (Multi-Stream)
 // ----------------------------------------------------------------------------
 __global__ void kernel_ssm_step(
     const float* __restrict__ d_qkv,
@@ -326,12 +336,13 @@ __global__ void kernel_ssm_step(
     float* __restrict__ d_ssm_state,
     float* __restrict__ d_out,
     uint32_t layer_idx,
-    uint32_t inner_dim
+    uint32_t inner_dim,
+    uint32_t stream_slot
 ) {
     uint32_t idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (idx >= inner_dim) return;
 
-    size_t state_offset = static_cast<size_t>(layer_idx) * inner_dim + idx;
+    size_t state_offset = (static_cast<size_t>(stream_slot) * 48ULL + layer_idx) * inner_dim + idx;
 
     float u = d_qkv[idx];
     float prev_s = d_ssm_state[state_offset];
@@ -347,7 +358,23 @@ __global__ void kernel_ssm_step(
 }
 
 // ----------------------------------------------------------------------------
-// Candidate Extraction Kernel (Single Block Reduction on Device)
+// On-Device FSM Grammar Logit Masking Kernel
+// ----------------------------------------------------------------------------
+__global__ void kernel_apply_fsm_mask(
+    float* __restrict__ d_logits,
+    uint32_t vocab_size,
+    const uint32_t* __restrict__ d_bitmask
+) {
+    uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (tid >= vocab_size) return;
+
+    uint32_t word_idx = tid >> 5;
+    uint32_t bit_idx = tid & 31;
+    uint32_t allowed = (d_bitmask[word_idx] >> bit_idx) & 1u;
+    if (!allowed) {
+        d_logits[tid] = -1e30f;
+    }
+}
 // ----------------------------------------------------------------------------
 __global__ void kernel_extract_top_candidates(
     const float* __restrict__ d_logits,
@@ -361,6 +388,10 @@ __global__ void kernel_extract_top_candidates(
     __shared__ uint32_t s_count;
 
     uint32_t tid = threadIdx.x;
+    for (uint32_t i = tid; i < max_candidates; i += blockDim.x) {
+        d_top_logits[i] = -1e30f;
+        d_top_tokens[i] = 0;
+    }
     if (tid == 0) s_count = 1; // Index 0 reserved for argmax
     __syncthreads();
 
@@ -418,6 +449,77 @@ __global__ void kernel_extract_top_candidates(
 
 } // anonymous namespace
 
+ToolCall parse_tool_call_json(const std::string& raw_json, uint32_t stream_id) {
+    ToolCall result;
+    result.id = "call_" + std::to_string(stream_id) + "_" + std::to_string(rand() % 100000);
+    result.name = "";
+    result.arguments = "{}";
+
+    if (raw_json.empty()) return result;
+
+    // Search for "name"
+    size_t name_pos = raw_json.find("\"name\"");
+    if (name_pos != std::string::npos) {
+        size_t colon = raw_json.find(':', name_pos + 6);
+        if (colon != std::string::npos) {
+            size_t q1 = raw_json.find('"', colon);
+            if (q1 != std::string::npos) {
+                size_t q2 = raw_json.find('"', q1 + 1);
+                if (q2 != std::string::npos) {
+                    result.name = raw_json.substr(q1 + 1, q2 - (q1 + 1));
+                }
+            }
+        }
+    }
+
+    // Search for "arguments"
+    size_t args_pos = raw_json.find("\"arguments\"");
+    if (args_pos != std::string::npos) {
+        size_t colon = raw_json.find(':', args_pos + 11);
+        if (colon != std::string::npos) {
+            size_t start = raw_json.find_first_not_of(" \t\r\n", colon + 1);
+            if (start != std::string::npos) {
+                if (raw_json[start] == '{') {
+                    int brace_count = 0;
+                    size_t end = start;
+                    for (; end < raw_json.size(); ++end) {
+                        if (raw_json[end] == '{') brace_count++;
+                        else if (raw_json[end] == '}') {
+                            brace_count--;
+                            if (brace_count == 0) break;
+                        }
+                    }
+                    if (end < raw_json.size()) {
+                        result.arguments = raw_json.substr(start, end - start + 1);
+                    }
+                } else if (raw_json[start] == '"') {
+                    size_t q2 = raw_json.find('"', start + 1);
+                    while (q2 != std::string::npos && raw_json[q2 - 1] == '\\') {
+                        q2 = raw_json.find('"', q2 + 1);
+                    }
+                    if (q2 != std::string::npos) {
+                        result.arguments = raw_json.substr(start + 1, q2 - (start + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+void NativeDecoder::test_apply_grammar_mask(float* d_logits, const uint32_t* d_bitmask) {
+    uint32_t block = 256;
+    uint32_t grid = (vocab_size_ + block - 1) / block;
+    kernel_apply_fsm_mask<<<grid, block>>>(d_logits, vocab_size_, d_bitmask);
+    cudaDeviceSynchronize();
+}
+
+void NativeDecoder::test_extract_top_candidates(const float* d_logits, uint32_t* d_top_tokens, float* d_top_logits, uint32_t max_candidates) {
+    kernel_extract_top_candidates<<<1, 256>>>(d_logits, vocab_size_, d_top_tokens, d_top_logits, max_candidates);
+    cudaDeviceSynchronize();
+}
+
 NativeDecoder::NativeDecoder() = default;
 
 NativeDecoder::~NativeDecoder() {
@@ -445,6 +547,7 @@ NativeDecoder::~NativeDecoder() {
         if (d_k_cache_) cudaFree(d_k_cache_);
         if (d_v_cache_) cudaFree(d_v_cache_);
         if (d_ssm_state_) cudaFree(d_ssm_state_);
+        if (d_grammar_mask_) cudaFree(d_grammar_mask_);
         if (d_top_tokens_) cudaFree(d_top_tokens_);
         if (d_top_logits_) cudaFree(d_top_logits_);
         if (h_top_tokens_) cudaFreeHost(h_top_tokens_);
@@ -564,17 +667,22 @@ bool NativeDecoder::initialize(const std::filesystem::path& model_path) {
     CUDA_CHECK(cudaMalloc(&d_ffn_out_, embedding_dim_ * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&d_logits_, vocab_size_ * sizeof(float)));
 
-    // KV Cache (16 layers, MAX_SEQ_LEN tokens, 4 heads, 256 dim)
-    size_t kv_cache_elements = 16ULL * MAX_SEQ_LEN * 4 * 256;
+    // Multi-Stream KV Cache (MAX_STREAMS * 16 layers, MAX_SEQ_LEN tokens, 4 heads, 256 dim)
+    size_t kv_cache_elements = static_cast<size_t>(MAX_STREAMS) * 16ULL * MAX_SEQ_LEN * 4 * 256;
     CUDA_CHECK(cudaMalloc(&d_k_cache_, kv_cache_elements * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&d_v_cache_, kv_cache_elements * sizeof(float)));
     CUDA_CHECK(cudaMemsetAsync(d_k_cache_, 0, kv_cache_elements * sizeof(float), stream));
     CUDA_CHECK(cudaMemsetAsync(d_v_cache_, 0, kv_cache_elements * sizeof(float), stream));
 
-    // SSM State (48 layers * 6144 floats)
-    size_t ssm_state_elements = 48ULL * ssm_inner_;
+    // Multi-Stream SSM State (MAX_STREAMS * 48 layers * 6144 floats)
+    size_t ssm_state_elements = static_cast<size_t>(MAX_STREAMS) * 48ULL * ssm_inner_;
     CUDA_CHECK(cudaMalloc(&d_ssm_state_, ssm_state_elements * sizeof(float)));
     CUDA_CHECK(cudaMemsetAsync(d_ssm_state_, 0, ssm_state_elements * sizeof(float), stream));
+
+    // Grammar Mask Buffer on Device
+    size_t mask_words = (vocab_size_ + 31) / 32;
+    CUDA_CHECK(cudaMalloc(&d_grammar_mask_, mask_words * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMemsetAsync(d_grammar_mask_, 0xFF, mask_words * sizeof(uint32_t), stream));
 
     // Top-K Candidate Buffers
     CUDA_CHECK(cudaMalloc(&d_top_tokens_, TOP_CANDIDATES * sizeof(uint32_t)));
@@ -584,7 +692,8 @@ bool NativeDecoder::initialize(const std::filesystem::path& model_path) {
 
     CUDA_CHECK(cudaStreamSynchronize(stream));
     initialized_ = true;
-    std::cout << "[Hydrogen NativeDecoder] Initialized successfully. 64 layers loaded in GPU VRAM. Vocab: "
+    std::cout << "[Hydrogen NativeDecoder] Initialized successfully. 64 layers loaded in GPU VRAM (Multi-Stream: "
+              << MAX_STREAMS << " streams, Context: " << MAX_SEQ_LEN << " tokens). Vocab: "
               << vocab_size_ << " tokens.\n";
     return true;
 }
@@ -691,7 +800,13 @@ uint32_t NativeDecoder::sample_next_token(
     return cands[0].token;
 }
 
-void NativeDecoder::forward_token(uint32_t token_id, uint32_t pos, bool compute_logits) {
+void NativeDecoder::forward_token(
+    uint32_t token_id,
+    uint32_t pos,
+    bool compute_logits,
+    uint32_t stream_slot,
+    const uint32_t* d_bitmask
+) {
     cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
 
     // 1. Embedding Lookup
@@ -748,7 +863,8 @@ void NativeDecoder::forward_token(uint32_t token_id, uint32_t pos, bool compute_
                 MAX_SEQ_LEN,
                 head_count_,
                 head_count_kv_,
-                head_dim_
+                head_dim_,
+                stream_slot
             );
 
             kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_q_, lay.attn_output, d_res_, 6144, embedding_dim_);
@@ -768,7 +884,8 @@ void NativeDecoder::forward_token(uint32_t token_id, uint32_t pos, bool compute_
                 d_ssm_state_,
                 d_attn_out_,
                 ssm_layer_counter,
-                ssm_inner_
+                ssm_inner_,
+                stream_slot
             );
 
             kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_attn_out_, lay.ssm_out, d_res_, 6144, embedding_dim_);
@@ -815,6 +932,15 @@ void NativeDecoder::forward_token(uint32_t token_id, uint32_t pos, bool compute_
             vocab_size_
         );
 
+        // Apply on-device FSM grammar mask BEFORE candidate reduction
+        if (d_bitmask != nullptr) {
+            uint32_t mask_threads = 256;
+            uint32_t mask_blocks = (vocab_size_ + mask_threads - 1) / mask_threads;
+            kernel_apply_fsm_mask<<<mask_blocks, mask_threads, 0, stream>>>(
+                d_logits_, vocab_size_, d_bitmask
+            );
+        }
+
         // Run On-Device Candidate Extraction
         kernel_extract_top_candidates<<<1, 1024, 0, stream>>>(
             d_logits_, vocab_size_, d_top_tokens_, d_top_logits_, TOP_CANDIDATES
@@ -827,35 +953,43 @@ void NativeDecoder::forward_token(uint32_t token_id, uint32_t pos, bool compute_
 void NativeDecoder::generate(
     const std::string& prompt,
     int max_tokens,
-    const std::function<bool(uint32_t token_id, float logit, const std::string& text, bool is_final)>& on_token,
-    const SamplingConfig& sampling
+    const TokenCallback& on_token,
+    const SamplingConfig& sampling,
+    uint32_t stream_id,
+    bool reset_state,
+    const uint32_t* d_grammar_bitmask,
+    const ToolCallCallback& on_tool_call
 ) {
     if (!initialized_) return;
 
     cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
+    uint32_t stream_slot = stream_id % MAX_STREAMS;
 
-    // Reset KV cache and SSM state
-    size_t kv_cache_elements = 16ULL * MAX_SEQ_LEN * 4 * 256;
-    size_t ssm_state_elements = 48ULL * ssm_inner_;
-    CUDA_CHECK(cudaMemsetAsync(d_k_cache_, 0, kv_cache_elements * sizeof(float), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_v_cache_, 0, kv_cache_elements * sizeof(float), stream));
-    CUDA_CHECK(cudaMemsetAsync(d_ssm_state_, 0, ssm_state_elements * sizeof(float), stream));
+    size_t stream_kv_stride = 16ULL * MAX_SEQ_LEN * 4 * 256;
+    size_t stream_ssm_stride = 48ULL * ssm_inner_;
+
+    if (reset_state) {
+        stream_seq_pos_[stream_slot] = 0;
+        CUDA_CHECK(cudaMemsetAsync(d_k_cache_ + stream_slot * stream_kv_stride, 0, stream_kv_stride * sizeof(float), stream));
+        CUDA_CHECK(cudaMemsetAsync(d_v_cache_ + stream_slot * stream_kv_stride, 0, stream_kv_stride * sizeof(float), stream));
+        CUDA_CHECK(cudaMemsetAsync(d_ssm_state_ + stream_slot * stream_ssm_stride, 0, stream_ssm_stride * sizeof(float), stream));
+    }
 
     // Format prompt with ChatML if needed
     std::string formatted_prompt = prompt;
-    if (prompt.find("<|im_start|>") == std::string::npos) {
+    if (reset_state && prompt.find("<|im_start|>") == std::string::npos) {
         formatted_prompt = "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n";
     }
 
     std::vector<uint32_t> prompt_tokens = tokenizer_.encode(formatted_prompt);
     if (prompt_tokens.empty()) prompt_tokens.push_back(bos_token_id_);
 
-    uint32_t seq_pos = 0;
+    uint32_t seq_pos = stream_seq_pos_[stream_slot];
 
     // 1. Prefill Phase
     for (size_t i = 0; i < prompt_tokens.size(); ++i) {
         bool is_last = (i + 1 == prompt_tokens.size());
-        forward_token(prompt_tokens[i], seq_pos, is_last);
+        forward_token(prompt_tokens[i], seq_pos, is_last, stream_slot, d_grammar_bitmask);
         seq_pos++;
         if (seq_pos >= MAX_SEQ_LEN - 1) break;
     }
@@ -866,29 +1000,86 @@ void NativeDecoder::generate(
     int generated_count = 0;
     std::vector<uint32_t> generated_tokens;
     generated_tokens.reserve(max_tokens);
+    std::string accumulated_text;
+    size_t prompt_tc = formatted_prompt.rfind("<tool_call>");
+    if (prompt_tc != std::string::npos) {
+        accumulated_text = formatted_prompt.substr(prompt_tc);
+    }
+
+    // Check if prefilled prompt already contains a completed tool call
+    if (on_tool_call && accumulated_text.find("</tool_call>") != std::string::npos) {
+        size_t start_tag = accumulated_text.find("<tool_call>");
+        size_t end_tag = accumulated_text.find("</tool_call>");
+        if (start_tag != std::string::npos && end_tag > start_tag) {
+            std::string json_body = accumulated_text.substr(start_tag + 11, end_tag - (start_tag + 11));
+            ToolCall tc = parse_tool_call_json(json_body, stream_id);
+            if (!tc.name.empty()) {
+                on_tool_call(tc);
+                stream_seq_pos_[stream_slot] = seq_pos;
+                return;
+            }
+        }
+    }
 
     while (generated_count < max_tokens && seq_pos < MAX_SEQ_LEN - 1) {
         uint32_t next_token = sample_next_token(sampling, generated_tokens);
         float logit = h_top_logits_[0];
 
         if (next_token == eos_token_id_ || next_token == bos_token_id_ || next_token == tokenizer_.im_end_id()) {
+            // Check if accumulated text contains a completed tool call
+            if (on_tool_call) {
+                size_t start_tag = accumulated_text.find("<tool_call>");
+                size_t end_tag = accumulated_text.find("</tool_call>");
+                if (start_tag != std::string::npos && end_tag != std::string::npos && end_tag > start_tag) {
+                    std::string json_body = accumulated_text.substr(start_tag + 11, end_tag - (start_tag + 11));
+                    ToolCall tc = parse_tool_call_json(json_body, stream_id);
+                    if (!tc.name.empty()) {
+                        on_tool_call(tc);
+                        stream_seq_pos_[stream_slot] = seq_pos;
+                        return;
+                    }
+                }
+            }
             if (on_token) on_token(next_token, logit, "", true);
+            stream_seq_pos_[stream_slot] = seq_pos;
             return;
         }
 
         generated_tokens.push_back(next_token);
         std::string token_str = tokenizer_.decode_token(next_token);
+        accumulated_text += token_str;
+
+        // Check for completed tool call before EOS
+        if (on_tool_call && accumulated_text.find("</tool_call>") != std::string::npos) {
+            size_t start_tag = accumulated_text.find("<tool_call>");
+            size_t end_tag = accumulated_text.find("</tool_call>");
+            if (start_tag != std::string::npos && end_tag > start_tag) {
+                std::string json_body = accumulated_text.substr(start_tag + 11, end_tag - (start_tag + 11));
+                ToolCall tc = parse_tool_call_json(json_body, stream_id);
+                if (!tc.name.empty()) {
+                    on_tool_call(tc);
+                    stream_seq_pos_[stream_slot] = seq_pos;
+                    return;
+                }
+            }
+        }
 
         bool is_last_step = (generated_count + 1 >= max_tokens);
         if (on_token) {
             bool cont = on_token(next_token, logit, token_str, is_last_step);
-            if (!cont) return;
+            if (!cont) {
+                stream_seq_pos_[stream_slot] = seq_pos;
+                return;
+            }
         }
 
-        if (is_last_step) return;
+        if (is_last_step) {
+            stream_seq_pos_[stream_slot] = seq_pos;
+            return;
+        }
 
-        // Compute next token forward step
-        forward_token(next_token, seq_pos, true);
+        // Compute next token forward step with stream slot and grammar mask
+        forward_token(next_token, seq_pos, true, stream_slot, d_grammar_bitmask);
         seq_pos++;
         generated_count++;
 
@@ -897,6 +1088,7 @@ void NativeDecoder::generate(
 
     // Safety fallback
     if (on_token) on_token(eos_token_id_, 1.0f, "", true);
+    stream_seq_pos_[stream_slot] = seq_pos;
 }
 
 void NativeDecoder::generate(
@@ -904,7 +1096,9 @@ void NativeDecoder::generate(
     int max_tokens,
     ipc::ShmServer& server,
     uint32_t stream_id,
-    const SamplingConfig& sampling
+    const SamplingConfig& sampling,
+    bool reset_state,
+    const uint32_t* d_grammar_bitmask
 ) {
     generate(
         prompt,
@@ -912,7 +1106,13 @@ void NativeDecoder::generate(
         [&server, stream_id](uint32_t token_id, float logit, const std::string& text, bool is_final) -> bool {
             return server.send_token(stream_id, token_id, logit, text, is_final);
         },
-        sampling
+        sampling,
+        stream_id,
+        reset_state,
+        d_grammar_bitmask,
+        [&server, stream_id](const ToolCall& tool_call) -> bool {
+            return server.send_tool_call(stream_id, tool_call.id, tool_call.name, tool_call.arguments);
+        }
     );
 }
 

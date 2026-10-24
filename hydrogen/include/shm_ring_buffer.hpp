@@ -109,6 +109,11 @@ public:
                     const std::string& token_text,
                     bool is_final = false);
 
+    bool send_tool_call(uint32_t stream_id,
+                        const std::string& id,
+                        const std::string& name,
+                        const std::string& arguments);
+
     // Read requests from Daemon (Daemon -> Engine)
     bool poll_request(IpcFrameHeader& out_header,
                       void* out_payload,
