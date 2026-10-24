@@ -684,6 +684,63 @@ size_t NativeDecoder::attach_stream_to_prefix(uint32_t stream_slot, std::span<co
     return match.matched_tokens;
 }
 
+size_t NativeDecoder::allocate_stream_blocks_batch(uint32_t stream_slot, uint32_t start_block, uint32_t num_blocks) {
+    if (stream_slot >= MAX_STREAMS || !page_pool_ || num_blocks == 0) {
+        return 0;
+    }
+    if (start_block + num_blocks > paged_kv_.max_blocks_per_stream) {
+        num_blocks = paged_kv_.max_blocks_per_stream - start_block;
+    }
+
+    std::vector<uint32_t> needed_blocks;
+    needed_blocks.reserve(num_blocks);
+
+    for (uint32_t i = 0; i < num_blocks; ++i) {
+        uint32_t block = start_block + i;
+        size_t table_idx = stream_slot * paged_kv_.max_blocks_per_stream + block;
+        if (table_idx < h_stream_block_table_.size() && h_stream_block_table_[table_idx] == INVALID_PAGE_ID) {
+            needed_blocks.push_back(block);
+        }
+    }
+
+    if (needed_blocks.empty()) {
+        return num_blocks;
+    }
+
+    std::vector<uint32_t> new_pages;
+    new_pages.reserve(needed_blocks.size());
+    size_t allocated = page_pool_->allocate_batch(needed_blocks.size(), new_pages);
+    if (allocated == 0) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < allocated; ++i) {
+        uint32_t block = needed_blocks[i];
+        uint32_t pid = new_pages[i];
+        size_t table_idx = stream_slot * paged_kv_.max_blocks_per_stream + block;
+        h_stream_block_table_[table_idx] = pid;
+        stream_allocated_pages_[stream_slot].push_back(pid);
+    }
+
+    if (d_dynamic_block_table_ && allocated > 0) {
+        cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
+        uint32_t min_block = needed_blocks.front();
+        uint32_t max_block = needed_blocks[allocated - 1];
+        size_t count = max_block - min_block + 1;
+        size_t start_idx = stream_slot * paged_kv_.max_blocks_per_stream + min_block;
+
+        CUDA_CHECK(cudaMemcpyAsync(
+            d_dynamic_block_table_ + start_idx,
+            &h_stream_block_table_[start_idx],
+            count * sizeof(uint32_t),
+            cudaMemcpyHostToDevice,
+            stream
+        ));
+    }
+
+    return allocated;
+}
+
 uint32_t NativeDecoder::allocate_stream_block(uint32_t stream_slot, uint32_t logical_block) {
     if (stream_slot >= MAX_STREAMS || !page_pool_ || logical_block >= paged_kv_.max_blocks_per_stream) {
         return INVALID_PAGE_ID;
@@ -696,25 +753,10 @@ uint32_t NativeDecoder::allocate_stream_block(uint32_t stream_slot, uint32_t log
         }
     }
 
-    uint32_t page_id = page_pool_->allocate_page();
-    if (page_id == INVALID_PAGE_ID) {
-        return INVALID_PAGE_ID;
-    }
+    // Allocate in chunks of 4 blocks (64 tokens) to eliminate frequent PCIe driver copies
+    allocate_stream_blocks_batch(stream_slot, logical_block, 4);
 
-    h_stream_block_table_[table_idx] = page_id;
-    stream_allocated_pages_[stream_slot].push_back(page_id);
-
-    if (d_dynamic_block_table_) {
-        cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
-        cudaMemcpyAsync(
-            d_dynamic_block_table_ + table_idx,
-            &page_id,
-            sizeof(uint32_t),
-            cudaMemcpyHostToDevice,
-            stream
-        );
-    }
-    return page_id;
+    return (table_idx < h_stream_block_table_.size()) ? h_stream_block_table_[table_idx] : INVALID_PAGE_ID;
 }
 
 void NativeDecoder::release_stream_blocks(uint32_t stream_slot) {
@@ -753,14 +795,15 @@ void NativeDecoder::set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable>
     if (active_fsm_table_ && !active_fsm_table_->bitmasks.empty()) {
         current_fsm_state_ = active_fsm_table_->start_state;
         size_t total_words = active_fsm_table_->bitmasks.size();
-        if (total_words > fsm_bitmasks_allocated_words_) {
+        if (total_words > fsm_bitmasks_allocated_words_ || d_fsm_bitmasks_ == nullptr) {
             if (d_fsm_bitmasks_) {
                 cudaFree(d_fsm_bitmasks_);
                 d_fsm_bitmasks_ = nullptr;
                 fsm_bitmasks_allocated_words_ = 0;
             }
-            CUDA_CHECK(cudaMalloc(&d_fsm_bitmasks_, total_words * sizeof(uint32_t)));
-            fsm_bitmasks_allocated_words_ = total_words;
+            size_t alloc_words = std::max(total_words, static_cast<size_t>(262144)); // 1 MiB reserved pool
+            CUDA_CHECK(cudaMalloc(&d_fsm_bitmasks_, alloc_words * sizeof(uint32_t)));
+            fsm_bitmasks_allocated_words_ = alloc_words;
         }
         CUDA_CHECK(cudaMemcpy(
             d_fsm_bitmasks_,
@@ -776,11 +819,7 @@ void NativeDecoder::set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable>
 void NativeDecoder::clear_grammar() {
     active_fsm_table_ = nullptr;
     current_fsm_state_ = 0;
-    if (d_fsm_bitmasks_) {
-        cudaFree(d_fsm_bitmasks_);
-        d_fsm_bitmasks_ = nullptr;
-        fsm_bitmasks_allocated_words_ = 0;
-    }
+    // Retain pre-allocated d_fsm_bitmasks_ pool for zero-malloc dynamic tool reuse
 }
 
 NativeDecoder::NativeDecoder() = default;
@@ -948,6 +987,12 @@ bool NativeDecoder::initialize(const std::filesystem::path& model_path) {
     size_t mask_words = (vocab_size_ + 31) / 32;
     CUDA_CHECK(cudaMalloc(&d_grammar_mask_, mask_words * sizeof(uint32_t)));
     CUDA_CHECK(cudaMemsetAsync(d_grammar_mask_, 0xFF, mask_words * sizeof(uint32_t), stream));
+
+    // Pre-allocated FSM State Bitmasks Device Pool (Issue H23: 1 MiB / 262,144 words for zero-malloc schema switching)
+    constexpr size_t INITIAL_FSM_CAPACITY_WORDS = 262144;
+    CUDA_CHECK(cudaMalloc(&d_fsm_bitmasks_, INITIAL_FSM_CAPACITY_WORDS * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMemsetAsync(d_fsm_bitmasks_, 0, INITIAL_FSM_CAPACITY_WORDS * sizeof(uint32_t), stream));
+    fsm_bitmasks_allocated_words_ = INITIAL_FSM_CAPACITY_WORDS;
 
     // Top-K Candidate Buffers
     CUDA_CHECK(cudaMalloc(&d_top_tokens_, TOP_CANDIDATES * sizeof(uint32_t)));
@@ -1285,6 +1330,10 @@ void NativeDecoder::generate(
     if (page_pool_) {
         std::vector<int32_t> prompt_i32(prompt_tokens.begin(), prompt_tokens.end());
         attach_stream_to_prefix(stream_slot, prompt_i32);
+
+        // Pre-allocate all prefill blocks in a single batched PCIe transfer (H23)
+        uint32_t total_prefill_blocks = (prompt_tokens.size() + paged_kv_.block_size - 1) / paged_kv_.block_size;
+        allocate_stream_blocks_batch(stream_slot, 0, total_prefill_blocks);
     }
 
     // Prefill Phase
