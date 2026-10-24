@@ -234,10 +234,16 @@ int main(int argc, char* argv[]) {
             sampling.min_p = extract_float_from_json(req_json, "min_p", 0.0f);
             sampling.repetition_penalty = extract_float_from_json(req_json, "repeat_penalty", 1.05f);
 
+            bool is_tool_continuation = (prompt.find("<|im_start|>tool") != std::string::npos ||
+                                         req_json.find("\"role\":\"tool\"") != std::string::npos ||
+                                         req_json.find("\"role\": \"tool\"") != std::string::npos);
+            bool reset_state = !is_tool_continuation;
+
             if (decoder_ready) {
                 std::cout << "[Hydrogen] Autoregressive generation stream_id=" << req_hdr.stream_id
-                          << " max_tokens=" << max_tokens << " prompt_len=" << prompt.size() << "\n" << std::flush;
-                decoder.generate(prompt, max_tokens, server, req_hdr.stream_id, sampling);
+                          << " max_tokens=" << max_tokens << " reset_state=" << (reset_state ? "true" : "false")
+                          << " prompt_len=" << prompt.size() << "\n" << std::flush;
+                decoder.generate(prompt, max_tokens, server, req_hdr.stream_id, sampling, reset_state);
             } else {
                 // Fallback for environment without fully loaded model weights
                 hydrogen::ForwardConfig fwd_cfg;

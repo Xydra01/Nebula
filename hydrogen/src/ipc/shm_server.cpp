@@ -380,6 +380,19 @@ bool ShmServer::send_token(uint32_t stream_id,
     return send_response(MessageType::MSG_TOKEN_CHUNK, stream_id, flags, &payload, sizeof(payload));
 }
 
+bool ShmServer::send_tool_call(uint32_t stream_id,
+                               const std::string& id,
+                               const std::string& name,
+                               const std::string& arguments) {
+    if (!is_initialized_) return false;
+
+    // Construct JSON payload matching nebula-model deserializer:
+    // {"id": "...", "name": "...", "arguments": ...}
+    std::string payload = "{\"id\":\"" + id + "\",\"name\":\"" + name + "\",\"arguments\":" + arguments + "}";
+    return send_response(MessageType::MSG_TOOL_CALL, stream_id, FrameFlags::END_OF_STREAM,
+                         payload.data(), static_cast<uint32_t>(payload.size()));
+}
+
 bool ShmServer::poll_request(IpcFrameHeader& out_header,
                              void* out_payload,
                              size_t max_payload_len) {
