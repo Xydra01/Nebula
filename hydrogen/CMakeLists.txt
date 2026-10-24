@@ -346,6 +346,7 @@ set_target_properties(hydrogen_grammar PROPERTIES
 
 target_link_libraries(hydrogen_engine PUBLIC
     hydrogen_grammar
+    hydrogen_memory
 )
 
 # GPU-Fused FSM Tool Grammar Sampler Benchmark Target (Issue H11)

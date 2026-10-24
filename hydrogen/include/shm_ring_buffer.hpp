@@ -131,6 +131,12 @@ public:
     void set_cuda_yield_mode(uint32_t mode) noexcept;
     [[nodiscard]] uint32_t get_cuda_yield_mode() const noexcept;
 
+    // Adaptive Win32 Event Signaling (suppresses redundant syscalls when ring is non-empty)
+    void set_adaptive_signaling(bool enable) noexcept { adaptive_signaling_ = enable; }
+    [[nodiscard]] bool is_adaptive_signaling_enabled() const noexcept { return adaptive_signaling_; }
+    [[nodiscard]] uint64_t total_events_signaled() const noexcept { return total_events_signaled_; }
+    [[nodiscard]] uint64_t total_signals_suppressed() const noexcept { return total_signals_suppressed_; }
+
     [[nodiscard]] ShmGlobalHeader* raw_header() noexcept { return global_header_; }
 
 private:
@@ -154,6 +160,10 @@ private:
 
     mutable std::mutex response_mutex_;
     mutable std::mutex request_mutex_;
+
+    bool adaptive_signaling_ = true;
+    uint64_t total_events_signaled_ = 0;
+    uint64_t total_signals_suppressed_ = 0;
 };
 
 // ============================================================================

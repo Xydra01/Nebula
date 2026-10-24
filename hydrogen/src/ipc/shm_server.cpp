@@ -349,11 +349,25 @@ bool ShmServer::send_response(MessageType msg_type,
                               uint64_t sequence_num) {
     if (!is_initialized_) return false;
     std::lock_guard<std::mutex> lock(response_mutex_);
+
+    // Check if queue was empty prior to this write
+    const bool was_empty = response_ring_.is_empty();
+    const bool is_urgent = (flags & FrameFlags::END_OF_STREAM) != 0 ||
+                           msg_type == MessageType::MSG_TOOL_CALL ||
+                           msg_type == MessageType::MSG_PONG;
+
     const bool ok = response_ring_.write_frame(msg_type, stream_id, flags, payload, payload_size, sequence_num);
     if (ok) {
 #ifdef _WIN32
         if (h_engine_event_) {
-            SetEvent(h_engine_event_);
+            // Adaptive signaling: only trigger OS kernel transition if consumer was idle
+            // (empty queue) or frame requires immediate delivery (EOS / ToolCall / Pong).
+            if (!adaptive_signaling_ || was_empty || is_urgent) {
+                SetEvent(h_engine_event_);
+                total_events_signaled_++;
+            } else {
+                total_signals_suppressed_++;
+            }
         }
 #endif
     }
