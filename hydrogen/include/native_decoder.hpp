@@ -8,6 +8,8 @@
 #include "shm_ring_buffer.hpp"
 #include "tokenizer.hpp"
 #include "fsm_grammar.hpp"
+#include "page_pool.hpp"
+#include "radix_tree.hpp"
 
 #include <string>
 #include <vector>
@@ -16,6 +18,7 @@
 #include <memory>
 #include <cstdint>
 #include <functional>
+#include <span>
 
 namespace hydrogen {
 
@@ -34,6 +37,7 @@ struct PagedKvTable {
     float* d_paged_k = nullptr;
     float* d_paged_v = nullptr;
     bool is_paged_enabled = false;
+    size_t total_pages = 4096;
 };
 
 struct SamplingConfig {
@@ -145,6 +149,17 @@ public:
     [[nodiscard]] bool is_paged_kv_enabled() const noexcept { return paged_kv_.is_paged_enabled; }
     [[nodiscard]] const PagedKvTable& paged_kv_table() const noexcept { return paged_kv_; }
 
+    // Dynamic Radix Page Pool Engine (Issue H22)
+    bool enable_dynamic_paged_kv(size_t total_pages = 1024, uint32_t block_size = 16, uint32_t max_blocks_per_stream = 2048);
+    void disable_dynamic_paged_kv();
+    size_t register_shared_prefix(std::span<const int32_t> prefix_tokens);
+    size_t attach_stream_to_prefix(uint32_t stream_slot, std::span<const int32_t> prompt_tokens);
+    uint32_t allocate_stream_block(uint32_t stream_slot, uint32_t logical_block);
+    void release_stream_blocks(uint32_t stream_slot);
+    [[nodiscard]] std::shared_ptr<PagePool> page_pool() const noexcept { return page_pool_; }
+    [[nodiscard]] std::shared_ptr<RadixTree> radix_tree() const noexcept { return radix_tree_; }
+    [[nodiscard]] const uint32_t* device_fsm_bitmasks() const noexcept { return d_fsm_bitmasks_; }
+
     // Dynamic FSM Tool Grammar Bitmask Compiler & Step Synchronizer
     void set_grammar_schema(const grammar::ToolSchema& schema);
     void set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable> table);
@@ -210,12 +225,22 @@ private:
     // Grammar Mask Buffer (Device)
     uint32_t* d_grammar_mask_ = nullptr; // [(vocab_size + 31) / 32]
 
-    // Dynamic Radix Paged KV Table
+    // Dynamic Radix Paged KV Table & Engine (H22)
     PagedKvTable paged_kv_;
+    std::shared_ptr<PagePool> page_pool_;
+    std::shared_ptr<RadixTree> radix_tree_;
+    uint32_t* d_dynamic_block_table_ = nullptr;
+    float* d_dynamic_paged_k_ = nullptr;
+    float* d_dynamic_paged_v_ = nullptr;
+    std::vector<uint32_t> h_stream_block_table_;
+    std::vector<uint32_t> stream_allocated_pages_[MAX_STREAMS];
+    std::shared_ptr<RadixTreeNode> stream_radix_nodes_[MAX_STREAMS];
 
-    // Dynamic FSM Tool Grammar State
+    // Dynamic FSM Tool Grammar State (Zero PCIe copy per step)
     std::shared_ptr<grammar::FsmCompiledTable> active_fsm_table_;
     int current_fsm_state_ = 0;
+    uint32_t* d_fsm_bitmasks_ = nullptr;
+    size_t fsm_bitmasks_allocated_words_ = 0;
 
     // Pinned Sampling Buffers (Top-K extraction)
     static constexpr size_t TOP_CANDIDATES = 128;

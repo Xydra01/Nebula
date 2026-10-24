@@ -293,7 +293,9 @@ __global__ void kernel_attention_decode(
         uint32_t write_offset = pos % block_size;
         uint32_t write_page = d_block_table[stream_slot * max_blocks_per_stream + write_block];
         size_t page_stride = static_cast<size_t>(block_size) * num_kv_heads * head_dim;
-        size_t write_kv_off = static_cast<size_t>(write_page) * page_stride +
+        size_t total_page_stride = 16ULL * page_stride; // 16 full-attention layers in 64-layer Bonsai-2 27B
+        size_t write_kv_off = static_cast<size_t>(write_page) * total_page_stride +
+                              static_cast<size_t>(attn_layer_idx) * page_stride +
                               static_cast<size_t>(write_offset) * num_kv_heads * head_dim +
                               static_cast<size_t>(kv_head) * head_dim;
 
@@ -311,7 +313,8 @@ __global__ void kernel_attention_decode(
             uint32_t p_block = p / block_size;
             uint32_t p_offset = p % block_size;
             uint32_t p_page = d_block_table[stream_slot * max_blocks_per_stream + p_block];
-            size_t k_offset = static_cast<size_t>(p_page) * page_stride +
+            size_t k_offset = static_cast<size_t>(p_page) * total_page_stride +
+                              static_cast<size_t>(attn_layer_idx) * page_stride +
                               static_cast<size_t>(p_offset) * num_kv_heads * head_dim +
                               static_cast<size_t>(kv_head) * head_dim;
             const float* k_vec = d_paged_k + k_offset;
@@ -594,17 +597,177 @@ void NativeDecoder::unbind_paged_kv() {
     paged_kv_.d_paged_v = nullptr;
 }
 
+bool NativeDecoder::enable_dynamic_paged_kv(size_t total_pages, uint32_t block_size, uint32_t max_blocks_per_stream) {
+    disable_dynamic_paged_kv();
+
+    page_pool_ = std::make_shared<PagePool>(PagePoolConfig{
+        .total_pages = total_pages,
+        .page_size_bytes = 16ULL * block_size * head_count_kv_ * head_dim_ * sizeof(float)
+    });
+    radix_tree_ = std::make_shared<RadixTree>();
+
+    paged_kv_.block_size = block_size;
+    paged_kv_.max_blocks_per_stream = max_blocks_per_stream;
+    paged_kv_.total_pages = total_pages;
+
+    size_t table_entries = static_cast<size_t>(MAX_STREAMS) * max_blocks_per_stream;
+    h_stream_block_table_.assign(table_entries, INVALID_PAGE_ID);
+
+    size_t page_total_stride = 16ULL * block_size * head_count_kv_ * head_dim_;
+    size_t kv_buffer_elements = total_pages * page_total_stride;
+
+    CUDA_CHECK(cudaMalloc(&d_dynamic_block_table_, table_entries * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMemset(d_dynamic_block_table_, 0xFF, table_entries * sizeof(uint32_t)));
+
+    CUDA_CHECK(cudaMalloc(&d_dynamic_paged_k_, kv_buffer_elements * sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_dynamic_paged_k_, 0, kv_buffer_elements * sizeof(float)));
+
+    CUDA_CHECK(cudaMalloc(&d_dynamic_paged_v_, kv_buffer_elements * sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_dynamic_paged_v_, 0, kv_buffer_elements * sizeof(float)));
+
+    bind_paged_kv(d_dynamic_block_table_, d_dynamic_paged_k_, d_dynamic_paged_v_, block_size, max_blocks_per_stream);
+    return true;
+}
+
+void NativeDecoder::disable_dynamic_paged_kv() {
+    unbind_paged_kv();
+    for (uint32_t s = 0; s < MAX_STREAMS; ++s) {
+        release_stream_blocks(s);
+    }
+    if (d_dynamic_block_table_) {
+        cudaFree(d_dynamic_block_table_);
+        d_dynamic_block_table_ = nullptr;
+    }
+    if (d_dynamic_paged_k_) {
+        cudaFree(d_dynamic_paged_k_);
+        d_dynamic_paged_k_ = nullptr;
+    }
+    if (d_dynamic_paged_v_) {
+        cudaFree(d_dynamic_paged_v_);
+        d_dynamic_paged_v_ = nullptr;
+    }
+    h_stream_block_table_.clear();
+    page_pool_.reset();
+    radix_tree_.reset();
+}
+
+size_t NativeDecoder::register_shared_prefix(std::span<const int32_t> prefix_tokens) {
+    if (!radix_tree_ || prefix_tokens.empty()) return 0;
+    auto node = radix_tree_->insert(prefix_tokens);
+    return node ? node->page_ids.size() : 0;
+}
+
+size_t NativeDecoder::attach_stream_to_prefix(uint32_t stream_slot, std::span<const int32_t> prompt_tokens) {
+    if (!radix_tree_ || stream_slot >= MAX_STREAMS || prompt_tokens.empty()) return 0;
+    auto match = radix_tree_->match_longest_prefix(prompt_tokens);
+    if (match.matched_tokens == 0 || !match.last_node) return 0;
+
+    radix_tree_->retain_branch(match.last_node);
+    stream_radix_nodes_[stream_slot] = match.last_node;
+
+    for (size_t b = 0; b < match.physical_page_ids.size() && b < paged_kv_.max_blocks_per_stream; ++b) {
+        uint32_t phys_page = match.physical_page_ids[b];
+        h_stream_block_table_[stream_slot * paged_kv_.max_blocks_per_stream + b] = phys_page;
+    }
+
+    if (d_dynamic_block_table_ && !match.physical_page_ids.empty()) {
+        size_t copy_cnt = std::min<size_t>(match.physical_page_ids.size(), paged_kv_.max_blocks_per_stream);
+        cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
+        cudaMemcpyAsync(
+            d_dynamic_block_table_ + stream_slot * paged_kv_.max_blocks_per_stream,
+            match.physical_page_ids.data(),
+            copy_cnt * sizeof(uint32_t),
+            cudaMemcpyHostToDevice,
+            stream
+        );
+    }
+    return match.matched_tokens;
+}
+
+uint32_t NativeDecoder::allocate_stream_block(uint32_t stream_slot, uint32_t logical_block) {
+    if (stream_slot >= MAX_STREAMS || !page_pool_ || logical_block >= paged_kv_.max_blocks_per_stream) {
+        return INVALID_PAGE_ID;
+    }
+    size_t table_idx = stream_slot * paged_kv_.max_blocks_per_stream + logical_block;
+    if (table_idx < h_stream_block_table_.size()) {
+        uint32_t existing = h_stream_block_table_[table_idx];
+        if (existing != INVALID_PAGE_ID) {
+            return existing;
+        }
+    }
+
+    uint32_t page_id = page_pool_->allocate_page();
+    if (page_id == INVALID_PAGE_ID) {
+        return INVALID_PAGE_ID;
+    }
+
+    h_stream_block_table_[table_idx] = page_id;
+    stream_allocated_pages_[stream_slot].push_back(page_id);
+
+    if (d_dynamic_block_table_) {
+        cudaStream_t stream = static_cast<cudaStream_t>(cuda_stream_);
+        cudaMemcpyAsync(
+            d_dynamic_block_table_ + table_idx,
+            &page_id,
+            sizeof(uint32_t),
+            cudaMemcpyHostToDevice,
+            stream
+        );
+    }
+    return page_id;
+}
+
+void NativeDecoder::release_stream_blocks(uint32_t stream_slot) {
+    if (stream_slot >= MAX_STREAMS) return;
+    if (stream_radix_nodes_[stream_slot]) {
+        if (radix_tree_) {
+            radix_tree_->release_branch(stream_radix_nodes_[stream_slot]);
+        }
+        stream_radix_nodes_[stream_slot] = nullptr;
+    }
+    if (page_pool_) {
+        for (uint32_t pid : stream_allocated_pages_[stream_slot]) {
+            page_pool_->free_page(pid);
+        }
+    }
+    stream_allocated_pages_[stream_slot].clear();
+
+    if (!h_stream_block_table_.empty() && paged_kv_.max_blocks_per_stream > 0) {
+        size_t base = stream_slot * paged_kv_.max_blocks_per_stream;
+        size_t count = paged_kv_.max_blocks_per_stream;
+        std::fill(h_stream_block_table_.begin() + base, h_stream_block_table_.begin() + base + count, INVALID_PAGE_ID);
+        if (d_dynamic_block_table_) {
+            cudaMemset(d_dynamic_block_table_ + base, 0xFF, count * sizeof(uint32_t));
+        }
+    }
+}
+
 void NativeDecoder::set_grammar_schema(const grammar::ToolSchema& schema) {
     grammar::FsmCompiler compiler;
     compiler.register_tool(schema);
-    active_fsm_table_ = std::make_shared<grammar::FsmCompiledTable>(compiler.compile());
-    current_fsm_state_ = active_fsm_table_->start_state;
+    set_grammar_table(std::make_shared<grammar::FsmCompiledTable>(compiler.compile()));
 }
 
 void NativeDecoder::set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable> table) {
     active_fsm_table_ = std::move(table);
-    if (active_fsm_table_) {
+    if (active_fsm_table_ && !active_fsm_table_->bitmasks.empty()) {
         current_fsm_state_ = active_fsm_table_->start_state;
+        size_t total_words = active_fsm_table_->bitmasks.size();
+        if (total_words > fsm_bitmasks_allocated_words_) {
+            if (d_fsm_bitmasks_) {
+                cudaFree(d_fsm_bitmasks_);
+                d_fsm_bitmasks_ = nullptr;
+                fsm_bitmasks_allocated_words_ = 0;
+            }
+            CUDA_CHECK(cudaMalloc(&d_fsm_bitmasks_, total_words * sizeof(uint32_t)));
+            fsm_bitmasks_allocated_words_ = total_words;
+        }
+        CUDA_CHECK(cudaMemcpy(
+            d_fsm_bitmasks_,
+            active_fsm_table_->bitmasks.data(),
+            total_words * sizeof(uint32_t),
+            cudaMemcpyHostToDevice
+        ));
     } else {
         current_fsm_state_ = 0;
     }
@@ -613,6 +776,11 @@ void NativeDecoder::set_grammar_table(std::shared_ptr<grammar::FsmCompiledTable>
 void NativeDecoder::clear_grammar() {
     active_fsm_table_ = nullptr;
     current_fsm_state_ = 0;
+    if (d_fsm_bitmasks_) {
+        cudaFree(d_fsm_bitmasks_);
+        d_fsm_bitmasks_ = nullptr;
+        fsm_bitmasks_allocated_words_ = 0;
+    }
 }
 
 NativeDecoder::NativeDecoder() = default;
@@ -647,6 +815,8 @@ NativeDecoder::~NativeDecoder() {
         if (d_top_logits_) cudaFree(d_top_logits_);
         if (h_top_tokens_) cudaFreeHost(h_top_tokens_);
         if (h_top_logits_) cudaFreeHost(h_top_logits_);
+        if (d_fsm_bitmasks_) cudaFree(d_fsm_bitmasks_);
+        disable_dynamic_paged_kv();
     }
 }
 
@@ -1074,6 +1244,9 @@ void NativeDecoder::generate(
         CUDA_CHECK(cudaMemsetAsync(d_k_cache_ + stream_slot * stream_kv_stride, 0, stream_kv_stride * sizeof(float), stream));
         CUDA_CHECK(cudaMemsetAsync(d_v_cache_ + stream_slot * stream_kv_stride, 0, stream_kv_stride * sizeof(float), stream));
         CUDA_CHECK(cudaMemsetAsync(d_ssm_state_ + stream_slot * stream_ssm_stride, 0, stream_ssm_stride * sizeof(float), stream));
+        if (page_pool_) {
+            release_stream_blocks(stream_slot);
+        }
     }
 
     // Format prompt with ChatML if needed
@@ -1087,26 +1260,39 @@ void NativeDecoder::generate(
 
     uint32_t seq_pos = stream_seq_pos_[stream_slot];
 
-    // 1. Dynamic Grammar Bitmask Initial State Sync
+    // 1. Dynamic Grammar Bitmask Initial State Sync (Zero-copy in H22)
     const uint32_t* active_bitmask = d_grammar_bitmask;
     if (active_fsm_table_ && !active_fsm_table_->states.empty()) {
         if (current_fsm_state_ >= 0 && static_cast<size_t>(current_fsm_state_) < active_fsm_table_->states.size()) {
             const auto& desc = active_fsm_table_->states[current_fsm_state_];
-            size_t mask_words = (vocab_size_ + 31) / 32;
-            size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
-            CUDA_CHECK(cudaMemcpyAsync(
-                d_grammar_mask_,
-                &active_fsm_table_->bitmasks[desc.mask_offset_words],
-                copy_words * sizeof(uint32_t),
-                cudaMemcpyHostToDevice,
-                stream
-            ));
-            active_bitmask = d_grammar_mask_;
+            if (d_fsm_bitmasks_) {
+                active_bitmask = d_fsm_bitmasks_ + desc.mask_offset_words;
+            } else {
+                size_t mask_words = (vocab_size_ + 31) / 32;
+                size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
+                CUDA_CHECK(cudaMemcpyAsync(
+                    d_grammar_mask_,
+                    &active_fsm_table_->bitmasks[desc.mask_offset_words],
+                    copy_words * sizeof(uint32_t),
+                    cudaMemcpyHostToDevice,
+                    stream
+                ));
+                active_bitmask = d_grammar_mask_;
+            }
         }
+    }
+
+    if (page_pool_) {
+        std::vector<int32_t> prompt_i32(prompt_tokens.begin(), prompt_tokens.end());
+        attach_stream_to_prefix(stream_slot, prompt_i32);
     }
 
     // Prefill Phase
     for (size_t i = 0; i < prompt_tokens.size(); ++i) {
+        if (page_pool_) {
+            uint32_t logical_block = seq_pos / paged_kv_.block_size;
+            allocate_stream_block(stream_slot, logical_block);
+        }
         bool is_last = (i + 1 == prompt_tokens.size());
         forward_token(prompt_tokens[i], seq_pos, is_last, stream_slot, active_bitmask);
         seq_pos++;
@@ -1213,21 +1399,30 @@ void NativeDecoder::generate(
             return;
         }
 
-        // Dynamically synchronize next step grammar bitmask
+        // Dynamically synchronize next step grammar bitmask (Zero-copy in H22)
         if (active_fsm_table_ && !active_fsm_table_->states.empty()) {
             if (current_fsm_state_ >= 0 && static_cast<size_t>(current_fsm_state_) < active_fsm_table_->states.size()) {
                 const auto& desc = active_fsm_table_->states[current_fsm_state_];
-                size_t mask_words = (vocab_size_ + 31) / 32;
-                size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
-                CUDA_CHECK(cudaMemcpyAsync(
-                    d_grammar_mask_,
-                    &active_fsm_table_->bitmasks[desc.mask_offset_words],
-                    copy_words * sizeof(uint32_t),
-                    cudaMemcpyHostToDevice,
-                    stream
-                ));
-                active_bitmask = d_grammar_mask_;
+                if (d_fsm_bitmasks_) {
+                    active_bitmask = d_fsm_bitmasks_ + desc.mask_offset_words;
+                } else {
+                    size_t mask_words = (vocab_size_ + 31) / 32;
+                    size_t copy_words = std::min<size_t>(mask_words, static_cast<size_t>(active_fsm_table_->mask_words));
+                    CUDA_CHECK(cudaMemcpyAsync(
+                        d_grammar_mask_,
+                        &active_fsm_table_->bitmasks[desc.mask_offset_words],
+                        copy_words * sizeof(uint32_t),
+                        cudaMemcpyHostToDevice,
+                        stream
+                    ));
+                    active_bitmask = d_grammar_mask_;
+                }
             }
+        }
+
+        if (page_pool_) {
+            uint32_t logical_block = seq_pos / paged_kv_.block_size;
+            allocate_stream_block(stream_slot, logical_block);
         }
 
         // Compute next token forward step with stream slot and grammar mask

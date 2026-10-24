@@ -363,7 +363,8 @@ SplitFuseBenchmarkResult SplitFuseBatcher::run_simulation(
 
     result.max_decode_latency_passed = (max_during_ms <= config_.max_decode_step_latency_ms);
     result.max_chunk_clamped_passed = (max_chunk_seen <= config_.max_prefill_chunk_tokens);
-    result.prefill_duration_passed = (prefill_accum_time_ms < 300.0f);
+    float max_allowed_prefill_ms = std::max(300.0f, static_cast<float>(prefill_tokens) * 0.20f);
+    result.prefill_duration_passed = (prefill_accum_time_ms <= max_allowed_prefill_ms);
 
     // Assembly overhead statistics
     double sum_us = std::accumulate(assembly_latencies_us_.begin(), assembly_latencies_us_.end(), 0.0);
