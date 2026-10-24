@@ -250,6 +250,12 @@ private:
     uint32_t* h_top_tokens_ = nullptr;
     float* h_top_logits_ = nullptr;
 
+    // Hadamard Outlier Rotation Buffers (PrismML PTQ1_0)
+    bool has_hadamard_ = false;
+    int8_t* d_signs_5120_ = nullptr;
+    int8_t* d_signs_6144_ = nullptr;
+    int8_t* d_signs_17408_ = nullptr;
+
     // CUDA Stream
     void* cuda_stream_ = nullptr;
 

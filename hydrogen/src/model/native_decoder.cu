@@ -28,13 +28,6 @@ namespace hydrogen {
 
 namespace {
 
-// TQ1_0 PrismML block definition (256 elements in 56 bytes, 8-byte aligned)
-struct BlockTQ1_0 {
-    uint16_t d;         // delta (fp16)
-    uint8_t packed[52]; // packed base-3 trits
-    uint16_t _pad;      // alignment padding
-};
-
 // Warp-level sum reduction using shuffle intrinsics
 __device__ __forceinline__ float warp_reduce_sum(float val) {
     #pragma unroll
@@ -58,7 +51,90 @@ __device__ __forceinline__ void warp_reduce_argmax(float& val, uint32_t& idx) {
 }
 
 // ----------------------------------------------------------------------------
-// Embedding Lookup Kernel
+// Fast Walsh-Hadamard Transform (FWHT) Kernels (Normalized Sylvester, B=1024)
+// ----------------------------------------------------------------------------
+__global__ void kernel_hadamard_forward(
+    float* __restrict__ d_data,
+    const int8_t* __restrict__ d_signs,
+    uint32_t total_dim
+) {
+    uint32_t chunk = blockIdx.x;
+    uint32_t base = chunk * 1024;
+    if (base >= total_dim) return;
+
+    uint32_t tid = threadIdx.x; // 0..511
+    __shared__ float s_data[1024];
+
+    float val0 = d_data[base + tid];
+    float val1 = d_data[base + tid + 512];
+    if (d_signs != nullptr) {
+        val0 *= static_cast<float>(d_signs[base + tid]);
+        val1 *= static_cast<float>(d_signs[base + tid + 512]);
+    }
+    s_data[tid] = val0;
+    s_data[tid + 512] = val1;
+    __syncthreads();
+
+    #pragma unroll
+    for (int h = 1; h < 1024; h <<= 1) {
+        uint32_t group = tid / h;
+        uint32_t offset = tid % h;
+        uint32_t j = group * (2 * h) + offset;
+
+        float u = s_data[j];
+        float v = s_data[j + h];
+        __syncthreads();
+        s_data[j]     = u + v;
+        s_data[j + h] = u - v;
+        __syncthreads();
+    }
+
+    d_data[base + tid]       = s_data[tid] * 0.03125f;
+    d_data[base + tid + 512] = s_data[tid + 512] * 0.03125f;
+}
+
+__global__ void kernel_hadamard_inverse(
+    float* __restrict__ d_data,
+    const int8_t* __restrict__ d_signs,
+    uint32_t total_dim
+) {
+    uint32_t chunk = blockIdx.x;
+    uint32_t base = chunk * 1024;
+    if (base >= total_dim) return;
+
+    uint32_t tid = threadIdx.x; // 0..511
+    __shared__ float s_data[1024];
+
+    s_data[tid]       = d_data[base + tid];
+    s_data[tid + 512] = d_data[base + tid + 512];
+    __syncthreads();
+
+    #pragma unroll
+    for (int h = 1; h < 1024; h <<= 1) {
+        uint32_t group = tid / h;
+        uint32_t offset = tid % h;
+        uint32_t j = group * (2 * h) + offset;
+
+        float u = s_data[j];
+        float v = s_data[j + h];
+        __syncthreads();
+        s_data[j]     = u + v;
+        s_data[j + h] = u - v;
+        __syncthreads();
+    }
+
+    float res0 = s_data[tid] * 0.03125f;
+    float res1 = s_data[tid + 512] * 0.03125f;
+    if (d_signs != nullptr) {
+        res0 *= static_cast<float>(d_signs[base + tid]);
+        res1 *= static_cast<float>(d_signs[base + tid + 512]);
+    }
+    d_data[base + tid]       = res0;
+    d_data[base + tid + 512] = res1;
+}
+
+// ----------------------------------------------------------------------------
+// Embedding Lookup Kernel (PTQ1_0 Dual 28-byte Sub-Block Layout)
 // ----------------------------------------------------------------------------
 __global__ void kernel_embedding_lookup(
     const uint8_t* __restrict__ embd_data,
@@ -74,32 +150,33 @@ __global__ void kernel_embedding_lookup(
     uint32_t blocks_per_row = embedding_dim / 256;
     uint64_t global_block_idx = static_cast<uint64_t>(token_id) * blocks_per_row + block_idx;
 
-    const BlockTQ1_0* blk = reinterpret_cast<const BlockTQ1_0*>(embd_data) + global_block_idx;
-    float d = __half2float(*reinterpret_cast<const __half*>(&blk->d));
-    if (isnan(d) || isinf(d)) d = 0.0f;
+    const uint8_t* blk_ptr = embd_data + (global_block_idx * 56);
+    uint32_t sub = in_block_idx / 128;
+    const uint8_t* sub_ptr = blk_ptr + (sub * 28);
+    float scale = __half2float(*reinterpret_cast<const __half*>(sub_ptr + 26));
+    if (isnan(scale) || isinf(scale)) scale = 0.0f;
 
-    int trit = 0;
-    if (in_block_idx < 250) {
-        uint32_t byte_idx = in_block_idx / 5;
-        uint32_t trit_idx = in_block_idx % 5;
-        uint32_t val = blk->packed[byte_idx];
-        #pragma unroll
-        for (uint32_t s = 0; s < trit_idx; ++s) {
-            val /= 3;
-        }
-        trit = static_cast<int>(val % 3) - 1;
+    uint32_t idx = in_block_idx % 128;
+    uint32_t r, b;
+    if (idx < 80) {
+        r = idx / 16;
+        b = idx % 16;
+    } else if (idx < 120) {
+        uint32_t rem = idx - 80;
+        r = rem / 8;
+        b = 16 + (rem % 8);
     } else {
-        uint32_t rem = in_block_idx - 250;
-        uint32_t byte_idx = 50 + (rem / 3);
-        uint32_t trit_idx = rem % 3;
-        uint32_t val = blk->packed[byte_idx];
-        #pragma unroll
-        for (uint32_t s = 0; s < trit_idx; ++s) {
-            val /= 3;
-        }
-        trit = static_cast<int>(val % 3) - 1;
+        uint32_t rem = idx - 120;
+        r = rem / 2;
+        b = 24 + (rem % 2);
     }
-    d_out[tid] = d * static_cast<float>(trit);
+
+    uint8_t byte_val = sub_ptr[b];
+    static const uint32_t pow3[5] = {1, 3, 9, 27, 81};
+    uint32_t val = (static_cast<uint32_t>(byte_val) * pow3[r]) & 0xFF;
+    int trit = static_cast<int>((val * 3) >> 8) - 1;
+
+    d_out[tid] = scale * static_cast<float>(trit);
 }
 
 // ----------------------------------------------------------------------------
@@ -150,7 +227,7 @@ __global__ void kernel_rmsnorm(
 }
 
 // ----------------------------------------------------------------------------
-// Matrix-Vector Multiplication for TQ1_0 Weights
+// Matrix-Vector Multiplication for PTQ1_0 Weights (Dual 28-byte Sub-Blocks)
 // ----------------------------------------------------------------------------
 __global__ void kernel_gemv_tq1_0(
     const float* __restrict__ d_x,
@@ -164,38 +241,100 @@ __global__ void kernel_gemv_tq1_0(
 
     uint32_t lane = threadIdx.x % 32;
     uint32_t blocks_per_row = in_dim / 256;
-    const BlockTQ1_0* row_blocks = reinterpret_cast<const BlockTQ1_0*>(d_weight) + (static_cast<uint64_t>(row) * blocks_per_row);
+    const uint8_t* row_blocks = d_weight + (static_cast<uint64_t>(row) * blocks_per_row * 56);
 
     float sum = 0.0f;
+    static const uint32_t pow3[5] = {1, 3, 9, 27, 81};
 
     for (uint32_t b = lane; b < blocks_per_row; b += 32) {
-        const BlockTQ1_0* blk = row_blocks + b;
-        float d = __half2float(*reinterpret_cast<const __half*>(&blk->d));
-        if (isnan(d) || isinf(d)) continue;
-
+        const uint8_t* blk_ptr = row_blocks + (static_cast<size_t>(b) * 56);
         const float* x_ptr = d_x + (b * 256);
 
-        #pragma unroll 4
-        for (uint32_t byte_idx = 0; byte_idx < 50; ++byte_idx) {
-            uint32_t val = blk->packed[byte_idx];
-            uint32_t base_k = byte_idx * 5;
+        // Sub-block 0 (elements 0..127)
+        float d0 = __half2float(*reinterpret_cast<const __half*>(blk_ptr + 26));
+        if (!isnan(d0) && !isinf(d0) && d0 != 0.0f) {
+            float sub_sum0 = 0.0f;
             #pragma unroll
-            for (uint32_t s = 0; s < 5; ++s) {
-                int trit = static_cast<int>(val % 3) - 1;
-                val /= 3;
-                sum += (d * static_cast<float>(trit)) * x_ptr[base_k + s];
+            for (uint32_t r = 0; r < 5; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t base_k = r * 16;
+                #pragma unroll 16
+                for (uint32_t j = 0; j < 16; ++j) {
+                    uint32_t val = (static_cast<uint32_t>(blk_ptr[j]) * p3) & 0xFF;
+                    int trit = static_cast<int>((val * 3) >> 8) - 1;
+                    sub_sum0 += static_cast<float>(trit) * x_ptr[base_k + j];
+                }
             }
+            #pragma unroll
+            for (uint32_t r = 0; r < 5; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t base_k = 80 + r * 8;
+                #pragma unroll 8
+                for (uint32_t j = 0; j < 8; ++j) {
+                    uint32_t val = (static_cast<uint32_t>(blk_ptr[16 + j]) * p3) & 0xFF;
+                    int trit = static_cast<int>((val * 3) >> 8) - 1;
+                    sub_sum0 += static_cast<float>(trit) * x_ptr[base_k + j];
+                }
+            }
+            uint32_t b24 = blk_ptr[24];
+            uint32_t b25 = blk_ptr[25];
+            #pragma unroll
+            for (uint32_t r = 0; r < 4; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t val24 = (b24 * p3) & 0xFF;
+                int t24 = static_cast<int>((val24 * 3) >> 8) - 1;
+                sub_sum0 += static_cast<float>(t24) * x_ptr[120 + r * 2];
+
+                uint32_t val25 = (b25 * p3) & 0xFF;
+                int t25 = static_cast<int>((val25 * 3) >> 8) - 1;
+                sub_sum0 += static_cast<float>(t25) * x_ptr[120 + r * 2 + 1];
+            }
+            sum += d0 * sub_sum0;
         }
 
-        uint32_t val50 = blk->packed[50];
-        sum += (d * static_cast<float>(static_cast<int>(val50 % 3) - 1)) * x_ptr[250]; val50 /= 3;
-        sum += (d * static_cast<float>(static_cast<int>(val50 % 3) - 1)) * x_ptr[251]; val50 /= 3;
-        sum += (d * static_cast<float>(static_cast<int>(val50 % 3) - 1)) * x_ptr[252];
+        // Sub-block 1 (elements 128..255)
+        const uint8_t* blk1_ptr = blk_ptr + 28;
+        const float* x1_ptr = x_ptr + 128;
+        float d1 = __half2float(*reinterpret_cast<const __half*>(blk1_ptr + 26));
+        if (!isnan(d1) && !isinf(d1) && d1 != 0.0f) {
+            float sub_sum1 = 0.0f;
+            #pragma unroll
+            for (uint32_t r = 0; r < 5; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t base_k = r * 16;
+                #pragma unroll 16
+                for (uint32_t j = 0; j < 16; ++j) {
+                    uint32_t val = (static_cast<uint32_t>(blk1_ptr[j]) * p3) & 0xFF;
+                    int trit = static_cast<int>((val * 3) >> 8) - 1;
+                    sub_sum1 += static_cast<float>(trit) * x1_ptr[base_k + j];
+                }
+            }
+            #pragma unroll
+            for (uint32_t r = 0; r < 5; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t base_k = 80 + r * 8;
+                #pragma unroll 8
+                for (uint32_t j = 0; j < 8; ++j) {
+                    uint32_t val = (static_cast<uint32_t>(blk1_ptr[16 + j]) * p3) & 0xFF;
+                    int trit = static_cast<int>((val * 3) >> 8) - 1;
+                    sub_sum1 += static_cast<float>(trit) * x1_ptr[base_k + j];
+                }
+            }
+            uint32_t b24 = blk1_ptr[24];
+            uint32_t b25 = blk1_ptr[25];
+            #pragma unroll
+            for (uint32_t r = 0; r < 4; ++r) {
+                uint32_t p3 = pow3[r];
+                uint32_t val24 = (b24 * p3) & 0xFF;
+                int t24 = static_cast<int>((val24 * 3) >> 8) - 1;
+                sub_sum1 += static_cast<float>(t24) * x1_ptr[120 + r * 2];
 
-        uint32_t val51 = blk->packed[51];
-        sum += (d * static_cast<float>(static_cast<int>(val51 % 3) - 1)) * x_ptr[253]; val51 /= 3;
-        sum += (d * static_cast<float>(static_cast<int>(val51 % 3) - 1)) * x_ptr[254]; val51 /= 3;
-        sum += (d * static_cast<float>(static_cast<int>(val51 % 3) - 1)) * x_ptr[255];
+                uint32_t val25 = (b25 * p3) & 0xFF;
+                int t25 = static_cast<int>((val25 * 3) >> 8) - 1;
+                sub_sum1 += static_cast<float>(t25) * x1_ptr[120 + r * 2 + 1];
+            }
+            sum += d1 * sub_sum1;
+        }
     }
 
     sum = warp_reduce_sum(sum);
@@ -854,7 +993,9 @@ NativeDecoder::~NativeDecoder() {
         if (d_top_logits_) cudaFree(d_top_logits_);
         if (h_top_tokens_) cudaFreeHost(h_top_tokens_);
         if (h_top_logits_) cudaFreeHost(h_top_logits_);
-        if (d_fsm_bitmasks_) cudaFree(d_fsm_bitmasks_);
+        if (d_signs_5120_) cudaFree(d_signs_5120_);
+        if (d_signs_6144_) cudaFree(d_signs_6144_);
+        if (d_signs_17408_) cudaFree(d_signs_17408_);
         disable_dynamic_paged_kv();
     }
 }
@@ -894,6 +1035,25 @@ bool NativeDecoder::initialize(const std::filesystem::path& model_path) {
 
     const uint8_t* host_data = loader_.mapped_file().data() + model.tensor_data_offset;
     CUDA_CHECK(cudaMemcpyAsync(d_weights_, host_data, total_weight_bytes_, cudaMemcpyHostToDevice, stream));
+
+    // 2b. Load Hadamard Outlier Rotation Signs (PrismML PTQ1_0)
+    auto it_signs = model.metadata.find("prism.hadamard.sign_values");
+    if (it_signs != model.metadata.end()) {
+        const auto& arr = it_signs->second.as_array();
+        if (arr.size() >= 28672) {
+            std::vector<int8_t> h_signs(28672);
+            for (size_t i = 0; i < 28672; ++i) {
+                h_signs[i] = static_cast<int8_t>(arr[i].as_int32());
+            }
+            CUDA_CHECK(cudaMalloc(&d_signs_5120_, 5120 * sizeof(int8_t)));
+            CUDA_CHECK(cudaMalloc(&d_signs_6144_, 6144 * sizeof(int8_t)));
+            CUDA_CHECK(cudaMalloc(&d_signs_17408_, 17408 * sizeof(int8_t)));
+            CUDA_CHECK(cudaMemcpyAsync(d_signs_5120_, h_signs.data(), 5120 * sizeof(int8_t), cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_signs_6144_, h_signs.data() + 5120, 6144 * sizeof(int8_t), cudaMemcpyHostToDevice, stream));
+            CUDA_CHECK(cudaMemcpyAsync(d_signs_17408_, h_signs.data() + 5120 + 6144, 17408 * sizeof(int8_t), cudaMemcpyHostToDevice, stream));
+            has_hadamard_ = true;
+        }
+    }
 
     // Map Global Tensors
     const GGUFTensor* t_embd = model.find_tensor("token_embd.weight");
@@ -1129,6 +1289,13 @@ void NativeDecoder::forward_token(
         embedding_dim_
     );
 
+    // Apply Inverse Hadamard on token embedding (PrismML inverse-after-lookup)
+    if (has_hadamard_) {
+        kernel_hadamard_inverse<<<embedding_dim_ / 1024, 512, 0, stream>>>(
+            d_x_, d_signs_5120_, embedding_dim_
+        );
+    }
+
     uint32_t norm_threads = 512;
     size_t shared_bytes = (norm_threads / 32) * sizeof(float);
 
@@ -1150,6 +1317,12 @@ void NativeDecoder::forward_token(
             embedding_dim_,
             rms_norm_eps_
         );
+
+        if (has_hadamard_) {
+            kernel_hadamard_forward<<<embedding_dim_ / 1024, 512, 0, stream>>>(
+                d_x_norm_, d_signs_5120_, embedding_dim_
+            );
+        }
 
         if (lay.is_attention) {
             uint32_t q_blocks = (12288 + 31) / 32;
@@ -1183,6 +1356,12 @@ void NativeDecoder::forward_token(
                 paged_kv_.d_paged_v
             );
 
+            if (has_hadamard_) {
+                kernel_hadamard_forward<<<6144 / 1024, 512, 0, stream>>>(
+                    d_q_, d_signs_6144_, 6144
+                );
+            }
+
             kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_q_, lay.attn_output, d_res_, 6144, embedding_dim_);
             kernel_add_residual<<<(embedding_dim_ + 255) / 256, 256, 0, stream>>>(d_x_, d_res_, embedding_dim_);
 
@@ -1204,6 +1383,12 @@ void NativeDecoder::forward_token(
                 stream_slot
             );
 
+            if (has_hadamard_) {
+                kernel_hadamard_forward<<<6144 / 1024, 512, 0, stream>>>(
+                    d_attn_out_, d_signs_6144_, 6144
+                );
+            }
+
             kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_attn_out_, lay.ssm_out, d_res_, 6144, embedding_dim_);
             kernel_add_residual<<<(embedding_dim_ + 255) / 256, 256, 0, stream>>>(d_x_, d_res_, embedding_dim_);
 
@@ -1219,11 +1404,23 @@ void NativeDecoder::forward_token(
             rms_norm_eps_
         );
 
+        if (has_hadamard_) {
+            kernel_hadamard_forward<<<embedding_dim_ / 1024, 512, 0, stream>>>(
+                d_x_norm_, d_signs_5120_, embedding_dim_
+            );
+        }
+
         // C. SwiGLU FFN
         kernel_gemv_tq1_0<<<ffn_blocks, 128, 0, stream>>>(d_x_norm_, lay.ffn_gate, d_gate_, embedding_dim_, ffn_dim_);
         kernel_gemv_tq1_0<<<ffn_blocks, 128, 0, stream>>>(d_x_norm_, lay.ffn_up, d_up_, embedding_dim_, ffn_dim_);
 
         kernel_swiglu<<<(ffn_dim_ + 255) / 256, 256, 0, stream>>>(d_gate_, d_up_, d_act_, ffn_dim_);
+
+        if (has_hadamard_) {
+            kernel_hadamard_forward<<<ffn_dim_ / 1024, 512, 0, stream>>>(
+                d_act_, d_signs_17408_, ffn_dim_
+            );
+        }
 
         kernel_gemv_tq1_0<<<x_blocks, 128, 0, stream>>>(d_act_, lay.ffn_down, d_ffn_out_, ffn_dim_, embedding_dim_);
         kernel_add_residual<<<(embedding_dim_ + 255) / 256, 256, 0, stream>>>(d_x_, d_ffn_out_, embedding_dim_);
@@ -1238,6 +1435,12 @@ void NativeDecoder::forward_token(
             embedding_dim_,
             rms_norm_eps_
         );
+
+        if (has_hadamard_) {
+            kernel_hadamard_forward<<<embedding_dim_ / 1024, 512, 0, stream>>>(
+                d_x_norm_, d_signs_5120_, embedding_dim_
+            );
+        }
 
         uint32_t vocab_blocks = (vocab_size_ + 31) / 32;
         kernel_gemv_tq1_0<<<vocab_blocks, 128, 0, stream>>>(
