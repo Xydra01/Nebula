@@ -14,7 +14,8 @@
 //! MSVC `/O2` from reordering the store past subsequent kernel dispatches, ensuring the
 //! engine transitions to `cudaDeviceScheduleYield` before the next batch.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
 use nebula_hydrogen::{
@@ -33,8 +34,8 @@ use crate::types::{BackendHealth, ChatRequest, ChatStream, StreamItem, ToolCall}
 /// Timeout for health/ping probes (ms).
 const HEALTH_TIMEOUT_MS: u32 = 2_000;
 
-/// Timeout for waiting on response frames during chat streaming (ms).
-const STREAM_WAIT_TIMEOUT_MS: u32 = 120_000;
+type StreamSender = mpsc::Sender<Result<StreamItem, ModelError>>;
+type RouterTable = Arc<Mutex<HashMap<u32, StreamSender>>>;
 
 /// The Hydrogen inference engine backend, connected via Win32 named shared memory.
 ///
@@ -48,6 +49,16 @@ pub struct HydrogenBackend {
     activity: Activity,
     /// Next stream id for request framing.
     next_stream_id: std::sync::atomic::AtomicU32,
+    /// Mutex serializing request frame writes to the shared request ring.
+    request_lock: Arc<Mutex<()>>,
+    /// Routing table mapping active stream IDs to their channel senders.
+    router_table: RouterTable,
+    /// Cancellation token for stopping the background demuxer thread.
+    router_cancel: CancellationToken,
+    /// Dedicated background OS thread demuxing response frames.
+    router_thread: Mutex<Option<std::thread::JoinHandle<()>>>,
+    /// Notifier for engine health check (Pong) frames.
+    pong_notify: Arc<tokio::sync::Notify>,
 }
 
 impl HydrogenBackend {
@@ -84,10 +95,36 @@ impl HydrogenBackend {
         let shm = Arc::new(shm);
         nebula_hydrogen::register_global_shm(Arc::clone(&shm));
 
+        let router_table: RouterTable = Arc::new(Mutex::new(HashMap::new()));
+        let router_cancel = CancellationToken::new();
+        let pong_notify = Arc::new(tokio::sync::Notify::new());
+
+        let shm_for_router = Arc::clone(&shm);
+        let table_for_router = Arc::clone(&router_table);
+        let cancel_for_router = router_cancel.clone();
+        let notify_for_router = Arc::clone(&pong_notify);
+
+        let router_thread = std::thread::Builder::new()
+            .name("hydrogen-demuxer".into())
+            .spawn(move || {
+                Self::demuxer_loop(
+                    &shm_for_router,
+                    &table_for_router,
+                    &cancel_for_router,
+                    &notify_for_router,
+                );
+            })
+            .map_err(|e| ModelError::Transport(format!("spawn demuxer thread: {e}")))?;
+
         Ok(Self {
             shm,
             activity: Activity::new(),
             next_stream_id: std::sync::atomic::AtomicU32::new(1),
+            request_lock: Arc::new(Mutex::new(())),
+            router_table,
+            router_cancel,
+            router_thread: Mutex::new(Some(router_thread)),
+            pong_notify,
         })
     }
 
@@ -127,48 +164,33 @@ impl HydrogenBackend {
         serde_json::to_vec(&body).unwrap_or_default()
     }
 
-    /// Reads response frames from the ring buffer and sends them into the channel.
-    async fn pump_responses(
-        shm: Arc<ShmHandle>,
-        stream_id: u32,
-        tx: mpsc::Sender<Result<StreamItem, ModelError>>,
-        cancel: CancellationToken,
+    /// Centralized background demuxer loop: continuously reads response frames
+    /// from the response ring buffer and dispatches to registered per-stream channels.
+    fn demuxer_loop(
+        shm: &ShmHandle,
+        router_table: &RouterTable,
+        cancel: &CancellationToken,
+        pong_notify: &tokio::sync::Notify,
     ) {
-        loop {
-            // Check cancellation.
-            if cancel.is_cancelled() {
-                let _ = tx.send(Ok(StreamItem::Done(StopReason::Cancelled))).await;
-                return;
-            }
-            if tx.is_closed() {
-                return;
-            }
-
-            // Wait for the engine event (response data ready).
-            match shm.wait_engine_event(STREAM_WAIT_TIMEOUT_MS) {
+        while !cancel.is_cancelled() {
+            // Wait for engine event with 50ms timeout to regularly check cancellation.
+            match shm.wait_engine_event(50) {
                 Ok(()) => {}
-                Err(_timeout) => {
-                    let _ = tx.send(Err(ModelError::Timeout)).await;
-                    return;
-                }
-            }
-
-            // Drain all available frames.
-            while let Some(frame) = shm.peek_response_frame() {
-                // Skip frames for other streams.
-                if frame.stream_id != stream_id {
-                    // Advance past the frame anyway to avoid blocking.
-                    let _ = shm.read_response_payload(frame.payload_size as usize);
+                Err(nebula_hydrogen::IpcError::Timeout { .. }) => continue,
+                Err(e) => {
+                    tracing::warn!(event = "hydrogen.wait_engine_event_error", error = %e);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
                     continue;
                 }
+            }
 
+            // Drain all available frames from the response ring buffer.
+            while let Some(frame) = shm.peek_response_frame() {
                 let payload = match shm.read_response_payload(frame.payload_size as usize) {
                     Ok(p) => p,
                     Err(e) => {
-                        let _ = tx
-                            .send(Err(ModelError::Protocol(format!("ring read: {e}"))))
-                            .await;
-                        return;
+                        tracing::error!(event = "hydrogen.read_payload_error", error = %e);
+                        break;
                     }
                 };
 
@@ -181,27 +203,32 @@ impl HydrogenBackend {
                     continue;
                 };
 
-                match msg_type {
+                if msg_type == MessageType::Pong {
+                    pong_notify.notify_one();
+                    continue;
+                }
+
+                let item_opt = match msg_type {
                     MessageType::TokenChunk => {
                         if let Some(token) = nebula_hydrogen::TokenPayload::from_bytes(&payload) {
                             let text = token.text_str().to_owned();
-                            if !text.is_empty() {
-                                let item = StreamItem::Token {
-                                    text,
-                                    reasoning: false,
-                                };
-                                if tx.send(Ok(item)).await.is_err() {
-                                    return;
-                                }
-                            }
-                            if token.is_final != 0 {
-                                let _ = tx.send(Ok(StreamItem::Done(StopReason::Stop))).await;
-                                return;
-                            }
+                            let is_final = token.is_final != 0;
+                            Some((
+                                if text.is_empty() {
+                                    None
+                                } else {
+                                    Some(StreamItem::Token {
+                                        text,
+                                        reasoning: false,
+                                    })
+                                },
+                                is_final,
+                            ))
+                        } else {
+                            None
                         }
                     }
                     MessageType::ToolCall => {
-                        // Parse tool call from JSON payload.
                         if let Ok(tc) =
                             std::str::from_utf8(&payload).map_err(|_| ()).and_then(|t| {
                                 serde_json::from_str::<serde_json::Value>(t).map_err(|_| ())
@@ -224,20 +251,39 @@ impl HydrogenBackend {
                                     .or_else(|| tc.get("arguments").map(ToString::to_string))
                                     .unwrap_or_default(),
                             };
-                            if tx.send(Ok(StreamItem::ToolCall(tool_call))).await.is_err() {
-                                return;
-                            }
+                            Some((Some(StreamItem::ToolCall(tool_call)), true))
+                        } else {
+                            None
                         }
                     }
-                    _ => {
-                        // Ignore pong, wrap markers, etc.
+                    _ => None,
+                };
+
+                let is_eos = (frame.flags & FrameFlags::END_OF_STREAM) != 0;
+                let mut remove = false;
+
+                let mut table = router_table.lock().unwrap_or_else(PoisonError::into_inner);
+                if let Some(tx) = table.get(&frame.stream_id) {
+                    let mut stream_done = false;
+                    if let Some((item_content, item_is_final)) = item_opt {
+                        if let Some(item) = item_content {
+                            remove = tx.blocking_send(Ok(item)).is_err();
+                        }
+                        if item_is_final && !remove {
+                            let _ = tx.blocking_send(Ok(StreamItem::Done(StopReason::Stop)));
+                            stream_done = true;
+                            remove = true;
+                        }
+                    }
+
+                    if is_eos && !stream_done && !remove {
+                        let _ = tx.blocking_send(Ok(StreamItem::Done(StopReason::Stop)));
+                        remove = true;
                     }
                 }
 
-                // If END_OF_STREAM flag is set, the stream is done.
-                if frame.flags & FrameFlags::END_OF_STREAM != 0 {
-                    let _ = tx.send(Ok(StreamItem::Done(StopReason::Stop))).await;
-                    return;
+                if remove {
+                    table.remove(&frame.stream_id);
                 }
             }
         }
@@ -255,6 +301,11 @@ impl std::fmt::Debug for HydrogenBackend {
 
 impl Drop for HydrogenBackend {
     fn drop(&mut self) {
+        self.router_cancel.cancel();
+        let _ = self.shm.signal_engine_event();
+        if let Some(handle) = self.router_thread.lock().ok().and_then(|mut lock| lock.take()) {
+            let _ = handle.join();
+        }
         nebula_hydrogen::unregister_global_shm();
     }
 }
@@ -276,27 +327,62 @@ impl ModelBackend for HydrogenBackend {
         let stream_id = self.alloc_stream_id();
         let payload = Self::build_generate_payload(&req);
 
-        self.shm
-            .write_request_frame(
-                MessageType::GenerateRequest,
-                FrameFlags::NONE,
-                stream_id,
-                &payload,
-            )
-            .map_err(|e| ModelError::Transport(format!("write request: {e}")))?;
+        let (tx, rx) = mpsc::channel(1024);
 
-        self.shm
-            .signal_daemon_event()
-            .map_err(|e| ModelError::Transport(format!("signal: {e}")))?;
+        // Register stream in router table before queueing request.
+        {
+            let mut table = self
+                .router_table
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            table.insert(stream_id, tx);
+        }
 
-        let (tx, rx) = mpsc::channel(64);
-        let shm = Arc::clone(&self.shm);
-        let cancel = self.activity.cancel_token();
+        // Write request frame under request_lock serialization.
+        {
+            let _lock = self
+                .request_lock
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            self.shm
+                .write_request_frame(
+                    MessageType::GenerateRequest,
+                    FrameFlags::NONE,
+                    stream_id,
+                    &payload,
+                )
+                .map_err(|e| {
+                    let mut table = self
+                        .router_table
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner);
+                    table.remove(&stream_id);
+                    ModelError::Transport(format!("write request: {e}"))
+                })?;
+
+            self.shm.signal_daemon_event().map_err(|e| {
+                let mut table = self
+                    .router_table
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                table.remove(&stream_id);
+                ModelError::Transport(format!("signal: {e}"))
+            })?;
+        }
 
         let _guard = self.activity.enter();
+        let router_table = Arc::clone(&self.router_table);
+        let cancel = self.activity.cancel_token();
         tokio::spawn(async move {
             let _g = _guard;
-            Self::pump_responses(shm, stream_id, tx, cancel).await;
+            cancel.cancelled().await;
+            let sender = {
+                let mut table = router_table.lock().unwrap_or_else(PoisonError::into_inner);
+                table.remove(&stream_id)
+            };
+            if let Some(tx) = sender {
+                let _ = tx.send(Ok(StreamItem::Done(StopReason::Cancelled))).await;
+            }
         });
 
         Ok(ChatStream::new(rx))
@@ -318,9 +404,31 @@ impl ModelBackend for HydrogenBackend {
 
     #[tracing::instrument(level = "debug", skip_all)]
     async fn health(&self) -> Result<BackendHealth, ModelError> {
-        self.shm
-            .ping(HEALTH_TIMEOUT_MS)
-            .map_err(|e| ModelError::Transport(format!("hydrogen ping: {e}")))?;
-        Ok(BackendHealth::Ok)
+        let notified = self.pong_notify.notified();
+
+        {
+            let _lock = self
+                .request_lock
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            self.shm
+                .write_request_frame(MessageType::Ping, FrameFlags::NONE, 0, &[])
+                .map_err(|e| ModelError::Transport(format!("write ping: {e}")))?;
+            self.shm
+                .signal_daemon_event()
+                .map_err(|e| ModelError::Transport(format!("signal: {e}")))?;
+        }
+
+        match tokio::time::timeout(
+            tokio::time::Duration::from_millis(u64::from(HEALTH_TIMEOUT_MS)),
+            notified,
+        )
+        .await
+        {
+            Ok(()) => Ok(BackendHealth::Ok),
+            Err(_) => Err(ModelError::Transport(format!(
+                "hydrogen ping: wait timed out after {HEALTH_TIMEOUT_MS} ms"
+            ))),
+        }
     }
 }

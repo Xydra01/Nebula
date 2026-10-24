@@ -157,6 +157,7 @@ target_link_libraries(hydrogen_test_tool_grammar_and_calling PRIVATE
     hydrogen_engine
     hydrogen_ipc
     hydrogen_model
+    hydrogen_grammar
     CUDA::cudart
 )
 
@@ -341,6 +342,10 @@ target_link_libraries(hydrogen_grammar PUBLIC
 
 set_target_properties(hydrogen_grammar PROPERTIES
     CUDA_SEPARABLE_COMPILATION OFF
+)
+
+target_link_libraries(hydrogen_engine PUBLIC
+    hydrogen_grammar
 )
 
 # GPU-Fused FSM Tool Grammar Sampler Benchmark Target (Issue H11)

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <mutex>
 #include <functional>
 #include <stdexcept>
 #include <vector>
@@ -150,6 +151,9 @@ private:
 
     ShmRingBuffer request_ring_;  // Daemon -> Engine
     ShmRingBuffer response_ring_; // Engine -> Daemon
+
+    mutable std::mutex response_mutex_;
+    mutable std::mutex request_mutex_;
 };
 
 // ============================================================================
