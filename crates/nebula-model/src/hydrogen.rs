@@ -303,7 +303,12 @@ impl Drop for HydrogenBackend {
     fn drop(&mut self) {
         self.router_cancel.cancel();
         let _ = self.shm.signal_engine_event();
-        if let Some(handle) = self.router_thread.lock().ok().and_then(|mut lock| lock.take()) {
+        if let Some(handle) = self
+            .router_thread
+            .lock()
+            .ok()
+            .and_then(|mut lock| lock.take())
+        {
             let _ = handle.join();
         }
         nebula_hydrogen::unregister_global_shm();
