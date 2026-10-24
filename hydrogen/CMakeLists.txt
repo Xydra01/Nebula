@@ -57,9 +57,10 @@ set_target_properties(hydrogen_sanity_test PROPERTIES
     CUDA_SEPARABLE_COMPILATION OFF
 )
 
-# Model Subsystem Library (Issue H02)
+# Model Subsystem Library (Issue H02, H19)
 add_library(hydrogen_model STATIC
     src/model/tensor_loader.cpp
+    src/model/tokenizer.cpp
 )
 
 target_include_directories(hydrogen_model PUBLIC
@@ -76,13 +77,38 @@ target_link_libraries(hydrogen_inspect_model PRIVATE
     hydrogen_model
 )
 
-# Forward Baseline Engine Library (Issues H03, H07, H08, H09)
+# Standalone Tokenizer Unit Test (Issue H19)
+add_executable(hydrogen_test_tokenizer
+    src/tools/test_tokenizer.cpp
+)
+
+target_include_directories(hydrogen_test_tokenizer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_test_tokenizer PRIVATE
+    hydrogen_model
+)
+
+# IPC Subsystem Library (Issue H16)
+add_library(hydrogen_ipc STATIC
+    src/ipc/shm_server.cpp
+)
+
+target_include_directories(hydrogen_ipc PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Forward Baseline Engine Library (Issues H03, H07, H08, H09, H19)
 add_library(hydrogen_engine STATIC
     src/model/forward_baseline.cu
     src/attention/cascade_attention.cu
     src/model/marlin_gemm.cu
     src/attention/dispatch.cpp
     src/model/kernel_tiler.cu
+    src/model/native_decoder.cu
 )
 
 target_include_directories(hydrogen_engine PUBLIC
@@ -91,6 +117,28 @@ target_include_directories(hydrogen_engine PUBLIC
 )
 
 target_link_libraries(hydrogen_engine PUBLIC
+    hydrogen_model
+    hydrogen_ipc
+    CUDA::cudart
+)
+
+set_target_properties(hydrogen_engine PROPERTIES
+    CUDA_SEPARABLE_COMPILATION OFF
+)
+
+# Standalone Autoregressive Decoder Unit Test (Issue H19)
+add_executable(hydrogen_test_autoregressive_decoder
+    src/tools/test_autoregressive_decoder.cpp
+)
+
+target_include_directories(hydrogen_test_autoregressive_decoder PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_test_autoregressive_decoder PRIVATE
+    hydrogen_engine
+    hydrogen_ipc
     hydrogen_model
     CUDA::cudart
 )
@@ -367,15 +415,6 @@ target_link_libraries(hydrogen_test_deadlock_and_tdr PRIVATE
     CUDA::cudart
 )
 
-# IPC Subsystem Library (Issue H16)
-add_library(hydrogen_ipc STATIC
-    src/ipc/shm_server.cpp
-)
-
-target_include_directories(hydrogen_ipc PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
 
 # Win32 Named Shared Memory IPC Benchmark Target (Issue H16)
 add_executable(hydrogen_bench_shm_ipc
@@ -389,6 +428,27 @@ target_include_directories(hydrogen_bench_shm_ipc PRIVATE
 
 target_link_libraries(hydrogen_bench_shm_ipc PRIVATE
     hydrogen_ipc
+)
+
+# Standalone Hydrogen Inference Engine Daemon Server
+add_executable(hydrogen_engine_bin
+    src/server_main.cpp
+)
+
+target_include_directories(hydrogen_engine_bin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(hydrogen_engine_bin PRIVATE
+    hydrogen_engine
+    hydrogen_ipc
+    hydrogen_model
+    CUDA::cudart
+)
+
+set_target_properties(hydrogen_engine_bin PROPERTIES
+    OUTPUT_NAME "hydrogen_engine"
 )
 
 

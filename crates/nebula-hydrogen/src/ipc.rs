@@ -210,8 +210,8 @@ impl TokenPayload {
 
 /// Lock-free SPSC ring buffer control block.
 ///
-/// Field layout matches C++ `alignas(64)` on `head` and `tail`.
-#[repr(C)]
+/// Field layout matches C++ `alignas(64)` on `head` and `tail`, with a 192-byte total size.
+#[repr(C, align(64))]
 pub struct ShmQueueHeader {
     /// Ring buffer capacity.
     pub capacity_bytes: u64,
@@ -225,8 +225,6 @@ pub struct ShmQueueHeader {
     _pad_tail: [u8; 56],
     /// Read cursor (advanced by consumer).
     pub tail: AtomicU64,
-    /// Padding after tail.
-    _pad_post_tail: [u8; 56],
     /// Total bytes written (diagnostic).
     pub total_bytes_written: u64,
     /// Total bytes read (diagnostic).
@@ -235,6 +233,8 @@ pub struct ShmQueueHeader {
     pub total_frames_written: u64,
     /// Total frames read (diagnostic).
     pub total_frames_read: u64,
+    /// Trailing padding to 64-byte boundary.
+    _pad_end: [u8; 24],
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +244,8 @@ pub struct ShmQueueHeader {
 /// Shared memory global header at byte 0 of the mapping.
 ///
 /// Layout matches C++ `alignas(64)` on the struct itself and on
-/// `active_tool_processes` / `cuda_yield_mode`.
-#[repr(C)]
+/// `active_tool_processes` / `cuda_yield_mode`, with a 576-byte total size.
+#[repr(C, align(64))]
 pub struct ShmGlobalHeader {
     /// Protocol magic.
     pub magic: u32,
@@ -265,17 +265,27 @@ pub struct ShmGlobalHeader {
     _pad_cym: [u8; 60],
     /// Engine scheduling mode: 0 = spin/poll, 1 = `cudaDeviceScheduleYield`.
     pub cuda_yield_mode: AtomicU32,
-    // 4 bytes for AtomicU32, pad to 64
-    _pad_post_cym: [u8; 60],
+    // 4 bytes padding to 8-byte boundary for uint64_t
+    _pad_post_cym: [u8; 4],
     /// Byte offset of the request queue data region.
     pub request_queue_offset: u64,
     /// Byte offset of the response queue data region.
     pub response_queue_offset: u64,
+    // 8 bytes (144..152) used, pad to 64-byte boundary for ShmQueueHeader (152..192)
+    _pad_rq: [u8; 40],
     /// Request queue control block.
     pub request_queue: ShmQueueHeader,
     /// Response queue control block.
     pub response_queue: ShmQueueHeader,
 }
+
+// Compile-time layout guarantees matching C++ hydrogen_ipc.h
+const _: () = {
+    assert!(std::mem::size_of::<ShmQueueHeader>() == 192);
+    assert!(std::mem::align_of::<ShmQueueHeader>() == 64);
+    assert!(std::mem::size_of::<ShmGlobalHeader>() == 576);
+    assert!(std::mem::align_of::<ShmGlobalHeader>() == 64);
+};
 
 // ---------------------------------------------------------------------------
 // ShmHandle — the safe, owning wrapper

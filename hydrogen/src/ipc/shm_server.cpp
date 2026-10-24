@@ -264,35 +264,47 @@ bool ShmServer::initialize() {
     std::memset(mapped_view_, 0, total_capacity_);
 #endif
 
-    // Initialize global header
+    // Initialize or attach to global header
     global_header_ = reinterpret_cast<ShmGlobalHeader*>(mapped_view_);
-    std::memset(global_header_, 0, sizeof(ShmGlobalHeader));
+    const bool already_initialized = (global_header_->magic == IPC_MAGIC && global_header_->version == IPC_VERSION);
 
-    global_header_->magic = IPC_MAGIC;
-    global_header_->version = IPC_VERSION;
-    global_header_->total_size_bytes = total_capacity_;
+    if (!already_initialized) {
+        std::memset(global_header_, 0, sizeof(ShmGlobalHeader));
+        global_header_->magic = IPC_MAGIC;
+        global_header_->version = IPC_VERSION;
+        global_header_->total_size_bytes = total_capacity_;
+
+        const uint64_t req_offset = (sizeof(ShmGlobalHeader) + 63) & ~63ULL;
+        const uint64_t resp_offset = req_offset + REQUEST_QUEUE_CAPACITY_BYTES;
+
+        global_header_->request_queue_offset = req_offset;
+        global_header_->response_queue_offset = resp_offset;
+
+        request_ring_.init(&global_header_->request_queue,
+                           mapped_view_ + req_offset,
+                           REQUEST_QUEUE_CAPACITY_BYTES);
+
+        response_ring_.init(&global_header_->response_queue,
+                            mapped_view_ + resp_offset,
+                            RESPONSE_QUEUE_CAPACITY_BYTES);
+
+        request_ring_.reset();
+        response_ring_.reset();
+    } else {
+        request_ring_.init(&global_header_->request_queue,
+                           mapped_view_ + global_header_->request_queue_offset,
+                           REQUEST_QUEUE_CAPACITY_BYTES);
+
+        response_ring_.init(&global_header_->response_queue,
+                            mapped_view_ + global_header_->response_queue_offset,
+                            RESPONSE_QUEUE_CAPACITY_BYTES);
+    }
+
 #ifdef _WIN32
     global_header_->engine_pid = GetCurrentProcessId();
 #else
     global_header_->engine_pid = 1001;
 #endif
-
-    const uint64_t req_offset = (sizeof(ShmGlobalHeader) + 63) & ~63ULL;
-    const uint64_t resp_offset = req_offset + REQUEST_QUEUE_CAPACITY_BYTES;
-
-    global_header_->request_queue_offset = req_offset;
-    global_header_->response_queue_offset = resp_offset;
-
-    request_ring_.init(&global_header_->request_queue,
-                       mapped_view_ + req_offset,
-                       REQUEST_QUEUE_CAPACITY_BYTES);
-
-    response_ring_.init(&global_header_->response_queue,
-                        mapped_view_ + resp_offset,
-                        RESPONSE_QUEUE_CAPACITY_BYTES);
-
-    request_ring_.reset();
-    response_ring_.reset();
 
     is_initialized_ = true;
     return true;

@@ -172,4 +172,17 @@ struct alignas(64) ShmGlobalHeader {
 #pragma warning(pop)
 #endif
 
+static_assert(sizeof(ShmQueueHeader) == 192, "ShmQueueHeader size mismatch with Rust IPC");
+static_assert(offsetof(ShmQueueHeader, head) == 64, "ShmQueueHeader head offset mismatch");
+static_assert(offsetof(ShmQueueHeader, tail) == 128, "ShmQueueHeader tail offset mismatch");
+static_assert(offsetof(ShmQueueHeader, total_bytes_written) == 136, "ShmQueueHeader total_bytes_written offset mismatch");
+
+static_assert(sizeof(ShmGlobalHeader) == 576, "ShmGlobalHeader size mismatch with Rust IPC");
+static_assert(offsetof(ShmGlobalHeader, active_tool_processes) == 64, "ShmGlobalHeader active_tool_processes offset mismatch");
+static_assert(offsetof(ShmGlobalHeader, cuda_yield_mode) == 128, "ShmGlobalHeader cuda_yield_mode offset mismatch");
+static_assert(offsetof(ShmGlobalHeader, request_queue_offset) == 136, "ShmGlobalHeader request_queue_offset offset mismatch");
+static_assert(offsetof(ShmGlobalHeader, response_queue_offset) == 144, "ShmGlobalHeader response_queue_offset offset mismatch");
+static_assert(offsetof(ShmGlobalHeader, request_queue) == 192, "ShmGlobalHeader request_queue offset mismatch");
+static_assert(offsetof(ShmGlobalHeader, response_queue) == 384, "ShmGlobalHeader response_queue offset mismatch");
+
 } // namespace hydrogen::ipc
